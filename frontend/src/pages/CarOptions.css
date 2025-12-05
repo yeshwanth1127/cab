@@ -1,0 +1,108 @@
+.car-options-page {
+  min-height: 100vh;
+  position: relative;
+  overflow: hidden;
+}
+
+.car-options-map-wrapper {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.car-options-container {
+  padding: 60px 0;
+  position: relative;
+  z-index: 1;
+}
+
+.car-options-card h2 {
+  margin-bottom: 12px;
+  color: #1f2933;
+  font-size: 30px;
+  font-weight: 700;
+}
+
+.subtitle {
+  color: #6b7280;
+  margin-bottom: 30px;
+  font-size: 15px;
+}
+
+.car-options-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
+  margin-top: 10px;
+}
+
+.car-option-card {
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.15);
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.car-option-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 14px 40px rgba(15, 23, 42, 0.25);
+}
+
+.car-option-image-wrapper {
+  width: 100%;
+  height: 160px;
+  overflow: hidden;
+  background: #e5e7eb;
+}
+
+.car-option-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.car-option-content {
+  padding: 18px 20px 20px;
+}
+
+.car-option-content h3 {
+  margin-bottom: 8px;
+  color: #111827;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.car-option-content p {
+  color: #4b5563;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.empty-state {
+  padding: 24px;
+  text-align: center;
+  color: #6b7280;
+}
+
+@media (max-width: 768px) {
+  .car-options-card {
+    padding: 20px;
+    margin: 0 8px;
+  }
+
+  .car-options-card h2 {
+    font-size: 24px;
+  }
+
+  .car-options-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+

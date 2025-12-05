@@ -1,0 +1,173 @@
+.location-input-container {
+  position: relative;
+  margin-bottom: 24px;
+  animation: fadeIn 0.6s ease-out;
+}
+
+.location-input-container label {
+  display: block;
+  margin-bottom: 10px;
+  font-weight: 600;
+  color: #333;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.location-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.location-input {
+  width: 100%;
+  padding: 14px 50px 14px 16px;
+  border: 2px solid #e0e0e0;
+  border-radius: 12px;
+  font-size: 16px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: white;
+  font-family: inherit;
+}
+
+.location-input:focus {
+  outline: none;
+  border-color: #facc15;
+  box-shadow: 0 0 0 4px rgba(250, 204, 21, 0.1);
+  transform: translateY(-2px);
+}
+
+.location-input:hover {
+  border-color: #b0b0b0;
+}
+
+.location-button {
+  position: absolute;
+  right: 8px;
+  background: linear-gradient(135deg, #facc15 0%, #eab308 100%);
+  border: none;
+  font-size: 22px;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 8px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(250, 204, 21, 0.3);
+}
+
+.location-button:hover {
+  background: linear-gradient(135deg, #eab308 0%, #d97706 100%);
+  transform: scale(1.1) rotate(5deg);
+  box-shadow: 0 4px 12px rgba(250, 204, 21, 0.4);
+}
+
+.location-button:active {
+  transform: scale(0.95);
+}
+
+.location-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.suggestions-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  border: 2px solid #facc15;
+  border-top: none;
+  border-radius: 0 0 12px 12px;
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 1000;
+  box-shadow: 0 8px 25px rgba(250, 204, 21, 0.3);
+  margin-top: -2px;
+  animation: slideInLeft 0.3s ease-out;
+}
+
+.suggestion-item {
+  padding: 14px 18px;
+  cursor: pointer;
+  border-bottom: 1px solid #f0f0f0;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.suggestion-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: linear-gradient(135deg, #facc15 0%, #eab308 100%);
+  transform: scaleY(0);
+  transition: transform 0.3s ease;
+}
+
+.suggestion-item:hover::before {
+  transform: scaleY(1);
+}
+
+.suggestion-item:last-child {
+  border-bottom: none;
+}
+
+.suggestion-item:hover {
+  background: linear-gradient(90deg, rgba(250, 204, 21, 0.1) 0%, transparent 100%);
+  padding-left: 22px;
+  transform: translateX(4px);
+}
+
+.suggestion-item.loading {
+  text-align: center;
+  color: #666;
+  font-style: italic;
+  cursor: default;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.suggestion-item.loading:hover {
+  background: white;
+  padding-left: 18px;
+  transform: none;
+}
+
+.suggestion-name {
+  font-size: 15px;
+  color: #333;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.suggestion-type {
+  font-size: 12px;
+  color: #666;
+  text-transform: capitalize;
+}
+
+/* Scrollbar styling for suggestions */
+.suggestions-dropdown::-webkit-scrollbar {
+  width: 6px;
+}
+
+.suggestions-dropdown::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.suggestions-dropdown::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #facc15 0%, #eab308 100%);
+  border-radius: 3px;
+}
+
+.suggestions-dropdown::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #eab308 0%, #d97706 100%);
+}
