@@ -15,6 +15,7 @@ const BookingPage = () => {
   const [toLocation, setToLocation] = useState('');
   const [userLocation, setUserLocation] = useState(null);
   const [selectedCarOptionId, setSelectedCarOptionId] = useState(null);
+  const [numberOfHours, setNumberOfHours] = useState(''); // For local bookings only
   const [fare, setFare] = useState(null);
   const [loading, setLoading] = useState(false);
   const [calculating, setCalculating] = useState(false);
@@ -30,18 +31,34 @@ const BookingPage = () => {
   const [bookingId, setBookingId] = useState(null);
   const [expandedCarKey, setExpandedCarKey] = useState(null);
   const [carOptionCards, setCarOptionCards] = useState([]);
+  const [carImageIndices, setCarImageIndices] = useState({}); // Track image index per car
+  const [showConfirmation, setShowConfirmation] = useState(false);
 
-  // Initial load: car options + optional geolocation prompt
+  // Initial load: optional geolocation prompt
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    fetchCarOptions();
-
     // Only try to use location once, and remember the choice in localStorage
     const consent = localStorage.getItem('locationConsent');
     if (!consent || consent === 'granted') {
       requestUserLocation();
     }
   }, []);
+
+  // Fetch car options when service type is selected
+  useEffect(() => {
+    if (serviceType) {
+      fetchCarOptions(serviceType);
+      // Reset selected car when service type changes
+      setSelectedCarOptionId(null);
+      setCarImageIndices({});
+      setNumberOfHours(''); // Reset hours when service type changes
+    } else {
+      // If no service type selected, show all cars (or empty)
+      setCarOptionCards([]);
+      setSelectedCarOptionId(null);
+      setNumberOfHours('');
+    }
+  }, [serviceType]);
 
   const requestUserLocation = async () => {
     try {
@@ -59,9 +76,12 @@ const BookingPage = () => {
     }
   };
 
-  const fetchCarOptions = async () => {
+  const fetchCarOptions = async (serviceTypeFilter = null) => {
     try {
-      const response = await api.get('/car-options');
+      const url = serviceTypeFilter 
+        ? `/car-options?service_type=${serviceTypeFilter}`
+        : '/car-options';
+      const response = await api.get(url);
       setCarOptionCards(response.data || []);
     } catch (error) {
       console.error('Error fetching public car options:', error);
@@ -69,18 +89,34 @@ const BookingPage = () => {
   };
 
   const calculateFare = async () => {
-    if (!serviceType || !fromLocation || !toLocation || !selectedCarOptionId) {
-      alert('Please fill in all fields');
-      return;
+    // Validation based on service type
+    if (serviceType === 'local') {
+      if (!serviceType || !fromLocation || !numberOfHours || !selectedCarOptionId) {
+        alert('Please fill in all fields');
+        return;
+      }
+    } else {
+      if (!serviceType || !fromLocation || !toLocation || !selectedCarOptionId) {
+        alert('Please fill in all fields');
+        return;
+      }
     }
 
     setCalculating(true);
     try {
-      const response = await api.post('/bookings/calculate-fare', {
+      const requestData = {
         from_location: fromLocation,
-        to_location: toLocation,
         service_type: serviceType,
-      });
+        cab_type_id: selectedCarOptionId, // Pass selected car option ID for rate meter lookup
+      };
+
+      if (serviceType === 'local') {
+        requestData.number_of_hours = parseInt(numberOfHours);
+      } else {
+        requestData.to_location = toLocation;
+      }
+
+      const response = await api.post('/bookings/calculate-fare', requestData);
 
       setFare(response.data);
       setShowBookingForm(true);
@@ -93,12 +129,17 @@ const BookingPage = () => {
 
   const handleBooking = async (e) => {
     e.preventDefault();
+    // Show confirmation step instead of submitting directly
+    setShowConfirmation(true);
+  };
+
+  const handleConfirmBooking = async () => {
     setLoading(true);
+    setShowConfirmation(false);
 
     try {
-      const response = await api.post('/bookings', {
+      const bookingPayload = {
         from_location: fromLocation,
-        to_location: toLocation,
         service_type: serviceType,
         car_option_id: selectedCarOptionId,
         passenger_name: bookingData.passenger_name,
@@ -106,10 +147,20 @@ const BookingPage = () => {
         passenger_email: bookingData.passenger_email,
         travel_date: bookingData.travel_date,
         notes: bookingData.notes,
-        distance_km: fare.distance_km,
-        estimated_time_minutes: fare.estimated_time_minutes,
         fare_amount: fare.fare,
-      });
+      };
+
+      if (serviceType === 'local') {
+        bookingPayload.number_of_hours = parseInt(numberOfHours);
+        bookingPayload.distance_km = 0; // Local bookings don't use distance
+        bookingPayload.estimated_time_minutes = parseInt(numberOfHours) * 60;
+      } else {
+        bookingPayload.to_location = toLocation;
+        bookingPayload.distance_km = fare.distance_km;
+        bookingPayload.estimated_time_minutes = fare.estimated_time_minutes;
+      }
+
+      const response = await api.post('/bookings', bookingPayload);
 
       setBookingSuccess(true);
       setBookingId(response.data.id);
@@ -119,7 +170,9 @@ const BookingPage = () => {
       setFromLocation('');
       setToLocation('');
       setSelectedCarOptionId(null);
+      setNumberOfHours('');
       setFare(null);
+      setCarImageIndices({});
       setBookingData({
         passenger_name: '',
         passenger_phone: '',
@@ -142,9 +195,34 @@ const BookingPage = () => {
     setExpandedCarKey((current) => (current === key ? null : key));
   };
 
+  const getSelectedCarOption = () => {
+    return carOptionCards.find(opt => opt.id === selectedCarOptionId);
+  };
+
+  const handleCarSelection = (carId) => {
+    if (selectedCarOptionId !== carId) {
+      setSelectedCarOptionId(carId);
+      if (!carImageIndices[carId]) {
+        setCarImageIndices({ ...carImageIndices, [carId]: 0 });
+      }
+    }
+  };
+
+  const updateCarImageIndex = (carId, newIndex) => {
+    setCarImageIndices({ ...carImageIndices, [carId]: newIndex });
+  };
+
   return (
     <div className="booking-page">
       <MainNavbar />
+      
+      <div className="flowing-banner">
+        <div className="flowing-banner-content">
+          <span>For immediate bookings, call +91 5547444589</span>
+          <span>For immediate bookings, call +91 5547444589</span>
+          <span>For immediate bookings, call +91 5547444589</span>
+        </div>
+      </div>
 
       <div className="container">
         <div className="booking-container">
@@ -203,43 +281,162 @@ const BookingPage = () => {
 
                 {serviceType && (
                   <>
-                    <LocationInput
-                      label="From Location"
-                      value={fromLocation}
-                      onChange={setFromLocation}
-                      placeholder="Enter pickup location or click 📍 for current location"
-                      userLocation={userLocation}
-                      onLocationRequest={handleLocationUpdate}
-                      showCurrentLocation={true}
-                    />
+                    {serviceType === 'local' ? (
+                      <>
+                        <LocationInput
+                          label="Pickup Location"
+                          value={fromLocation}
+                          onChange={setFromLocation}
+                          placeholder="Enter pickup location or click 📍 for current location"
+                          userLocation={userLocation}
+                          onLocationRequest={handleLocationUpdate}
+                          showCurrentLocation={true}
+                        />
 
-                    <LocationInput
-                      label="To Location"
-                      value={toLocation}
-                      onChange={setToLocation}
-                      placeholder="Enter destination"
-                      userLocation={userLocation}
-                      showCurrentLocation={false}
-                    />
+                        <div className="form-group">
+                          <label>Number of Hours *</label>
+                          <select
+                            value={numberOfHours}
+                            onChange={(e) => setNumberOfHours(e.target.value)}
+                            required
+                            className="hours-select"
+                          >
+                            <option value="">Select hours</option>
+                            <option value="2">2 hours</option>
+                            <option value="4">4 hours</option>
+                            <option value="8">8 hours</option>
+                            <option value="12">12 hours</option>
+                          </select>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <LocationInput
+                          label="From Location"
+                          value={fromLocation}
+                          onChange={setFromLocation}
+                          placeholder="Enter pickup location or click 📍 for current location"
+                          userLocation={userLocation}
+                          onLocationRequest={handleLocationUpdate}
+                          showCurrentLocation={true}
+                        />
+
+                        <LocationInput
+                          label="To Location"
+                          value={toLocation}
+                          onChange={setToLocation}
+                          placeholder="Enter destination"
+                          userLocation={userLocation}
+                          showCurrentLocation={false}
+                        />
+                      </>
+                    )}
 
                     <div className="form-group">
                       <label>Select Car *</label>
-                      <div className="cab-types-grid">
-                        {carOptionCards.map((opt) => (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            className={`cab-type-card ${
-                              selectedCarOptionId === opt.id ? 'selected' : ''
-                            }`}
-                            onClick={() => setSelectedCarOptionId(opt.id)}
-                          >
-                            <h3>{opt.name}</h3>
-                            {opt.description && <p>{opt.description}</p>}
-                          </button>
-                        ))}
+                      <div className="booking-car-options-grid">
+                        {carOptionCards.map((opt) => {
+                          const isSelected = selectedCarOptionId === opt.id;
+                          const carImageIndex = carImageIndices[opt.id] || 0;
+                          const carImages = opt.image_urls || (opt.image_url ? [opt.image_url] : []);
+                          
+                          return (
+                            <div
+                              key={opt.id}
+                              className={`booking-car-option-card ${
+                                isSelected ? 'selected' : ''
+                              }`}
+                              onClick={() => handleCarSelection(opt.id)}
+                            >
+                              {carImages.length > 0 && (
+                                <div className="booking-car-option-image-wrapper">
+                                  {carImages.length > 1 ? (
+                                    <div className="booking-car-image-gallery">
+                                      {carImages.map((url, index) => (
+                                        <div
+                                          key={index}
+                                          className={`booking-car-image-slide ${
+                                            index === carImageIndex ? 'active' : ''
+                                          }`}
+                                        >
+                                          <img
+                                            src={url}
+                                            alt={opt.name}
+                                            className="booking-car-option-image"
+                                            onError={(e) => {
+                                              e.target.style.display = 'none';
+                                            }}
+                                          />
+                                        </div>
+                                      ))}
+                                      <button
+                                        type="button"
+                                        className="booking-car-image-nav prev"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          const newIndex = carImageIndex > 0 
+                                            ? carImageIndex - 1 
+                                            : carImages.length - 1;
+                                          updateCarImageIndex(opt.id, newIndex);
+                                        }}
+                                        aria-label="Previous image"
+                                      >
+                                        ‹
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="booking-car-image-nav next"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          const newIndex = carImageIndex < carImages.length - 1 
+                                            ? carImageIndex + 1 
+                                            : 0;
+                                          updateCarImageIndex(opt.id, newIndex);
+                                        }}
+                                        aria-label="Next image"
+                                      >
+                                        ›
+                                      </button>
+                                      {carImages.length > 1 && (
+                                        <div className="booking-car-image-indicators">
+                                          {carImages.map((_, index) => (
+                                            <button
+                                              key={index}
+                                              type="button"
+                                              className={`booking-car-image-indicator ${
+                                                index === carImageIndex ? 'active' : ''
+                                              }`}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                updateCarImageIndex(opt.id, index);
+                                              }}
+                                              aria-label={`Go to image ${index + 1}`}
+                                            />
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <img
+                                      src={carImages[0]}
+                                      alt={opt.name}
+                                      className="booking-car-option-image"
+                                      onError={(e) => {
+                                        e.target.style.display = 'none';
+                                      }}
+                                    />
+                                  )}
+                                </div>
+                              )}
+                              <div className="booking-car-option-content">
+                                <h3>{opt.name}</h3>
+                                {opt.description && <p>{opt.description}</p>}
+                              </div>
+                            </div>
+                          );
+                        })}
                         {carOptionCards.length === 0 && (
-                          <p style={{ color: '#6b7280', fontSize: '14px' }}>
+                          <p style={{ color: '#9ca3af', fontSize: '14px' }}>
                             No car options configured yet. Please try again later.
                           </p>
                         )}
@@ -251,10 +448,15 @@ const BookingPage = () => {
                 {serviceType && (
                   <button
                     onClick={calculateFare}
-                    disabled={calculating || !fromLocation || !toLocation || !selectedCarOptionId}
+                    disabled={
+                      calculating || 
+                      !fromLocation || 
+                      !selectedCarOptionId ||
+                      (serviceType === 'local' ? !numberOfHours : !toLocation)
+                    }
                     className="btn btn-primary btn-block"
                   >
-                    {calculating ? 'Calculating...' : 'Calculate Fare'}
+                    {calculating ? 'Calculating...' : 'Check Price'}
                   </button>
                 )}
 
@@ -270,16 +472,24 @@ const BookingPage = () => {
                         <span>Base Fare:</span>
                         <span>₹{fare.breakdown.base_fare}</span>
                       </div>
+                    {serviceType !== 'local' && (
                       <div className="fare-item">
                         <span>Distance ({fare.distance_km} km):</span>
                         <span>₹{fare.breakdown.distance_charge.toFixed(2)}</span>
                       </div>
-                      {fare.breakdown.time_charge > 0 && (
-                        <div className="fare-item">
-                          <span>Time ({fare.estimated_time_minutes} min):</span>
-                          <span>₹{fare.breakdown.time_charge.toFixed(2)}</span>
-                        </div>
-                      )}
+                    )}
+                    {serviceType === 'local' && fare.breakdown.number_of_hours && (
+                      <div className="fare-item">
+                        <span>Duration ({fare.breakdown.number_of_hours} hours):</span>
+                        <span>₹{fare.breakdown.time_charge.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {serviceType !== 'local' && fare.breakdown.time_charge > 0 && (
+                      <div className="fare-item">
+                        <span>Time ({fare.estimated_time_minutes} min):</span>
+                        <span>₹{fare.breakdown.time_charge.toFixed(2)}</span>
+                      </div>
+                    )}
                       {fare.breakdown.service_multiplier > 1 && (
                         <div className="fare-item">
                           <span>Service Charge ({((fare.breakdown.service_multiplier - 1) * 100).toFixed(0)}%):</span>
@@ -291,13 +501,19 @@ const BookingPage = () => {
                         <span>₹{fare.fare}</span>
                       </div>
                     </div>
-                    <p className="estimated-time">
-                      ⏱️ Estimated Time: {fare.estimated_time_minutes} minutes
-                    </p>
+                    {serviceType === 'local' && fare.breakdown.number_of_hours ? (
+                      <p className="estimated-time">
+                        ⏱️ Duration: {fare.breakdown.number_of_hours} hours
+                      </p>
+                    ) : (
+                      <p className="estimated-time">
+                        ⏱️ Estimated Time: {fare.estimated_time_minutes} minutes
+                      </p>
+                    )}
                   </div>
                 )}
 
-                {showBookingForm && fare && (
+                {showBookingForm && fare && !showConfirmation && (
                   <form onSubmit={handleBooking} className="booking-form">
                     <h3>Complete Your Booking</h3>
                     
@@ -368,9 +584,127 @@ const BookingPage = () => {
                       disabled={loading}
                       className="btn btn-success btn-block"
                     >
-                      {loading ? 'Booking...' : `Confirm Booking - ₹${fare.fare}`}
+                      {loading ? 'Processing...' : `Proceed to Confirm - ₹${fare.fare}`}
                     </button>
                   </form>
+                )}
+
+                {showConfirmation && fare && (
+                  <div className="booking-confirmation-summary">
+                    <h3>Confirm Your Booking</h3>
+                    <p style={{ color: '#9ca3af', marginBottom: '20px', textAlign: 'center' }}>
+                      Please review your booking details before confirming
+                    </p>
+                    
+                    <div className="booking-summary-item">
+                      <span className="booking-summary-label">Service Type:</span>
+                      <span className="booking-summary-value">
+                        {serviceType === 'local' ? 'Local' : serviceType === 'airport' ? 'Airport' : 'Outstation'}
+                      </span>
+                    </div>
+                    
+                    <div className="booking-summary-item">
+                      <span className="booking-summary-label">
+                        {serviceType === 'local' ? 'Pickup Location:' : 'From:'}
+                      </span>
+                      <span className="booking-summary-value">{fromLocation}</span>
+                    </div>
+                    
+                    {serviceType === 'local' ? (
+                      <div className="booking-summary-item">
+                        <span className="booking-summary-label">Number of Hours:</span>
+                        <span className="booking-summary-value">{numberOfHours} hours</span>
+                      </div>
+                    ) : (
+                      <div className="booking-summary-item">
+                        <span className="booking-summary-label">To:</span>
+                        <span className="booking-summary-value">{toLocation}</span>
+                      </div>
+                    )}
+                    
+                    {(() => {
+                      const selectedCar = getSelectedCarOption();
+                      return selectedCar ? (
+                        <div className="booking-summary-item">
+                          <span className="booking-summary-label">Car:</span>
+                          <span className="booking-summary-value">{selectedCar.name}</span>
+                        </div>
+                      ) : null;
+                    })()}
+                    
+                    {serviceType === 'local' ? (
+                      <div className="booking-summary-item">
+                        <span className="booking-summary-label">Number of Hours:</span>
+                        <span className="booking-summary-value">{numberOfHours} hours</span>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="booking-summary-item">
+                          <span className="booking-summary-label">Distance:</span>
+                          <span className="booking-summary-value">{fare.distance_km} km</span>
+                        </div>
+                        
+                        <div className="booking-summary-item">
+                          <span className="booking-summary-label">Estimated Time:</span>
+                          <span className="booking-summary-value">{fare.estimated_time_minutes} minutes</span>
+                        </div>
+                      </>
+                    )}
+                    
+                    <div className="booking-summary-item">
+                      <span className="booking-summary-label">Passenger Name:</span>
+                      <span className="booking-summary-value">{bookingData.passenger_name}</span>
+                    </div>
+                    
+                    <div className="booking-summary-item">
+                      <span className="booking-summary-label">Phone:</span>
+                      <span className="booking-summary-value">{bookingData.passenger_phone}</span>
+                    </div>
+                    
+                    <div className="booking-summary-item">
+                      <span className="booking-summary-label">Email:</span>
+                      <span className="booking-summary-value">{bookingData.passenger_email}</span>
+                    </div>
+                    
+                    {bookingData.travel_date && (
+                      <div className="booking-summary-item">
+                        <span className="booking-summary-label">Travel Date:</span>
+                        <span className="booking-summary-value">
+                          {new Date(bookingData.travel_date).toLocaleString()}
+                        </span>
+                      </div>
+                    )}
+                    
+                    <div className="booking-summary-item" style={{ 
+                      borderTop: '2px solid rgba(250, 204, 21, 0.3)', 
+                      marginTop: '16px', 
+                      paddingTop: '16px',
+                      fontSize: '20px',
+                      fontWeight: '700'
+                    }}>
+                      <span className="booking-summary-label" style={{ color: '#facc15' }}>Total Fare:</span>
+                      <span className="booking-summary-value" style={{ color: '#facc15' }}>₹{fare.fare}</span>
+                    </div>
+                    
+                    <div className="booking-confirmation-actions">
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmation(false)}
+                        className="btn btn-secondary"
+                        disabled={loading}
+                      >
+                        Go Back
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleConfirmBooking}
+                        className="btn btn-success"
+                        disabled={loading}
+                      >
+                        {loading ? 'Booking...' : `Confirm Booking - ₹${fare.fare}`}
+                      </button>
+                    </div>
+                  </div>
                 )}
               </>
             )}

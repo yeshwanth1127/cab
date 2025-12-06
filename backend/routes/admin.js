@@ -425,7 +425,7 @@ router.get('/bookings', async (req, res) => {
        LEFT JOIN cab_types ct ON b.cab_type_id = ct.id
        LEFT JOIN car_options co ON b.car_option_id = co.id
        LEFT JOIN cabs c ON b.cab_id = c.id
-       ORDER BY b.booking_date DESC`
+       ORDER BY b.id DESC`
     );
     res.json(result);
   } catch (error) {
@@ -569,6 +569,194 @@ router.put('/bookings/:id/status', [
   }
 });
 
+// ========== RATE METERS MANAGEMENT ==========
+
+// Get all rate meters
+router.get('/rate-meters', async (req, res) => {
+  try {
+    const result = await db.allAsync(
+      `SELECT * FROM rate_meters ORDER BY service_type, car_category`
+    );
+    res.json(result);
+  } catch (error) {
+    console.error('Error fetching rate meters:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get rate meter by ID
+router.get('/rate-meters/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await db.getAsync(
+      'SELECT * FROM rate_meters WHERE id = ?',
+      [id]
+    );
+    if (!result) {
+      return res.status(404).json({ error: 'Rate meter not found' });
+    }
+    res.json(result);
+  } catch (error) {
+    console.error('Error fetching rate meter:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Create rate meter
+router.post('/rate-meters', [
+  body('service_type').isIn(['local', 'airport', 'outstation']).withMessage('Service type must be local, airport, or outstation'),
+  body('car_category').notEmpty().withMessage('Car category is required'),
+  body('base_fare').isFloat({ min: 0 }).withMessage('Base fare must be a positive number'),
+  body('per_km_rate').isFloat({ min: 0 }).withMessage('Per km rate must be a positive number'),
+  body('per_minute_rate').isFloat({ min: 0 }).withMessage('Per minute rate must be a positive number'),
+  body('per_hour_rate').isFloat({ min: 0 }).withMessage('Per hour rate must be a positive number'),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { service_type, car_category, base_fare, per_km_rate, per_minute_rate, per_hour_rate, is_active } = req.body;
+
+    // Check if rate meter already exists for this service_type and car_category
+    const existing = await db.getAsync(
+      'SELECT * FROM rate_meters WHERE service_type = ? AND car_category = ?',
+      [service_type, car_category]
+    );
+
+    if (existing) {
+      return res.status(400).json({ error: 'Rate meter already exists for this service type and car category' });
+    }
+
+    const result = await db.runAsync(
+      `INSERT INTO rate_meters (service_type, car_category, base_fare, per_km_rate, per_minute_rate, per_hour_rate, is_active)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        service_type,
+        car_category,
+        parseFloat(base_fare),
+        parseFloat(per_km_rate),
+        parseFloat(per_minute_rate),
+        parseFloat(per_hour_rate),
+        boolToInt(is_active !== undefined ? is_active : true),
+      ]
+    );
+
+    const newRateMeter = await db.getAsync('SELECT * FROM rate_meters WHERE id = ?', [result.lastID]);
+    res.status(201).json(newRateMeter);
+  } catch (error) {
+    console.error('Error creating rate meter:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update rate meter
+router.put('/rate-meters/:id', [
+  body('service_type').optional().isIn(['local', 'airport', 'outstation']).withMessage('Service type must be local, airport, or outstation'),
+  body('car_category').optional().notEmpty().withMessage('Car category cannot be empty'),
+  body('base_fare').optional().isFloat({ min: 0 }).withMessage('Base fare must be a positive number'),
+  body('per_km_rate').optional().isFloat({ min: 0 }).withMessage('Per km rate must be a positive number'),
+  body('per_minute_rate').optional().isFloat({ min: 0 }).withMessage('Per minute rate must be a positive number'),
+  body('per_hour_rate').optional().isFloat({ min: 0 }).withMessage('Per hour rate must be a positive number'),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { id } = req.params;
+    const { service_type, car_category, base_fare, per_km_rate, per_minute_rate, per_hour_rate, is_active } = req.body;
+
+    // Check if rate meter exists
+    const existing = await db.getAsync('SELECT * FROM rate_meters WHERE id = ?', [id]);
+    if (!existing) {
+      return res.status(404).json({ error: 'Rate meter not found' });
+    }
+
+    // If service_type or car_category is being changed, check for duplicates
+    if (service_type || car_category) {
+      const newServiceType = service_type || existing.service_type;
+      const newCarCategory = car_category || existing.car_category;
+      
+      if (newServiceType !== existing.service_type || newCarCategory !== existing.car_category) {
+        const duplicate = await db.getAsync(
+          'SELECT * FROM rate_meters WHERE service_type = ? AND car_category = ? AND id != ?',
+          [newServiceType, newCarCategory, id]
+        );
+        if (duplicate) {
+          return res.status(400).json({ error: 'Rate meter already exists for this service type and car category' });
+        }
+      }
+    }
+
+    // Build update query dynamically
+    const updates = [];
+    const values = [];
+
+    if (service_type !== undefined) {
+      updates.push('service_type = ?');
+      values.push(service_type);
+    }
+    if (car_category !== undefined) {
+      updates.push('car_category = ?');
+      values.push(car_category);
+    }
+    if (base_fare !== undefined) {
+      updates.push('base_fare = ?');
+      values.push(parseFloat(base_fare));
+    }
+    if (per_km_rate !== undefined) {
+      updates.push('per_km_rate = ?');
+      values.push(parseFloat(per_km_rate));
+    }
+    if (per_minute_rate !== undefined) {
+      updates.push('per_minute_rate = ?');
+      values.push(parseFloat(per_minute_rate));
+    }
+    if (per_hour_rate !== undefined) {
+      updates.push('per_hour_rate = ?');
+      values.push(parseFloat(per_hour_rate));
+    }
+    if (is_active !== undefined) {
+      updates.push('is_active = ?');
+      values.push(boolToInt(is_active));
+    }
+
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+    values.push(id);
+
+    await db.runAsync(
+      `UPDATE rate_meters SET ${updates.join(', ')} WHERE id = ?`,
+      values
+    );
+
+    const updated = await db.getAsync('SELECT * FROM rate_meters WHERE id = ?', [id]);
+    res.json(updated);
+  } catch (error) {
+    console.error('Error updating rate meter:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Delete rate meter
+router.delete('/rate-meters/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const existing = await db.getAsync('SELECT * FROM rate_meters WHERE id = ?', [id]);
+    if (!existing) {
+      return res.status(404).json({ error: 'Rate meter not found' });
+    }
+
+    await db.runAsync('DELETE FROM rate_meters WHERE id = ?', [id]);
+    res.json({ message: 'Rate meter deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting rate meter:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ========== DASHBOARD STATS ==========
 
 router.get('/dashboard/stats', async (req, res) => {
@@ -647,7 +835,7 @@ router.post(
         return res.status(400).json({ errors: errors.array() });
       }
 
-      const { name, description, sort_order } = req.body;
+      const { name, description, sort_order, car_subtype, cab_type_id } = req.body;
 
       let imageUrls = [];
       if (req.files && req.files.length > 0) {
@@ -658,9 +846,9 @@ router.post(
       }
 
       const result = await db.runAsync(
-        `INSERT INTO car_options (name, description, image_url, sort_order)
-         VALUES (?, ?, ?, ?)`,
-        [name, description || null, imageUrls.length ? JSON.stringify(imageUrls) : null, sort_order || 0]
+        `INSERT INTO car_options (name, description, image_url, sort_order, car_subtype, cab_type_id)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [name, description || null, imageUrls.length ? JSON.stringify(imageUrls) : null, sort_order || 0, car_subtype || null, cab_type_id || null]
       );
 
       const newOption = await db.getAsync('SELECT * FROM car_options WHERE id = ?', [result.lastID]);
@@ -676,7 +864,7 @@ router.post(
 router.put('/car-options/:id', upload.array('images', 10), async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, image_url, sort_order, is_active } = req.body;
+    const { name, description, image_url, sort_order, is_active, car_subtype, cab_type_id } = req.body;
 
     const updates = [];
     const values = [];
@@ -730,6 +918,14 @@ router.put('/car-options/:id', upload.array('images', 10), async (req, res) => {
       updates.push('is_active = ?');
       values.push(boolToInt(is_active));
     }
+    if (car_subtype !== undefined) {
+      updates.push('car_subtype = ?');
+      values.push(car_subtype || null);
+    }
+    if (cab_type_id !== undefined) {
+      updates.push('cab_type_id = ?');
+      values.push(cab_type_id || null);
+    }
 
     if (updates.length === 0) {
       return res.status(400).json({ error: 'No fields to update' });
@@ -766,6 +962,97 @@ router.delete('/car-options/:id', async (req, res) => {
     res.json({ message: 'Car option deleted successfully' });
   } catch (error) {
     console.error('Error deleting car option:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get cars grouped by cab type and subtype
+router.get('/cab-types/:cabTypeId/cars', async (req, res) => {
+  try {
+    const { cabTypeId } = req.params;
+    const cars = await db.allAsync(
+      `SELECT co.*, ct.name as cab_type_name
+       FROM car_options co
+       LEFT JOIN cab_types ct ON co.cab_type_id = ct.id
+       WHERE co.cab_type_id = ? AND co.is_active = 1
+       ORDER BY co.car_subtype, co.sort_order ASC`,
+      [cabTypeId]
+    );
+    
+    // Group by subtype
+    const grouped = {};
+    cars.forEach(car => {
+      const subtype = car.car_subtype || 'Uncategorized';
+      if (!grouped[subtype]) {
+        grouped[subtype] = [];
+      }
+      grouped[subtype].push(normalizeCarOptionImages(car));
+    });
+    
+    res.json(grouped);
+  } catch (error) {
+    console.error('Error fetching cars by cab type:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Assign car to cab type and subtype
+router.post('/cab-types/:cabTypeId/assign-car', [
+  body('car_option_id').isInt().withMessage('Car option ID is required'),
+  body('car_subtype').optional().notEmpty().withMessage('Car subtype must not be empty'),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { cabTypeId } = req.params;
+    const { car_option_id, car_subtype } = req.body;
+
+    // Verify cab type exists
+    const cabType = await db.getAsync('SELECT id FROM cab_types WHERE id = ?', [cabTypeId]);
+    if (!cabType) {
+      return res.status(404).json({ error: 'Cab type not found' });
+    }
+
+    // Verify car option exists
+    const carOption = await db.getAsync('SELECT id FROM car_options WHERE id = ?', [car_option_id]);
+    if (!carOption) {
+      return res.status(404).json({ error: 'Car option not found' });
+    }
+
+    // Update car option
+    await db.runAsync(
+      'UPDATE car_options SET cab_type_id = ?, car_subtype = ? WHERE id = ?',
+      [cabTypeId, car_subtype || null, car_option_id]
+    );
+
+    const updated = await db.getAsync(
+      `SELECT co.*, ct.name as cab_type_name
+       FROM car_options co
+       LEFT JOIN cab_types ct ON co.cab_type_id = ct.id
+       WHERE co.id = ?`,
+      [car_option_id]
+    );
+
+    res.json(normalizeCarOptionImages(updated));
+  } catch (error) {
+    console.error('Error assigning car to cab type:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get all available car options (for dropdown/selection)
+router.get('/car-options/available', async (req, res) => {
+  try {
+    const result = await db.allAsync(
+      'SELECT * FROM car_options WHERE is_active = 1 ORDER BY name ASC'
+    );
+    const normalized = result.map(normalizeCarOptionImages);
+    res.json(normalized);
+  } catch (error) {
+    console.error('Error fetching available car options:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

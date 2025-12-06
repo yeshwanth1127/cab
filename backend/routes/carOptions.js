@@ -31,9 +31,24 @@ const normalizeCarOptionImages = (row) => {
 // Get all active car options (public)
 router.get('/', async (req, res) => {
   try {
-    const result = await db.allAsync(
-      'SELECT * FROM car_options WHERE is_active = 1 ORDER BY sort_order ASC, created_at DESC'
-    );
+    const { service_type } = req.query;
+    
+    let query = 'SELECT co.* FROM car_options co WHERE co.is_active = 1';
+    const params = [];
+    
+    // If service_type is provided, filter by cab_type_id
+    if (service_type) {
+      // Map service_type to cab_type name
+      const cabTypeName = service_type.charAt(0).toUpperCase() + service_type.slice(1);
+      query += ` AND co.cab_type_id IN (
+        SELECT id FROM cab_types WHERE LOWER(name) = LOWER(?) AND is_active = 1
+      )`;
+      params.push(cabTypeName);
+    }
+    
+    query += ' ORDER BY co.car_subtype, co.sort_order ASC, co.created_at DESC';
+    
+    const result = await db.allAsync(query, params);
     const normalized = result.map(normalizeCarOptionImages);
     res.json(normalized);
   } catch (error) {

@@ -18,7 +18,6 @@ function App() {
   return (
     <AuthProvider>
       <Router>
-        <CornerLogo />
         <Routes>
           <Route path="/" element={<BookingPage />} />
           <Route path="/car-options" element={<CarOptions />} />

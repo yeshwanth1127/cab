@@ -1,6 +1,7 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
+const { mapCarToSubtype } = require('../utils/carMapping');
 
 const DB_PATH = path.join(__dirname, 'cab_booking.db');
 
@@ -55,6 +56,123 @@ const initDatabase = () => {
             }
           }
 
+          // Migration to add car_subtype and cab_type_id to car_options
+          try {
+            await db.runAsync(
+              `ALTER TABLE car_options ADD COLUMN car_subtype TEXT`
+            );
+            console.log('Migration: car_subtype column added to car_options');
+          } catch (migrationErr) {
+            if (!migrationErr.message.includes('duplicate column')) {
+              console.log('Migration note (car_subtype):', migrationErr.message);
+            }
+          }
+
+          try {
+            await db.runAsync(
+              `ALTER TABLE car_options ADD COLUMN cab_type_id INTEGER`
+            );
+            console.log('Migration: cab_type_id column added to car_options');
+          } catch (migrationErr) {
+            if (!migrationErr.message.includes('duplicate column')) {
+              console.log('Migration note (cab_type_id):', migrationErr.message);
+            }
+          }
+
+          // Migration to add number_of_hours to bookings
+          try {
+            await db.runAsync(
+              `ALTER TABLE bookings ADD COLUMN number_of_hours INTEGER`
+            );
+            console.log('Migration: number_of_hours column added to bookings');
+          } catch (migrationErr) {
+            if (!migrationErr.message.includes('duplicate column')) {
+              console.log('Migration note (number_of_hours):', migrationErr.message);
+            }
+          }
+
+          // Migration to create rate_meters table
+          try {
+            await db.runAsync(
+              `CREATE TABLE IF NOT EXISTS rate_meters (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                service_type TEXT NOT NULL CHECK (service_type IN ('local', 'airport', 'outstation')),
+                car_category TEXT NOT NULL,
+                base_fare REAL NOT NULL DEFAULT 0,
+                per_km_rate REAL NOT NULL DEFAULT 0,
+                per_minute_rate REAL NOT NULL DEFAULT 0,
+                per_hour_rate REAL NOT NULL DEFAULT 0,
+                is_active INTEGER DEFAULT 1,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(service_type, car_category)
+              )`
+            );
+            console.log('Migration: rate_meters table created');
+            
+            // Define all required rate meters with new subtypes (ordered: Sedan, SUV, Innova, Innova Crysta, Tempo, Urbenia, Minibus)
+            const defaultRates = [
+              ['local', 'Sedan', 50.00, 0, 0, 200.00],
+              ['local', 'SUV', 60.00, 0, 0, 250.00],
+              ['local', 'Innova', 70.00, 0, 0, 300.00],
+              ['local', 'Innova Crysta', 80.00, 0, 0, 350.00],
+              ['local', 'Tempo', 90.00, 0, 0, 400.00],
+              ['local', 'Urbenia', 100.00, 0, 0, 450.00],
+              ['local', 'Minibus', 120.00, 0, 0, 500.00],
+              ['airport', 'Sedan', 80.00, 12.00, 1.20, 0],
+              ['airport', 'SUV', 100.00, 15.00, 1.50, 0],
+              ['airport', 'Innova', 120.00, 18.00, 1.80, 0],
+              ['airport', 'Innova Crysta', 140.00, 20.00, 2.00, 0],
+              ['airport', 'Tempo', 160.00, 22.00, 2.20, 0],
+              ['airport', 'Urbenia', 180.00, 25.00, 2.50, 0],
+              ['airport', 'Minibus', 200.00, 28.00, 2.80, 0],
+              ['outstation', 'Sedan', 100.00, 15.00, 1.50, 0],
+              ['outstation', 'SUV', 120.00, 18.00, 1.80, 0],
+              ['outstation', 'Innova', 150.00, 22.00, 2.20, 0],
+              ['outstation', 'Innova Crysta', 180.00, 25.00, 2.50, 0],
+              ['outstation', 'Tempo', 200.00, 28.00, 2.80, 0],
+              ['outstation', 'Urbenia', 220.00, 30.00, 3.00, 0],
+              ['outstation', 'Minibus', 250.00, 35.00, 3.50, 0],
+            ];
+            
+            // Insert or update rate meters for all required combinations
+            for (const [service_type, car_category, base_fare, per_km_rate, per_minute_rate, per_hour_rate] of defaultRates) {
+              // Check if rate meter exists
+              const existing = await db.getAsync(
+                'SELECT id FROM rate_meters WHERE service_type = ? AND car_category = ?',
+                [service_type, car_category]
+              );
+              
+              if (existing) {
+                // Update existing rate meter
+                await db.runAsync(
+                  `UPDATE rate_meters 
+                   SET base_fare = ?, per_km_rate = ?, per_minute_rate = ?, per_hour_rate = ?, updated_at = CURRENT_TIMESTAMP
+                   WHERE service_type = ? AND car_category = ?`,
+                  [base_fare, per_km_rate, per_minute_rate, per_hour_rate, service_type, car_category]
+                );
+              } else {
+                // Insert new rate meter
+                await db.runAsync(
+                  `INSERT INTO rate_meters (service_type, car_category, base_fare, per_km_rate, per_minute_rate, per_hour_rate)
+                   VALUES (?, ?, ?, ?, ?, ?)`,
+                  [service_type, car_category, base_fare, per_km_rate, per_minute_rate, per_hour_rate]
+                );
+              }
+            }
+            
+            // Delete old rate meters with deprecated subtypes (Sub, Tempo Traveller)
+            await db.runAsync(
+              `DELETE FROM rate_meters WHERE car_category IN ('Sub', 'Tempo Traveller')`
+            );
+            
+            console.log('Migration: Rate meters updated with new subtypes');
+          } catch (migrationErr) {
+            if (!migrationErr.message.includes('already exists')) {
+              console.log('Migration note (rate_meters):', migrationErr.message);
+            }
+          }
+
           // Seed car options table with predefined cars (idempotent)
           try {
             const seedCars = [
@@ -79,12 +197,21 @@ const initDatabase = () => {
             ];
 
             for (const [name, description, sortOrder] of seedCars) {
+              const subtype = mapCarToSubtype(name, description);
               await db.runAsync(
-                `INSERT INTO car_options (name, description, image_url, sort_order)
-                 SELECT ?, ?, NULL, ?
+                `INSERT INTO car_options (name, description, image_url, sort_order, car_subtype)
+                 SELECT ?, ?, NULL, ?, ?
                  WHERE NOT EXISTS (SELECT 1 FROM car_options WHERE name = ?)`,
-                [name, description, sortOrder, name]
+                [name, description, sortOrder, subtype, name]
               );
+              
+              // Update existing records with subtype (always update to ensure correct mapping)
+              if (subtype) {
+                await db.runAsync(
+                  `UPDATE car_options SET car_subtype = ? WHERE name = ?`,
+                  [subtype, name]
+                );
+              }
             }
 
             console.log('Seeded car_options table with predefined cars (if missing)');

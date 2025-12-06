@@ -12,9 +12,9 @@
   position: absolute;
   top: -30%;
   left: -30%;
-  /* Dark map, but keep roads/labels visible */
-  filter: brightness(0.6) contrast(1.25);
-  opacity: 0.7;
+  /* Light/white map background */
+  filter: brightness(1.1) contrast(0.9);
+  opacity: 0.9;
   transition: transform 0.2s ease-out;
 }
 

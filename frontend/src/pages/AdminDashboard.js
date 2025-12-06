@@ -23,11 +23,32 @@ const AdminDashboard = () => {
   const [editingItem, setEditingItem] = useState(null);
   const [formData, setFormData] = useState({});
   const [carOptionImageFiles, setCarOptionImageFiles] = useState([]);
+  const [cabTypeCars, setCabTypeCars] = useState({}); // { cabTypeId: { subtype: [cars] } }
+  const [expandedCabTypes, setExpandedCabTypes] = useState({}); // { cabTypeId: true/false }
+  const [showAddCarModal, setShowAddCarModal] = useState(false);
+  const [selectedCabTypeForCar, setSelectedCabTypeForCar] = useState(null);
+  const [availableCars, setAvailableCars] = useState([]);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [rateMeters, setRateMeters] = useState([]);
+  const [expandedServiceTypes, setExpandedServiceTypes] = useState({});
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchDashboardData();
   }, [activeTab]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth <= 768;
+      setIsMobile(mobile);
+      if (!mobile) {
+        setSidebarOpen(false);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const fetchDashboardData = async () => {
     setLoading(true);
@@ -35,9 +56,30 @@ const AdminDashboard = () => {
       if (activeTab === 'dashboard') {
         const response = await api.get('/admin/dashboard/stats');
         setStats(response.data);
+      } else if (activeTab === 'rate-meters') {
+        const response = await api.get('/admin/rate-meters');
+        setRateMeters(response.data);
+      } else if (activeTab === 'rate-meters') {
+        const response = await api.get('/admin/rate-meters');
+        setRateMeters(response.data);
       } else if (activeTab === 'cab-types') {
         const response = await api.get('/admin/cab-types');
         setCabTypes(response.data);
+        // Fetch cars for each cab type
+        const carsData = {};
+        for (const cabType of response.data) {
+          try {
+            const carsResponse = await api.get(`/admin/cab-types/${cabType.id}/cars`);
+            carsData[cabType.id] = carsResponse.data;
+          } catch (error) {
+            console.error(`Error fetching cars for cab type ${cabType.id}:`, error);
+            carsData[cabType.id] = {};
+          }
+        }
+        setCabTypeCars(carsData);
+        // Also fetch all available cars for the add car modal
+        const allCarsResponse = await api.get('/admin/car-options/available');
+        setAvailableCars(allCarsResponse.data);
       } else if (activeTab === 'cabs') {
         const response = await api.get('/admin/cabs');
         setCabs(response.data);
@@ -138,6 +180,55 @@ const AdminDashboard = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const toggleCabTypeExpansion = (cabTypeId) => {
+    setExpandedCabTypes(prev => ({
+      ...prev,
+      [cabTypeId]: !prev[cabTypeId]
+    }));
+  };
+
+  const openAddCarModal = (cabTypeId) => {
+    setSelectedCabTypeForCar(cabTypeId);
+    setFormData({ car_option_id: '', car_subtype: '' });
+    setShowAddCarModal(true);
+  };
+
+  const handleAssignCar = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const { car_option_id, car_subtype } = formData;
+      await api.post(`/admin/cab-types/${selectedCabTypeForCar}/assign-car`, {
+        car_option_id,
+        car_subtype
+      });
+      alert('Car assigned successfully');
+      setShowAddCarModal(false);
+      setFormData({ car_option_id: '', car_subtype: '' });
+      fetchDashboardData();
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error assigning car');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRemoveCarFromCabType = async (carId) => {
+    if (!window.confirm('Remove this car from this cab type?')) {
+      return;
+    }
+    try {
+      await api.put(`/admin/car-options/${carId}`, {
+        cab_type_id: null,
+        car_subtype: null
+      });
+      alert('Car removed successfully');
+      fetchDashboardData();
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error removing car');
+    }
+  };
+
   const updateBookingStatus = async (bookingId, status) => {
     try {
       await api.put(`/admin/bookings/${bookingId}/status`, { status });
@@ -224,7 +315,17 @@ const AdminDashboard = () => {
       groups[groupKey].bookings.push(booking);
     });
 
-    return Object.entries(groups);
+    // Sort bookings within each group by booking ID (descending - latest first)
+    Object.values(groups).forEach((group) => {
+      group.bookings.sort((a, b) => (b.id || 0) - (a.id || 0));
+    });
+
+    // Sort groups by highest booking ID in each group (descending - latest first)
+    return Object.entries(groups).sort(([, groupA], [, groupB]) => {
+      const maxIdA = Math.max(...groupA.bookings.map((b) => b.id || 0));
+      const maxIdB = Math.max(...groupB.bookings.map((b) => b.id || 0));
+      return maxIdB - maxIdA;
+    });
   };
 
   const downloadReceipt = async (bookingId) => {
@@ -251,50 +352,141 @@ const AdminDashboard = () => {
 
   return (
     <div className="admin-dashboard">
-      <nav className="admin-navbar">
-        <div className="container">
-          <h1>Namma Cabs – Admin Dashboard</h1>
-          <div className="nav-right">
-            <span>Welcome, {user?.username}</span>
-            <button onClick={logout} className="btn btn-secondary">
-              Logout
-            </button>
-          </div>
-        </div>
-      </nav>
+      {/* Mobile hamburger menu button - fixed at top */}
+      {isMobile && (
+        <button 
+          className="mobile-hamburger-btn"
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          aria-label="Toggle menu"
+        >
+          {sidebarOpen ? '✕' : '☰'}
+        </button>
+      )}
+
+      {/* Mobile overlay when sidebar is open */}
+      {isMobile && sidebarOpen && (
+        <div 
+          className="mobile-sidebar-overlay"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
 
       <div className="admin-container">
-        <div className="sidebar">
-          <button
-            className={activeTab === 'dashboard' ? 'active' : ''}
-            onClick={() => setActiveTab('dashboard')}
-          >
-            📊 Dashboard
-          </button>
-          <button
-            className={activeTab === 'cab-types' ? 'active' : ''}
-            onClick={() => setActiveTab('cab-types')}
-          >
-            🚗 Cab Types
-          </button>
-          <button
-            className={activeTab === 'car-options' ? 'active' : ''}
-            onClick={() => setActiveTab('car-options')}
-          >
-            🚘 Car Options
-          </button>
-          <button
-            className={activeTab === 'bookings' ? 'active' : ''}
-            onClick={() => setActiveTab('bookings')}
-          >
-            📋 Bookings
-          </button>
-          <button
-            className={activeTab === 'cabs' ? 'active' : ''}
-            onClick={() => setActiveTab('cabs')}
-          >
-            🚕 Cab Details
-          </button>
+        <div className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
+          <div className="sidebar-header">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+              <div>
+                <h2>Namma Cabs</h2>
+                <p className="sidebar-subtitle">Admin Dashboard</p>
+              </div>
+              {isMobile && (
+                <button 
+                  className="mobile-menu-close-btn"
+                  onClick={() => setSidebarOpen(false)}
+                  aria-label="Close menu"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+            <div style={{ paddingTop: '15px', borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                <span style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '13px' }}>Welcome, {user?.username}</span>
+              </div>
+              <button 
+                onClick={logout} 
+                className="btn btn-secondary"
+                style={{ 
+                  width: '100%', 
+                  padding: '10px', 
+                  fontSize: '14px',
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  color: '#fff'
+                }}
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+          
+          <div className="sidebar-section">
+            <h3 className="sidebar-heading">Overview</h3>
+            <button
+              className={activeTab === 'dashboard' ? 'active' : ''}
+              onClick={() => {
+                setActiveTab('dashboard');
+                if (isMobile) setSidebarOpen(false);
+              }}
+            >
+              <span className="sidebar-icon">📊</span>
+              <span className="sidebar-text">Dashboard</span>
+              <span className="sidebar-subtext">Statistics & Insights</span>
+            </button>
+          </div>
+
+          <div className="sidebar-section">
+            <h3 className="sidebar-heading">Bookings</h3>
+            <button
+              className={activeTab === 'bookings' ? 'active' : ''}
+              onClick={() => {
+                setActiveTab('bookings');
+                if (isMobile) setSidebarOpen(false);
+              }}
+            >
+              <span className="sidebar-icon">📋</span>
+              <span className="sidebar-text">All Bookings</span>
+              <span className="sidebar-subtext">View & Manage</span>
+            </button>
+          </div>
+
+          <div className="sidebar-section">
+            <h3 className="sidebar-heading">Fleet Management</h3>
+            <button
+              className={activeTab === 'rate-meters' ? 'active' : ''}
+              onClick={() => {
+                setActiveTab('rate-meters');
+                if (isMobile) setSidebarOpen(false);
+              }}
+            >
+              <span className="sidebar-icon">💰</span>
+              <span className="sidebar-text">Rate Meter</span>
+              <span className="sidebar-subtext">Fare Rates</span>
+            </button>
+            <button
+              className={activeTab === 'cab-types' ? 'active' : ''}
+              onClick={() => {
+                setActiveTab('cab-types');
+                if (isMobile) setSidebarOpen(false);
+              }}
+            >
+              <span className="sidebar-icon">🚗</span>
+              <span className="sidebar-text">Cab Types</span>
+              <span className="sidebar-subtext">Categories & Pricing</span>
+            </button>
+            <button
+              className={activeTab === 'car-options' ? 'active' : ''}
+              onClick={() => {
+                setActiveTab('car-options');
+                if (isMobile) setSidebarOpen(false);
+              }}
+            >
+              <span className="sidebar-icon">🚘</span>
+              <span className="sidebar-text">Car Options</span>
+              <span className="sidebar-subtext">Vehicle Models</span>
+            </button>
+            <button
+              className={activeTab === 'cabs' ? 'active' : ''}
+              onClick={() => {
+                setActiveTab('cabs');
+                if (isMobile) setSidebarOpen(false);
+              }}
+            >
+              <span className="sidebar-icon">🚕</span>
+              <span className="sidebar-text">Cab Details</span>
+              <span className="sidebar-subtext">Drivers & Vehicles</span>
+            </button>
+          </div>
         </div>
 
         <div className="main-content">
@@ -329,45 +521,99 @@ const AdminDashboard = () => {
                   + Add Cab Type
                 </button>
               </div>
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Base Fare</th>
-                    <th>Per KM Rate</th>
-                    <th>Per Min Rate</th>
-                    <th>Capacity</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {cabTypes.map((ct) => (
-                    <tr key={ct.id}>
-                      <td>{ct.name}</td>
-                      <td>₹{ct.base_fare}</td>
-                      <td>₹{ct.per_km_rate}</td>
-                      <td>₹{ct.per_minute_rate}</td>
-                      <td>{ct.capacity}</td>
-                      <td>{ct.is_active ? 'Active' : 'Inactive'}</td>
-                      <td>
-                        <button
-                          onClick={() => openEditForm(ct)}
-                          className="btn btn-secondary btn-sm"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete('cab-types', ct.id)}
-                          className="btn btn-danger btn-sm"
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              
+              <div className="cab-types-hierarchical">
+                {cabTypes.map((ct) => {
+                  const isExpanded = expandedCabTypes[ct.id];
+                  const carsBySubtype = cabTypeCars[ct.id] || {};
+                  const subtypes = Object.keys(carsBySubtype).sort();
+                  
+                  return (
+                    <div key={ct.id} className="cab-type-section">
+                      <div className="cab-type-header" onClick={() => toggleCabTypeExpansion(ct.id)}>
+                        <div className="cab-type-header-left">
+                          <span className="expand-icon">{isExpanded ? '▼' : '▶'}</span>
+                          <h3>{ct.name}</h3>
+                          <span className="cab-type-info">
+                            ₹{ct.base_fare} base + ₹{ct.per_km_rate}/km
+                            {ct.per_minute_rate > 0 && ` + ₹${ct.per_minute_rate}/min`}
+                          </span>
+                        </div>
+                        <div className="cab-type-header-right">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openEditForm(ct);
+                            }}
+                            className="btn btn-secondary btn-sm"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDelete('cab-types', ct.id);
+                            }}
+                            className="btn btn-danger btn-sm"
+                          >
+                            Delete
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openAddCarModal(ct.id);
+                            }}
+                            className="btn btn-primary btn-sm"
+                          >
+                            + Add Car
+                          </button>
+                        </div>
+                      </div>
+                      
+                      {isExpanded && (
+                        <div className="cab-type-content">
+                          {subtypes.length === 0 ? (
+                            <div className="no-cars-message">
+                              <p>No cars assigned to this cab type yet.</p>
+                              <button
+                                onClick={() => openAddCarModal(ct.id)}
+                                className="btn btn-primary btn-sm"
+                              >
+                                + Add Car
+                              </button>
+                            </div>
+                          ) : (
+                            subtypes.map((subtype) => (
+                              <div key={subtype} className="car-subtype-section">
+                                <h4 className="subtype-header">{subtype}</h4>
+                                <div className="cars-grid">
+                                  {carsBySubtype[subtype].map((car) => (
+                                    <div key={car.id} className="car-card">
+                                      {car.image_url && (
+                                        <img src={car.image_url} alt={car.name} className="car-card-image" />
+                                      )}
+                                      <div className="car-card-content">
+                                        <h5>{car.name}</h5>
+                                        {car.description && <p>{car.description}</p>}
+                                      </div>
+                                      <button
+                                        onClick={() => handleRemoveCarFromCabType(car.id)}
+                                        className="btn btn-danger btn-sm car-remove-btn"
+                                      >
+                                        Remove
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 
@@ -379,7 +625,8 @@ const AdminDashboard = () => {
                   + Add Cab
                 </button>
               </div>
-              <table className="data-table">
+              <div className="data-table-wrapper">
+                <table className="data-table">
                 <thead>
                   <tr>
                     <th>Vehicle Number</th>
@@ -418,6 +665,132 @@ const AdminDashboard = () => {
                   ))}
                 </tbody>
               </table>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'rate-meters' && (
+            <div>
+              <div className="section-header">
+                <h2>Rate Meter Management</h2>
+                <button onClick={openCreateForm} className="btn btn-primary">
+                  + Add Rate Meter
+                </button>
+              </div>
+
+              <div className="rate-meters-container">
+                {['local', 'airport', 'outstation'].map((serviceType) => {
+                  const serviceRates = rateMeters.filter(rm => rm.service_type === serviceType);
+                  const isExpanded = expandedServiceTypes[serviceType];
+                  
+                  return (
+                    <div key={serviceType} className="rate-meter-service-section">
+                      <div 
+                        className="rate-meter-service-header"
+                        onClick={() => setExpandedServiceTypes(prev => ({
+                          ...prev,
+                          [serviceType]: !prev[serviceType]
+                        }))}
+                      >
+                        <div className="rate-meter-service-header-left">
+                          <span className="expand-icon">{isExpanded ? '▼' : '▶'}</span>
+                          <h3 className="service-type-title">
+                            {serviceType.charAt(0).toUpperCase() + serviceType.slice(1)}
+                          </h3>
+                          <span className="rate-count">
+                            {serviceRates.length} rate{serviceRates.length !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                      </div>
+
+                      {isExpanded && (
+                        <div className="rate-meter-service-content">
+                          {serviceRates.length === 0 ? (
+                            <div className="no-rates-message">
+                              <p>No rates configured for {serviceType} service.</p>
+                              <button
+                                onClick={() => {
+                                  setFormData({
+                                    service_type: serviceType,
+                                    car_category: '',
+                                    base_fare: 0,
+                                    per_km_rate: 0,
+                                    per_minute_rate: 0,
+                                    per_hour_rate: 0,
+                                  });
+                                  setEditingItem(null);
+                                  setShowForm(true);
+                                }}
+                                className="btn btn-primary btn-sm"
+                              >
+                                + Add Rate
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="rate-meters-grid">
+                              {serviceRates.map((rate) => (
+                                <div key={rate.id} className="rate-meter-card">
+                                  <div className="rate-meter-card-header">
+                                    <h4>{rate.car_category}</h4>
+                                    <div className="rate-meter-actions">
+                                      <button
+                                        onClick={() => openEditForm(rate)}
+                                        className="btn btn-secondary btn-sm"
+                                      >
+                                        Edit
+                                      </button>
+                                      <button
+                                        onClick={() => handleDelete('rate-meters', rate.id)}
+                                        className="btn btn-danger btn-sm"
+                                      >
+                                        Delete
+                                      </button>
+                                    </div>
+                                  </div>
+                                  <div className="rate-meter-details">
+                                    {serviceType === 'local' ? (
+                                      <>
+                                        <div className="rate-detail-item">
+                                          <span className="rate-label">Base Fare:</span>
+                                          <span className="rate-value">₹{rate.base_fare}</span>
+                                        </div>
+                                        <div className="rate-detail-item">
+                                          <span className="rate-label">Per Hour:</span>
+                                          <span className="rate-value">₹{rate.per_hour_rate}</span>
+                                        </div>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <div className="rate-detail-item">
+                                          <span className="rate-label">Base Fare:</span>
+                                          <span className="rate-value">₹{rate.base_fare}</span>
+                                        </div>
+                                        <div className="rate-detail-item">
+                                          <span className="rate-label">Per KM:</span>
+                                          <span className="rate-value">₹{rate.per_km_rate}</span>
+                                        </div>
+                                        <div className="rate-detail-item">
+                                          <span className="rate-label">Per Minute:</span>
+                                          <span className="rate-value">₹{rate.per_minute_rate}</span>
+                                        </div>
+                                      </>
+                                    )}
+                                    <div className="rate-status">
+                                      <span className={`status-badge ${rate.is_active ? 'active' : 'inactive'}`}>
+                                        {rate.is_active ? 'Active' : 'Inactive'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 
@@ -504,28 +877,31 @@ const AdminDashboard = () => {
                   </div>
                 </div>
               </div>
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>From</th>
-                    <th>To</th>
-                    <th>Cab Type</th>
-                    <th>Car Option</th>
-                    <th>Passenger</th>
-                    <th>Phone</th>
-                    <th>Fare</th>
-                    <th>Status</th>
-                    <th>Date</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
+              <div className="data-table-wrapper">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Service</th>
+                      <th>From</th>
+                      <th>To</th>
+                      <th>Hours</th>
+                      <th>Cab Type</th>
+                      <th>Car Option</th>
+                      <th>Passenger</th>
+                      <th>Phone</th>
+                      <th>Fare</th>
+                      <th>Status</th>
+                      <th>Date</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
                 <tbody>
                   {filteredAndGroupedBookings().map(
                     ([groupKey, group]) => (
                       <React.Fragment key={groupKey}>
                         <tr className="booking-group-row">
-                          <td colSpan="10">
+                          <td colSpan="13">
                             <div className="booking-group-header">
                               <span className="booking-group-title">
                                 {group.userLabel}
@@ -539,15 +915,33 @@ const AdminDashboard = () => {
                         </tr>
                         {group.bookings.map((booking) => (
                           <tr key={booking.id}>
-                            <td>{booking.id}</td>
-                            <td>{booking.from_location}</td>
-                            <td>{booking.to_location}</td>
-                            <td>{booking.cab_type_name}</td>
-                            <td>{booking.car_option_name || '-'}</td>
-                            <td>{booking.passenger_name}</td>
-                            <td>{booking.passenger_phone}</td>
-                            <td>₹{booking.fare_amount}</td>
-                            <td>
+                            <td data-label="ID">{booking.id}</td>
+                            <td data-label="Service">
+                              <span className={`service-badge ${booking.service_type || 'local'}`}>
+                                {(booking.service_type || 'local').charAt(0).toUpperCase() + (booking.service_type || 'local').slice(1)}
+                              </span>
+                            </td>
+                            <td data-label="From">{booking.from_location}</td>
+                            <td data-label="To">
+                              {booking.service_type === 'local' || booking.to_location === 'N/A' 
+                                ? <span className="text-muted">Local</span> 
+                                : booking.to_location}
+                            </td>
+                            <td data-label="Hours">
+                              {booking.service_type === 'local' ? (
+                                booking.number_of_hours 
+                                  ? <span style={{ fontWeight: 600, color: '#111827' }}>{booking.number_of_hours} hrs</span>
+                                  : <span style={{ color: '#dc2626', fontStyle: 'italic', fontWeight: 600 }}>⚠ Missing</span>
+                              ) : (
+                                <span className="text-muted">-</span>
+                              )}
+                            </td>
+                            <td data-label="Cab Type">{booking.cab_type_name}</td>
+                            <td data-label="Car Option">{booking.car_option_name || '-'}</td>
+                            <td data-label="Passenger">{booking.passenger_name}</td>
+                            <td data-label="Phone">{booking.passenger_phone}</td>
+                            <td data-label="Fare">₹{booking.fare_amount}</td>
+                            <td data-label="Status">
                               <select
                                 value={booking.booking_status}
                                 onChange={(e) =>
@@ -567,12 +961,12 @@ const AdminDashboard = () => {
                                 <option value="cancelled">Cancelled</option>
                               </select>
                             </td>
-                            <td>
+                            <td data-label="Date">
                               {new Date(
                                 booking.booking_date
                               ).toLocaleString()}
                             </td>
-                            <td>
+                            <td data-label="Actions">
                               <button
                                 onClick={() => {
                                   navigator.clipboard.writeText(booking.id);
@@ -598,6 +992,7 @@ const AdminDashboard = () => {
                   )}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
 
@@ -609,22 +1004,23 @@ const AdminDashboard = () => {
                   + Add Car Option
                 </button>
               </div>
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Image</th>
-                    <th>Description</th>
-                    <th>Sort Order</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
+              <div className="data-table-wrapper">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Image</th>
+                      <th>Description</th>
+                      <th>Sort Order</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
                 <tbody>
                   {carOptions.map((opt) => (
                     <tr key={opt.id}>
-                      <td>{opt.name}</td>
-                      <td>
+                      <td data-label="Name">{opt.name}</td>
+                      <td data-label="Image">
                         {opt.image_url ? (
                           <div>
                             <img
@@ -642,14 +1038,14 @@ const AdminDashboard = () => {
                           <span style={{ color: '#9ca3af' }}>No image uploaded</span>
                         )}
                       </td>
-                      <td style={{ maxWidth: '320px' }}>
+                      <td data-label="Description" style={{ maxWidth: '320px' }}>
                         <span style={{ display: 'block', whiteSpace: 'pre-wrap' }}>
                           {opt.description || '-'}
                         </span>
                       </td>
-                      <td>{opt.sort_order ?? 0}</td>
-                      <td>{opt.is_active ? 'Active' : 'Inactive'}</td>
-                      <td>
+                      <td data-label="Sort Order">{opt.sort_order ?? 0}</td>
+                      <td data-label="Status">{opt.is_active ? 'Active' : 'Inactive'}</td>
+                      <td data-label="Actions">
                         <button
                           onClick={() => openEditForm(opt)}
                           className="btn btn-secondary btn-sm"
@@ -667,6 +1063,7 @@ const AdminDashboard = () => {
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
 
@@ -756,6 +1153,128 @@ const AdminDashboard = () => {
                           </label>
                         </div>
                       )}
+                    </>
+                  )}
+
+                  {activeTab === 'rate-meters' && (
+                    <>
+                      <div className="form-group">
+                        <label>Service Type *</label>
+                        <select
+                          required
+                          value={formData.service_type || ''}
+                          onChange={(e) =>
+                            setFormData({ ...formData, service_type: e.target.value })
+                          }
+                        >
+                          <option value="">Select service type</option>
+                          <option value="local">Local</option>
+                          <option value="airport">Airport</option>
+                          <option value="outstation">Outstation</option>
+                        </select>
+                      </div>
+                      <div className="form-group">
+                        <label>Car Category *</label>
+                        <select
+                          required
+                          value={formData.car_category || ''}
+                          onChange={(e) =>
+                            setFormData({ ...formData, car_category: e.target.value })
+                          }
+                        >
+                          <option value="">Select car category</option>
+                          <option value="Sedan">Sedan</option>
+                          <option value="SUV">SUV</option>
+                          <option value="Innova">Innova</option>
+                          <option value="Innova Crysta">Innova Crysta</option>
+                          <option value="Tempo">Tempo</option>
+                          <option value="Urbenia">Urbenia</option>
+                          <option value="Minibus">Minibus</option>
+                        </select>
+                      </div>
+                      <div className="form-group">
+                        <label>Base Fare (₹) *</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          required
+                          value={formData.base_fare || ''}
+                          onChange={(e) =>
+                            setFormData({ ...formData, base_fare: parseFloat(e.target.value) || 0 })
+                          }
+                        />
+                      </div>
+                      {formData.service_type === 'local' ? (
+                        <div className="form-group">
+                          <label>Per Hour Rate (₹) *</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            required
+                            value={formData.per_hour_rate || ''}
+                            onChange={(e) =>
+                              setFormData({ ...formData, per_hour_rate: parseFloat(e.target.value) || 0 })
+                            }
+                          />
+                        </div>
+                      ) : (
+                        <>
+                          <div className="form-group">
+                            <label>Per KM Rate (₹) *</label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              required
+                              value={formData.per_km_rate || ''}
+                              onChange={(e) =>
+                                setFormData({ ...formData, per_km_rate: parseFloat(e.target.value) || 0 })
+                              }
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label>Per Minute Rate (₹) *</label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              required
+                              value={formData.per_minute_rate || ''}
+                              onChange={(e) =>
+                                setFormData({ ...formData, per_minute_rate: parseFloat(e.target.value) || 0 })
+                              }
+                            />
+                          </div>
+                        </>
+                      )}
+                      {formData.service_type !== 'local' && (
+                        <div className="form-group">
+                          <label>Per Hour Rate (₹) (Optional, for local override)</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={formData.per_hour_rate || ''}
+                            onChange={(e) =>
+                              setFormData({ ...formData, per_hour_rate: parseFloat(e.target.value) || 0 })
+                            }
+                          />
+                        </div>
+                      )}
+                      <div className="form-group">
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={formData.is_active !== undefined ? formData.is_active : true}
+                            onChange={(e) =>
+                              setFormData({ ...formData, is_active: e.target.checked })
+                            }
+                          />
+                          Active
+                        </label>
+                      </div>
                     </>
                   )}
 
@@ -947,6 +1466,76 @@ const AdminDashboard = () => {
           )}
         </div>
       </div>
+
+      {/* Add Car Modal */}
+      {showAddCarModal && (
+        <div className="modal-overlay" onClick={() => setShowAddCarModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Add Car to {cabTypes.find(ct => ct.id === selectedCabTypeForCar)?.name}</h3>
+              <button
+                className="modal-close"
+                onClick={() => setShowAddCarModal(false)}
+              >
+                ×
+              </button>
+            </div>
+            <form onSubmit={handleAssignCar}>
+              <div className="form-group">
+                <label>Select Car *</label>
+                <select
+                  required
+                  value={formData.car_option_id || ''}
+                  onChange={(e) => setFormData({ ...formData, car_option_id: parseInt(e.target.value) })}
+                >
+                  <option value="">Choose a car...</option>
+                  {availableCars.map((car) => (
+                    <option key={car.id} value={car.id}>
+                      {car.name} {car.description ? `- ${car.description}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              <div className="form-group">
+                <label>Car Subtype (e.g., Sedan, SUV, Innova) *</label>
+                <select
+                  required
+                  value={formData.car_subtype || ''}
+                  onChange={(e) => setFormData({ ...formData, car_subtype: e.target.value })}
+                >
+                  <option value="">Choose subtype...</option>
+                  <option value="Sedan">Sedan</option>
+                  <option value="SUV">SUV</option>
+                  <option value="Innova">Innova</option>
+                  <option value="Innova Crysta">Innova Crysta</option>
+                  <option value="Tempo">Tempo</option>
+                  <option value="Urbenia">Urbenia</option>
+                  <option value="Minibus">Minibus</option>
+                </select>
+              </div>
+
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  onClick={() => setShowAddCarModal(false)}
+                  className="btn btn-secondary"
+                  disabled={loading}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={loading}
+                >
+                  {loading ? 'Adding...' : 'Add Car'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

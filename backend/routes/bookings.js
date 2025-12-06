@@ -3,6 +3,7 @@ const { body, validationResult } = require('express-validator');
 const db = require('../db/database');
 const { sendBookingConfirmationEmail } = require('../services/emailService');
 const { authenticateToken } = require('../middleware/auth');
+const { getCarCategory } = require('../utils/carMapping');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
@@ -18,8 +19,9 @@ const router = express.Router();
 // Calculate fare
 router.post('/calculate-fare', [
   body('from_location').notEmpty().withMessage('From location is required'),
-  body('to_location').notEmpty().withMessage('To location is required'),
+  body('to_location').optional().notEmpty().withMessage('To location is required for non-local bookings'),
   body('service_type').isIn(['local', 'airport', 'outstation']).withMessage('Service type must be local, airport, or outstation'),
+  body('number_of_hours').optional().isInt({ min: 1 }).withMessage('Number of hours must be a positive integer'),
   body('cab_type_id').optional().isInt().withMessage('Cab type ID must be an integer'),
   body('distance_km').optional().isNumeric().withMessage('Distance must be a number'),
 ], async (req, res) => {
@@ -29,87 +31,170 @@ router.post('/calculate-fare', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { from_location, to_location, cab_type_id, service_type, distance_km, estimated_time_minutes } = req.body;
+    const { from_location, to_location, cab_type_id, service_type, distance_km, estimated_time_minutes, number_of_hours } = req.body;
 
-    // Resolve cab type: use provided cab_type_id if present, otherwise map from service_type
-    let cabType = null;
+    // Validate local bookings require number_of_hours (strict validation)
+    if (service_type === 'local') {
+      if (!number_of_hours || number_of_hours <= 0) {
+        return res.status(400).json({ error: 'Number of hours is required and must be greater than 0 for local bookings' });
+      }
+      // Ensure number_of_hours is a valid integer
+      if (!Number.isInteger(Number(number_of_hours))) {
+        return res.status(400).json({ error: 'Number of hours must be a valid integer for local bookings' });
+      }
+    }
+
+    // Validate non-local bookings require to_location
+    if (service_type !== 'local' && !to_location) {
+      return res.status(400).json({ error: 'To location is required for this service type' });
+    }
+
+    // Resolve rate meter: use service_type and car_category from car_option
+    let rateMeter = null;
+    let carCategory = null;
     let effectiveCabTypeId = cab_type_id;
 
-    if (effectiveCabTypeId) {
-      cabType = await db.getAsync(
-        'SELECT * FROM cab_types WHERE id = ? AND is_active = 1',
-        [effectiveCabTypeId]
+    // Get car option to determine car category
+    if (cab_type_id) {
+      // cab_type_id might actually be car_option_id in the request
+      const carOption = await db.getAsync(
+        'SELECT * FROM car_options WHERE id = ? AND is_active = 1',
+        [cab_type_id]
       );
-    } else {
-      cabType = await db.getAsync(
-        'SELECT * FROM cab_types WHERE LOWER(name) = LOWER(?) AND is_active = 1',
+      if (carOption) {
+        carCategory = getCarCategory(carOption);
+      }
+    }
+
+    // If no car category found, default to Sedan
+    if (!carCategory) {
+      carCategory = 'Sedan';
+    }
+
+    // Get rate meter for this service type and car category
+    rateMeter = await db.getAsync(
+      'SELECT * FROM rate_meters WHERE service_type = ? AND car_category = ? AND is_active = 1',
+      [service_type, carCategory]
+    );
+
+    // Fallback to any rate meter for this service type if specific category not found
+    if (!rateMeter) {
+      rateMeter = await db.getAsync(
+        'SELECT * FROM rate_meters WHERE service_type = ? AND is_active = 1 LIMIT 1',
         [service_type]
       );
-      if (cabType) {
+    }
+
+    // Final fallback: use cab_types (legacy support)
+    let cabType = null;
+    if (!rateMeter) {
+      if (effectiveCabTypeId) {
+        cabType = await db.getAsync(
+          'SELECT * FROM cab_types WHERE id = ? AND is_active = 1',
+          [effectiveCabTypeId]
+        );
+      } else {
+        cabType = await db.getAsync(
+          'SELECT * FROM cab_types WHERE LOWER(name) = LOWER(?) AND is_active = 1',
+          [service_type]
+        );
+        if (cabType) {
+          effectiveCabTypeId = cabType.id;
+        }
+      }
+
+      if (!cabType) {
+        cabType = await db.getAsync(
+          'SELECT * FROM cab_types WHERE is_active = 1 LIMIT 1'
+        );
+        if (!cabType) {
+          return res.status(404).json({ error: 'No active rate meters or cab types configured' });
+        }
         effectiveCabTypeId = cabType.id;
       }
     }
 
-    if (!cabType) {
-      // Fallback to any active cab type
-      cabType = await db.getAsync(
-        'SELECT * FROM cab_types WHERE is_active = 1 LIMIT 1'
-      );
-      if (!cabType) {
-        return res.status(404).json({ error: 'No active cab types configured' });
-      }
-      effectiveCabTypeId = cabType.id;
-    }
-
-    // Check if route exists in database
     let distance = distance_km;
     let time = estimated_time_minutes;
 
-    if (!distance) {
-      const route = await db.getAsync(
-        `SELECT distance_km, estimated_time_minutes FROM routes 
-         WHERE LOWER(from_location) = LOWER(?) AND LOWER(to_location) = LOWER(?) AND is_active = 1`,
-        [from_location, to_location]
-      );
-
-      if (route) {
-        distance = parseFloat(route.distance_km);
-        time = route.estimated_time_minutes;
+    // For local bookings, use hours instead of distance
+    if (service_type === 'local') {
+      if (number_of_hours) {
+        time = number_of_hours * 60; // Convert hours to minutes
+        distance = 0; // Local bookings don't use distance
       } else {
-        // Default distance calculation (you can integrate with Google Maps API here)
-        // For now, using a simple estimate: 10km default
-        distance = 10;
-        time = 20;
+        return res.status(400).json({ error: 'Number of hours is required for local bookings' });
+      }
+    } else {
+      // For airport/outstation, check if route exists in database
+      if (!distance && to_location) {
+        const route = await db.getAsync(
+          `SELECT distance_km, estimated_time_minutes FROM routes 
+           WHERE LOWER(from_location) = LOWER(?) AND LOWER(to_location) = LOWER(?) AND is_active = 1`,
+          [from_location, to_location]
+        );
+
+        if (route) {
+          distance = parseFloat(route.distance_km);
+          time = route.estimated_time_minutes;
+        } else {
+          // Default distance calculation (you can integrate with Google Maps API here)
+          // For now, using a simple estimate: 10km default
+          distance = 10;
+          time = 20;
+        }
       }
     }
 
-    // Service type multipliers
-    const serviceMultipliers = {
-      'local': 1.0,
-      'airport': 1.2, // 20% extra for airport
-      'outstation': 1.5, // 50% extra for outstation
-    };
-    
-    const multiplier = serviceMultipliers[service_type] || 1.0;
+    // Calculate fare using rate meter if available, otherwise use cab type (legacy)
+    let baseFare, distanceCharge, timeCharge, fare;
+    let multiplier = 1.0;
 
-    // Calculate fare: (base_fare + (distance * per_km_rate) + (time * per_minute_rate)) * service_multiplier
-    const baseFare = parseFloat(cabType.base_fare);
-    const distanceCharge = distance * parseFloat(cabType.per_km_rate);
-    const timeCharge = time * parseFloat(cabType.per_minute_rate || 0);
-    const subtotal = baseFare + distanceCharge + timeCharge;
-    const fare = subtotal * multiplier;
+    if (rateMeter) {
+      // Use rate meter for fare calculation
+      baseFare = parseFloat(rateMeter.base_fare);
+      
+      if (service_type === 'local' && number_of_hours) {
+        // Local bookings use per_hour_rate
+        const hourCharge = number_of_hours * parseFloat(rateMeter.per_hour_rate);
+        fare = baseFare + hourCharge;
+        distanceCharge = 0;
+        timeCharge = hourCharge;
+      } else {
+        // Airport/Outstation use per_km and per_minute
+        distanceCharge = distance * parseFloat(rateMeter.per_km_rate);
+        timeCharge = time * parseFloat(rateMeter.per_minute_rate || 0);
+        fare = baseFare + distanceCharge + timeCharge;
+      }
+    } else {
+      // Legacy: use cab type with service multiplier
+      const serviceMultipliers = {
+        'local': 1.0,
+        'airport': 1.2, // 20% extra for airport
+        'outstation': 1.5, // 50% extra for outstation
+      };
+      multiplier = serviceMultipliers[service_type] || 1.0;
+      
+      baseFare = parseFloat(cabType.base_fare);
+      distanceCharge = distance * parseFloat(cabType.per_km_rate);
+      timeCharge = time * parseFloat(cabType.per_minute_rate || 0);
+      const subtotal = baseFare + distanceCharge + timeCharge;
+      fare = subtotal * multiplier;
+    }
 
     res.json({
       fare: Math.round(fare * 100) / 100, // Round to 2 decimal places
       distance_km: distance,
       estimated_time_minutes: time,
+      number_of_hours: service_type === 'local' ? number_of_hours : null,
       service_type: service_type,
       breakdown: {
-        base_fare: baseFare,
-        distance_charge: distanceCharge,
-        time_charge: timeCharge,
-        service_multiplier: multiplier,
+        base_fare: baseFare || 0,
+        distance_charge: distanceCharge || 0,
+        time_charge: timeCharge || 0,
+        service_multiplier: rateMeter ? 1.0 : multiplier,
         service_type: service_type,
+        number_of_hours: service_type === 'local' ? number_of_hours : null,
       },
     });
   } catch (error) {
@@ -121,8 +206,9 @@ router.post('/calculate-fare', [
 // Create booking (attaches user_id if authenticated)
 router.post('/', [
   body('from_location').notEmpty().withMessage('From location is required'),
-  body('to_location').notEmpty().withMessage('To location is required'),
+  body('to_location').optional().notEmpty().withMessage('To location is required for non-local bookings'),
   body('service_type').isIn(['local', 'airport', 'outstation']).withMessage('Service type must be local, airport, or outstation'),
+  body('number_of_hours').optional().isInt({ min: 1 }).withMessage('Number of hours must be a positive integer'),
   body('cab_type_id').optional().isInt().withMessage('Cab type ID must be an integer'),
   body('car_option_id').optional().isInt().withMessage('Car option ID must be an integer'),
   body('passenger_name').notEmpty().withMessage('Passenger name is required'),
@@ -148,7 +234,18 @@ router.post('/', [
       fare_amount,
       travel_date,
       notes,
+      number_of_hours,
     } = req.body;
+
+    // Validate local bookings require number_of_hours
+    if (service_type === 'local' && !number_of_hours) {
+      return res.status(400).json({ error: 'Number of hours is required for local bookings' });
+    }
+
+    // Validate non-local bookings require to_location
+    if (service_type !== 'local' && !to_location) {
+      return res.status(400).json({ error: 'To location is required for this service type' });
+    }
 
     // Try to attach user_id if a valid token is provided
     let userId = null;
@@ -173,36 +270,86 @@ router.post('/', [
     let time = estimated_time_minutes;
 
     if (!fare || !distance) {
-      // Resolve effective cab type based on provided cab_type_id or service_type
-      let cabType = null;
+      // Resolve rate meter: use service_type and car_category from car_option
+      let rateMeter = null;
+      let carCategory = null;
       let effectiveCabTypeId = cab_type_id;
 
-      if (effectiveCabTypeId) {
-        cabType = await db.getAsync(
-          'SELECT * FROM cab_types WHERE id = ? AND is_active = 1',
+      // Get car option to determine car category
+      if (req.body.car_option_id) {
+        const carOption = await db.getAsync(
+          'SELECT * FROM car_options WHERE id = ? AND is_active = 1',
+          [req.body.car_option_id]
+        );
+        if (carOption) {
+          carCategory = getCarCategory(carOption);
+        }
+      } else if (effectiveCabTypeId) {
+        // cab_type_id might actually be car_option_id
+        const carOption = await db.getAsync(
+          'SELECT * FROM car_options WHERE id = ? AND is_active = 1',
           [effectiveCabTypeId]
         );
-      } else {
-        cabType = await db.getAsync(
-          'SELECT * FROM cab_types WHERE LOWER(name) = LOWER(?) AND is_active = 1',
+        if (carOption) {
+          carCategory = getCarCategory(carOption);
+        }
+      }
+
+      // If no car category found, default to Sub
+      if (!carCategory) {
+        carCategory = 'Sub';
+      }
+
+      // Get rate meter for this service type and car category
+      rateMeter = await db.getAsync(
+        'SELECT * FROM rate_meters WHERE service_type = ? AND car_category = ? AND is_active = 1',
+        [service_type, carCategory]
+      );
+
+      // Fallback to any rate meter for this service type
+      if (!rateMeter) {
+        rateMeter = await db.getAsync(
+          'SELECT * FROM rate_meters WHERE service_type = ? AND is_active = 1 LIMIT 1',
           [service_type]
         );
-        if (cabType) {
+      }
+
+      // Final fallback: use cab_types (legacy support)
+      let cabType = null;
+      if (!rateMeter) {
+        if (effectiveCabTypeId) {
+          cabType = await db.getAsync(
+            'SELECT * FROM cab_types WHERE id = ? AND is_active = 1',
+            [effectiveCabTypeId]
+          );
+        } else {
+          cabType = await db.getAsync(
+            'SELECT * FROM cab_types WHERE LOWER(name) = LOWER(?) AND is_active = 1',
+            [service_type]
+          );
+          if (cabType) {
+            effectiveCabTypeId = cabType.id;
+          }
+        }
+
+        if (!cabType) {
+          cabType = await db.getAsync(
+            'SELECT * FROM cab_types WHERE is_active = 1 LIMIT 1'
+          );
+          if (!cabType) {
+            return res.status(404).json({ error: 'No active rate meters or cab types configured' });
+          }
           effectiveCabTypeId = cabType.id;
         }
       }
 
-      if (!cabType) {
-        cabType = await db.getAsync(
-          'SELECT * FROM cab_types WHERE is_active = 1 LIMIT 1'
-        );
-        if (!cabType) {
-          return res.status(404).json({ error: 'No active cab types configured' });
+      // For local bookings, use hours instead of distance
+      if (service_type === 'local') {
+        if (number_of_hours) {
+          time = number_of_hours * 60; // Convert hours to minutes
+          distance = 0; // Local bookings don't use distance
         }
-        effectiveCabTypeId = cabType.id;
-      }
-
-      if (!distance) {
+      } else if (!distance && to_location) {
         const route = await db.getAsync(
           `SELECT distance_km, estimated_time_minutes FROM routes 
            WHERE LOWER(from_location) = LOWER(?) AND LOWER(to_location) = LOWER(?) AND is_active = 1`,
@@ -219,21 +366,44 @@ router.post('/', [
       }
 
       if (!fare) {
-        const serviceMultipliers = {
-          'local': 1.0,
-          'airport': 1.2,
-          'outstation': 1.5,
-        };
-        const multiplier = serviceMultipliers[service_type] || 1.0;
-        const subtotal = parseFloat(cabType.base_fare) + 
-                        (distance * parseFloat(cabType.per_km_rate)) + 
-                        (time * parseFloat(cabType.per_minute_rate || 0));
-        fare = subtotal * multiplier;
+        let baseFare, distanceCharge, timeCharge;
+
+        if (rateMeter) {
+          // Use rate meter for fare calculation
+          baseFare = parseFloat(rateMeter.base_fare);
+          
+          if (service_type === 'local' && number_of_hours) {
+            // Local bookings use per_hour_rate
+            const hourCharge = number_of_hours * parseFloat(rateMeter.per_hour_rate);
+            fare = baseFare + hourCharge;
+            distanceCharge = 0;
+            timeCharge = hourCharge;
+          } else {
+            // Airport/Outstation use per_km and per_minute
+            distanceCharge = distance * parseFloat(rateMeter.per_km_rate);
+            timeCharge = time * parseFloat(rateMeter.per_minute_rate || 0);
+            fare = baseFare + distanceCharge + timeCharge;
+          }
+        } else {
+          // Legacy: use cab type with service multiplier
+          const serviceMultipliers = {
+            'local': 1.0,
+            'airport': 1.2,
+            'outstation': 1.5,
+          };
+          const multiplier = serviceMultipliers[service_type] || 1.0;
+          const subtotal = parseFloat(cabType.base_fare) + 
+                          (distance * parseFloat(cabType.per_km_rate)) + 
+                          (time * parseFloat(cabType.per_minute_rate || 0));
+          fare = subtotal * multiplier;
+        }
       }
 
-      // Update cab_type_id to the effective one we resolved
-      req.body.cab_type_id = effectiveCabTypeId;
-      cab_type_id = effectiveCabTypeId;
+      // Update cab_type_id to the effective one we resolved (for legacy support)
+      if (!rateMeter && cabType) {
+        req.body.cab_type_id = effectiveCabTypeId;
+        cab_type_id = effectiveCabTypeId;
+      }
     }
 
     // Find an available cab
@@ -251,15 +421,15 @@ router.post('/', [
       `INSERT INTO bookings (
         user_id, cab_id, cab_type_id, car_option_id, from_location, to_location, distance_km, 
         estimated_time_minutes, fare_amount, booking_status, passenger_name, passenger_phone, 
-        passenger_email, travel_date, notes, service_type
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        passenger_email, travel_date, notes, service_type, number_of_hours
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         userId,
         cab_id,
         cab_type_id,
         req.body.car_option_id || null,
         from_location,
-        to_location,
+        service_type === 'local' ? 'N/A' : (to_location || 'N/A'), // Set 'N/A' for local bookings to satisfy NOT NULL constraint
         distance,
         time,
         fare,
@@ -270,6 +440,7 @@ router.post('/', [
         travel_date || null,
         notes || null,
         service_type || 'local',
+        service_type === 'local' ? (number_of_hours ? parseInt(number_of_hours) : null) : null,
       ]
     );
 

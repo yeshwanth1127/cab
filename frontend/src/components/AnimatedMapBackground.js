@@ -19,8 +19,8 @@ const AnimatedMapBackground = () => {
 
     const map = new maplibregl.Map({
       container: mapContainerRef.current,
-      // Carto Dark Matter vector style for dark-mode background
-      style: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+      // Carto Positron vector style for light/white background
+      style: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
       center: defaultCenter,
       zoom: defaultZoom,
       interactive: false, // purely visual background
