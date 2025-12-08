@@ -78,12 +78,19 @@ router.post('/login', [
     );
 
     if (!user) {
+      console.log(`Login attempt failed: User "${username}" not found`);
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    if (!user.password_hash) {
+      console.log(`Login attempt failed: User "${username}" has no password hash`);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     const isValidPassword = await bcrypt.compare(password, user.password_hash);
 
     if (!isValidPassword) {
+      console.log(`Login attempt failed: Invalid password for user "${username}"`);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 

@@ -162,7 +162,6 @@ const MainNavbar = () => {
           href="/" 
           className="navbar-logo" 
           aria-label="Namma Cabs home"
-          onMouseEnter={handleLogoEnter}
         >
           <img
             ref={logoImgRef}

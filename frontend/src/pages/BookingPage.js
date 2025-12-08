@@ -31,10 +31,11 @@ const BookingPage = () => {
   const [bookingId, setBookingId] = useState(null);
   const [expandedCarKey, setExpandedCarKey] = useState(null);
   const [carOptionCards, setCarOptionCards] = useState([]);
+  const [allCarOptions, setAllCarOptions] = useState([]); // All cars for the Available Car Options section
   const [carImageIndices, setCarImageIndices] = useState({}); // Track image index per car
   const [showConfirmation, setShowConfirmation] = useState(false);
 
-  // Initial load: optional geolocation prompt
+  // Initial load: optional geolocation prompt and fetch all car options
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     // Only try to use location once, and remember the choice in localStorage
@@ -42,6 +43,8 @@ const BookingPage = () => {
     if (!consent || consent === 'granted') {
       requestUserLocation();
     }
+    // Fetch all car options for the Available Car Options section
+    fetchAllCarOptions();
   }, []);
 
   // Fetch car options when service type is selected
@@ -85,6 +88,15 @@ const BookingPage = () => {
       setCarOptionCards(response.data || []);
     } catch (error) {
       console.error('Error fetching public car options:', error);
+    }
+  };
+
+  const fetchAllCarOptions = async () => {
+    try {
+      const response = await api.get('/car-options');
+      setAllCarOptions(response.data || []);
+    } catch (error) {
+      console.error('Error fetching all car options:', error);
     }
   };
 
@@ -757,12 +769,12 @@ const BookingPage = () => {
         </div>
         <div className="cars-section-inner">
           <h2>Available Car Options</h2>
-          <p className="section-subtitle">These are the same options configured in the admin dashboard.</p>
+          <p className="section-subtitle">Explore all available cars from our fleet.</p>
           <div className="cars-grid">
-            {carOptionCards.length === 0 && (
+            {allCarOptions.length === 0 && (
               <p className="section-subtitle">No car options available yet.</p>
             )}
-            {carOptionCards.map((opt) => (
+            {allCarOptions.map((opt) => (
               <div key={opt.id} className="car-option-button">
                 <div className="car-option-main">
                   <div>

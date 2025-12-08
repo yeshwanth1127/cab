@@ -52,26 +52,38 @@ const CarOptions = () => {
 
             {!loading && !error && options.length > 0 && (
               <div className="car-options-grid">
-                {options.map((opt) => (
-                  <div key={opt.id} className="car-option-card">
-                    {opt.image_url && (
-                      <div className="car-option-image-wrapper">
-                        <img
-                          src={opt.image_url}
-                          alt={opt.name}
-                          className="car-option-image"
-                          onError={(e) => {
-                            e.target.style.display = 'none';
-                          }}
-                        />
+                {options.map((opt) => {
+                  // Try to get image from image_urls array first, then image_url
+                  const imageUrl = (opt.image_urls && opt.image_urls.length > 0) 
+                    ? opt.image_urls[0] 
+                    : (opt.image_url || null);
+                  
+                  return (
+                    <div key={opt.id} className="car-option-card">
+                      {imageUrl ? (
+                        <div className="car-option-image-wrapper">
+                          <img
+                            src={imageUrl}
+                            alt={opt.name}
+                            className="car-option-image"
+                            onError={(e) => {
+                              console.error(`Failed to load image for ${opt.name}:`, imageUrl);
+                              e.target.style.display = 'none';
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <div className="car-option-image-wrapper" style={{ background: '#1f2937', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <span style={{ color: '#9ca3af' }}>No Image</span>
+                        </div>
+                      )}
+                      <div className="car-option-content">
+                        <h3>{opt.name}</h3>
+                        {opt.description && <p>{opt.description}</p>}
                       </div>
-                    )}
-                    <div className="car-option-content">
-                      <h3>{opt.name}</h3>
-                      {opt.description && <p>{opt.description}</p>}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

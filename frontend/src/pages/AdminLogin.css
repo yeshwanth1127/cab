@@ -114,4 +114,13 @@
   }
 }
 
+/* Admin login button text color */
+.admin-login-page .btn-primary {
+  color: #000000 !important;
+}
+
+.admin-login-page .btn-primary:hover {
+  color: #000000 !important;
+}
+
 /* no hover transform for the (now empty) ::before */

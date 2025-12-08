@@ -1,4 +1,13 @@
 -- SQLite Database Schema for Cab Booking System
+-- 
+-- ⚠️  CRITICAL: DO NOT ADD DELETE, DROP, or TRUNCATE STATEMENTS TO THIS FILE!
+-- This file is executed on every database initialization.
+-- Any DELETE/DROP/TRUNCATE statements will be automatically blocked by the database.js safeguard,
+-- but it's better to never add them in the first place.
+-- 
+-- Use INSERT OR IGNORE for adding default data.
+-- Use CREATE TABLE IF NOT EXISTS for creating tables.
+-- Use ALTER TABLE with error handling for migrations.
 
 -- Users table (for admin and potentially regular users)
 CREATE TABLE IF NOT EXISTS users (
@@ -33,7 +42,7 @@ CREATE TABLE IF NOT EXISTS cabs (
     is_available INTEGER DEFAULT 1,
     is_active INTEGER DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (cab_type_id) REFERENCES cab_types(id) ON DELETE CASCADE
+    FOREIGN KEY (cab_type_id) REFERENCES cab_types(id) ON DELETE SET NULL
 );
 
 -- Routes table (popular routes with fixed fares)
@@ -83,19 +92,7 @@ CREATE TABLE IF NOT EXISTS car_options (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Remove legacy vehicle-based cab type names so only service types remain
-DELETE FROM cab_types
-WHERE name IN (
-  'Sedan',
-  'Sedan - Premiere',
-  'SUV',
-  'Innova',
-  'Tempo Traveller',
-  'Urbenia',
-  'Minibus'
-);
-
--- Insert default service-type cab types
+-- Insert default service-type cab types (only if they don't exist)
 INSERT OR IGNORE INTO cab_types (name, description, base_fare, per_km_rate, per_minute_rate, capacity) VALUES
 ('Local', 'Local city rides', 50.00, 10.00, 1.00, 4),
 ('Airport', 'Airport pick-up and drop', 80.00, 12.00, 1.20, 4),

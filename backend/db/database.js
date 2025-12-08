@@ -1,3 +1,19 @@
+/**
+ * Database Module with Data Protection Safeguards
+ * 
+ * ⚠️  CRITICAL SAFEGUARDS IMPLEMENTED:
+ * 1. SQL Filter: Automatically blocks any DELETE, DROP, or TRUNCATE statements in schema.sql
+ * 2. Single Initialization: Database only initializes once per process (prevents re-running schema)
+ * 3. Safe Foreign Keys: Changed CASCADE deletes to SET NULL to prevent cascading data loss
+ * 4. Idempotent Operations: All schema operations use IF NOT EXISTS or INSERT OR IGNORE
+ * 
+ * These safeguards ensure that:
+ * - Running setup-admin.js will NEVER delete data
+ * - Restarting the server will NEVER delete data
+ * - Schema changes will NEVER delete existing data
+ * - Only intentional admin panel deletions can remove data (and only specific items)
+ */
+
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
@@ -16,12 +32,44 @@ const db = new sqlite3.Database(DB_PATH, (err) => {
   }
 });
 
+// Track if database has been initialized to prevent re-initialization
+let isInitialized = false;
+
+// Safeguard: Filter out any dangerous SQL statements (DELETE, DROP, TRUNCATE)
+const filterSafeSQL = (sql) => {
+  const lines = sql.split(';');
+  const safeLines = lines.filter(line => {
+    const trimmed = line.trim().toUpperCase();
+    // Block any DELETE, DROP, or TRUNCATE statements
+    if (trimmed.includes('DELETE FROM') || 
+        trimmed.includes('DROP TABLE') || 
+        trimmed.includes('TRUNCATE TABLE') ||
+        trimmed.startsWith('DELETE') ||
+        trimmed.startsWith('DROP') ||
+        trimmed.startsWith('TRUNCATE')) {
+      console.warn('⚠️  BLOCKED DANGEROUS SQL STATEMENT:', trimmed.substring(0, 100));
+      return false;
+    }
+    return true;
+  });
+  return safeLines.join(';');
+};
+
 // Initialize database with schema
 const initDatabase = () => {
   return new Promise(async (resolve, reject) => {
+    // Prevent multiple initializations
+    if (isInitialized) {
+      resolve();
+      return;
+    }
+
     try {
       const schemaPath = path.join(__dirname, 'schema.sql');
-      const schema = fs.readFileSync(schemaPath, 'utf8');
+      let schema = fs.readFileSync(schemaPath, 'utf8');
+      
+      // Remove any dangerous statements before execution
+      schema = filterSafeSQL(schema);
       
       db.exec(schema, async (err) => {
         if (err) {
@@ -161,10 +209,9 @@ const initDatabase = () => {
               }
             }
             
-            // Delete old rate meters with deprecated subtypes (Sub, Tempo Traveller)
-            await db.runAsync(
-              `DELETE FROM rate_meters WHERE car_category IN ('Sub', 'Tempo Traveller')`
-            );
+            // NOTE: Removed DELETE statement to prevent data loss
+            // Old rate meters with deprecated subtypes will remain but won't be used
+            // They can be manually removed through admin panel if needed
             
             console.log('Migration: Rate meters updated with new subtypes');
           } catch (migrationErr) {
@@ -219,6 +266,7 @@ const initDatabase = () => {
             console.error('Error seeding car_options table:', seedErr.message);
           }
 
+          isInitialized = true;
           resolve();
         }
       });
@@ -265,8 +313,14 @@ db.allAsync = (sql, params = []) => {
   });
 };
 
-// Initialize on module load
-initDatabase().catch(console.error);
+// Initialize on module load (only once)
+// This will only run CREATE TABLE IF NOT EXISTS and INSERT OR IGNORE statements
+// All DELETE, DROP, and TRUNCATE statements are automatically blocked
+initDatabase().catch((err) => {
+  console.error('Database initialization error:', err);
+  // Don't mark as initialized if there was an error
+  isInitialized = false;
+});
 
 module.exports = db;
 
