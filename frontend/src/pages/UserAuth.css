@@ -35,7 +35,7 @@
 
 .auth-toggle button.active {
   background: linear-gradient(135deg, #facc15 0%, #eab308 100%);
-  color: #000000 !important; /* Gold background needs black text */
+  color: white;
   box-shadow: 0 8px 20px rgba(250, 204, 21, 0.35);
 }
 

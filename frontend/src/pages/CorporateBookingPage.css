@@ -1,10 +1,10 @@
 .corporate-booking-page {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   position: relative;
-  padding-bottom: 40px;
+  overflow: visible;
 }
 
+/* Flowing banner animation */
 .flowing-banner {
   position: absolute;
   top: 170px;
@@ -47,49 +47,46 @@
 }
 
 .corporate-booking-container {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 40px 20px;
+  padding-top: 240px;
   position: relative;
+  z-index: 1;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding-left: 20px;
+  padding-right: 20px;
 }
 
 .booking-map-wrapper {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  opacity: 0.1;
+  inset: 0;
   z-index: 0;
-  pointer-events: none;
+  overflow: hidden;
 }
 
 .corporate-booking-title {
-  text-align: center;
-  color: #fff;
   font-size: 2.5rem;
-  margin-bottom: 10px;
-  position: relative;
-  z-index: 1;
-  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 16px;
+  color: #facc15;
+  text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.5);
 }
 
 .corporate-booking-subtitle {
   text-align: center;
-  color: rgba(255, 255, 255, 0.9);
   font-size: 1.1rem;
-  margin-bottom: 30px;
-  position: relative;
-  z-index: 1;
+  color: #e5e7eb;
+  margin-bottom: 40px;
+  line-height: 1.6;
 }
 
 .corporate-booking-card {
-  background: #fff;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(12px);
+  border: 2px solid rgba(250, 204, 21, 0.3);
   border-radius: 16px;
   padding: 40px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-  position: relative;
-  z-index: 1;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
 }
 
 .corporate-booking-form {
@@ -106,8 +103,10 @@
 
 .form-group label {
   font-weight: 600;
-  color: #374151;
+  color: #facc15;
   font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .form-group input[type="text"],
@@ -119,6 +118,8 @@
   font-size: 16px;
   transition: all 0.3s ease;
   font-family: inherit;
+  background: rgba(255, 255, 255, 0.95);
+  color: #111827;
 }
 
 .form-group input[type="text"]:focus,
@@ -186,13 +187,12 @@
 
 .btn-primary {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: #000000 !important;
+  color: #fff;
 }
 
 .btn-primary:hover:not(:disabled) {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-  color: #000000 !important;
 }
 
 .btn-primary:disabled {
@@ -225,8 +225,6 @@
 
   .corporate-booking-container {
     padding: 20px 10px;
-    padding-top: 180px; /* Account for navbar + banner on mobile */
+    padding-top: 180px;
   }
 }
-
-

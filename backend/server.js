@@ -29,7 +29,6 @@ app.use('/api/bookings', require('./routes/bookings'));
 app.use('/api/routes', require('./routes/routes'));
 app.use('/api/car-options', require('./routes/carOptions'));
 app.use('/api/corporate', require('./routes/corporate'));
-app.use('/api/drivers', require('./routes/drivers'));
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -41,15 +40,26 @@ app.listen(PORT, () => {
 });
 
 // Graceful shutdown
-process.on('SIGINT', () => {
-  db.close((err) => {
-    if (err) {
-      console.error('Error closing database:', err.message);
-    } else {
-      console.log('Database connection closed');
+process.on('SIGINT', async () => {
+  try {
+    if (typeof db.close === 'function') {
+      await db.close((err) => {
+        if (err) {
+          console.error('Error closing database:', err.message);
+        } else {
+          console.log('Database connection closed');
+        }
+      });
+    } else if (db.pool) {
+      // MySQL connection pool
+      await db.pool.end();
+      console.log('MySQL connection pool closed');
     }
     process.exit(0);
-  });
+  } catch (error) {
+    console.error('Error during shutdown:', error);
+    process.exit(1);
+  }
 });
 
 module.exports = app;

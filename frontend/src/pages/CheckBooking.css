@@ -255,7 +255,7 @@
 
 /* Make primary action text dark on Check Booking page */
 .check-booking-page .check-booking-form .btn-primary {
-  color: #000000 !important;
+  color: #111827;
 }
 
 @media (max-width: 768px) {

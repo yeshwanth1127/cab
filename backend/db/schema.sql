@@ -32,35 +32,17 @@ CREATE TABLE IF NOT EXISTS cab_types (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Drivers table (registered drivers)
-CREATE TABLE IF NOT EXISTS drivers (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    phone TEXT NOT NULL UNIQUE,
-    email TEXT,
-    license_number TEXT UNIQUE,
-    address TEXT,
-    emergency_contact_name TEXT,
-    emergency_contact_phone TEXT,
-    experience_years INTEGER,
-    is_active INTEGER DEFAULT 1,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
 -- Cabs table (individual vehicles)
 CREATE TABLE IF NOT EXISTS cabs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     cab_type_id INTEGER,
     vehicle_number TEXT UNIQUE NOT NULL,
-    driver_id INTEGER,
     driver_name TEXT,
     driver_phone TEXT,
     is_available INTEGER DEFAULT 1,
     is_active INTEGER DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (cab_type_id) REFERENCES cab_types(id) ON DELETE SET NULL,
-    FOREIGN KEY (driver_id) REFERENCES drivers(id) ON DELETE SET NULL
+    FOREIGN KEY (cab_type_id) REFERENCES cab_types(id) ON DELETE SET NULL
 );
 
 -- Routes table (popular routes with fixed fares)

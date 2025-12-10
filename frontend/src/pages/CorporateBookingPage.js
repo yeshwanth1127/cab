@@ -267,5 +267,3 @@ const CorporateBookingPage = () => {
 };
 
 export default CorporateBookingPage;
-
-

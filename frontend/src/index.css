@@ -15,9 +15,6 @@ body {
   overflow-x: hidden;
 }
 
-/* Only change button text color for buttons with light backgrounds where text is hard to read */
-/* Sidebar buttons should remain white - they're on dark background */
-
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
