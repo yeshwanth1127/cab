@@ -32,6 +32,17 @@ const AdminDashboard = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [rateMeters, setRateMeters] = useState([]);
   const [expandedServiceTypes, setExpandedServiceTypes] = useState({});
+  const [corporateBookings, setCorporateBookings] = useState([]);
+  const [corporateBookingFilters, setCorporateBookingFilters] = useState({
+    status: 'all',
+    search: '',
+  });
+  const [corporateBookingView, setCorporateBookingView] = useState('all'); // 'all' or 'assign-drivers'
+  const [availableDrivers, setAvailableDrivers] = useState([]);
+  const [availableVehicles, setAvailableVehicles] = useState([]);
+  const [selectedBookingForDriver, setSelectedBookingForDriver] = useState(null);
+  const [showDriverAssignmentModal, setShowDriverAssignmentModal] = useState(false);
+  const [drivers, setDrivers] = useState([]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -83,12 +94,39 @@ const AdminDashboard = () => {
       } else if (activeTab === 'cabs') {
         const response = await api.get('/admin/cabs');
         setCabs(response.data);
+        // Fetch drivers for driver selection
+        try {
+          const driversResponse = await api.get('/admin/drivers');
+          setDrivers(driversResponse.data);
+        } catch (error) {
+          console.error('Error fetching drivers:', error);
+        }
+        // Fetch all car options for car selection
+        try {
+          const carOptionsResponse = await api.get('/admin/car-options');
+          setCarOptions(carOptionsResponse.data);
+        } catch (error) {
+          console.error('Error fetching car options:', error);
+        }
       } else if (activeTab === 'bookings') {
         const response = await api.get('/admin/bookings');
         setBookings(response.data);
       } else if (activeTab === 'car-options') {
         const response = await api.get('/admin/car-options');
         setCarOptions(response.data);
+        // Also fetch cab types for the dropdown
+        try {
+          const cabTypesResponse = await api.get('/admin/cab-types');
+          setCabTypes(cabTypesResponse.data);
+        } catch (error) {
+          console.error('Error fetching cab types:', error);
+        }
+      } else if (activeTab === 'corporate-bookings') {
+        const response = await api.get('/admin/corporate-bookings');
+        setCorporateBookings(response.data);
+      } else if (activeTab === 'register-drivers') {
+        const response = await api.get('/admin/drivers');
+        setDrivers(response.data);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -142,13 +180,45 @@ const AdminDashboard = () => {
           });
           alert('Created successfully');
         }
-      } else {
-        // JSON body for all other tabs
+      } else if (activeTab === 'corporate-bookings') {
+        // Corporate bookings - only edit, no create (created via public form)
         if (editingItem) {
-          await api.put(`/admin/${activeTab}/${editingItem.id}`, formData);
+          await api.put(`/admin/corporate-bookings/${editingItem.id}`, formData);
           alert('Updated successfully');
         } else {
-          await api.post(`/admin/${activeTab}`, formData);
+          alert('Corporate bookings can only be created through the public form');
+          return;
+        }
+      } else if (activeTab === 'register-drivers') {
+        // Drivers management
+        if (editingItem) {
+          await api.put(`/admin/drivers/${editingItem.id}`, formData);
+          alert('Driver updated successfully');
+        } else {
+          await api.post('/admin/drivers', formData);
+          alert('Driver registered successfully');
+        }
+      } else {
+        // JSON body for all other tabs
+        let submitData = { ...formData };
+        
+        // For cabs, remove car_option_id and ensure cab_type_id is sent
+        if (activeTab === 'cabs') {
+          delete submitData.car_option_id;
+          // Ensure cab_type_id is a valid integer
+          if (!submitData.cab_type_id || isNaN(submitData.cab_type_id)) {
+            alert('Please select a car. Each car must be associated with a cab type.');
+            setLoading(false);
+            return;
+          }
+          submitData.cab_type_id = parseInt(submitData.cab_type_id);
+        }
+        
+        if (editingItem) {
+          await api.put(`/admin/${activeTab}/${editingItem.id}`, submitData);
+          alert('Updated successfully');
+        } else {
+          await api.post(`/admin/${activeTab}`, submitData);
           alert('Created successfully');
         }
       }
@@ -158,7 +228,12 @@ const AdminDashboard = () => {
       setCarOptionImageFiles([]);
       fetchDashboardData();
     } catch (error) {
-      alert(error.response?.data?.error || 'Error saving item');
+      if (error.response?.data?.errors) {
+        const errorMessages = error.response.data.errors.map(err => err.msg || err.message).join('\n');
+        alert(`Validation errors:\n${errorMessages}`);
+      } else {
+        alert(error.response?.data?.error || 'Error saving item');
+      }
     } finally {
       setLoading(false);
     }
@@ -166,7 +241,17 @@ const AdminDashboard = () => {
 
   const openEditForm = (item) => {
     setEditingItem(item);
-    setFormData(item);
+    let formDataToSet = { ...item };
+    
+    // For cabs, if cab_type_id exists, find the first car with that cab_type_id and set car_option_id
+    if (activeTab === 'cabs' && item.cab_type_id && carOptions.length > 0) {
+      const matchingCar = carOptions.find(car => car.cab_type_id === item.cab_type_id && car.is_active);
+      if (matchingCar) {
+        formDataToSet.car_option_id = matchingCar.id;
+      }
+    }
+    
+    setFormData(formDataToSet);
     setCarOptionImageFiles([]);
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -236,6 +321,82 @@ const AdminDashboard = () => {
       alert('Status updated successfully');
     } catch (error) {
       alert(error.response?.data?.error || 'Error updating status');
+    }
+  };
+
+  const updateCorporateBookingStatus = async (bookingId, status) => {
+    try {
+      await api.put(`/admin/corporate-bookings/${bookingId}`, { status });
+      fetchDashboardData();
+      alert('Status updated successfully');
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error updating status');
+    }
+  };
+
+  const openEditCorporateBooking = (booking) => {
+    setEditingItem(booking);
+    setFormData(booking);
+    setShowForm(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleDeleteCorporateBooking = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this corporate booking?')) {
+      return;
+    }
+
+    try {
+      await api.delete(`/admin/corporate-bookings/${id}`);
+      fetchDashboardData();
+      alert('Corporate booking deleted successfully');
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error deleting corporate booking');
+    }
+  };
+
+  const openDriverAssignmentModal = async (booking) => {
+    setSelectedBookingForDriver(booking);
+    try {
+      // Fetch available registered drivers
+      const driversResponse = await api.get('/admin/drivers/available/list');
+      setAvailableDrivers(driversResponse.data || []);
+      
+      // Fetch all vehicles/cabs
+      const vehiclesResponse = await api.get('/admin/cabs');
+      setAvailableVehicles(vehiclesResponse.data || []);
+      
+      setShowDriverAssignmentModal(true);
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error fetching available drivers and vehicles');
+    }
+  };
+
+  const handleAssignDriver = async (bookingId, driverId) => {
+    try {
+      await api.post(`/admin/corporate-bookings/${bookingId}/assign-driver`, {
+        driver_id: driverId
+      });
+      setShowDriverAssignmentModal(false);
+      setSelectedBookingForDriver(null);
+      fetchDashboardData();
+      alert('Driver assigned successfully');
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error assigning driver');
+    }
+  };
+
+  const handleUnassignDriver = async (bookingId) => {
+    if (!window.confirm('Are you sure you want to unassign the driver from this booking?')) {
+      return;
+    }
+
+    try {
+      await api.post(`/admin/corporate-bookings/${bookingId}/unassign-driver`);
+      fetchDashboardData();
+      alert('Driver unassigned successfully');
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error unassigning driver');
     }
   };
 
@@ -438,6 +599,81 @@ const AdminDashboard = () => {
               <span className="sidebar-text">All Bookings</span>
               <span className="sidebar-subtext">View & Manage</span>
             </button>
+            <button
+              className={activeTab === 'corporate-bookings' && corporateBookingView === 'all' ? 'active' : ''}
+              onClick={() => {
+                setActiveTab('corporate-bookings');
+                setCorporateBookingView('all');
+                if (isMobile) setSidebarOpen(false);
+              }}
+            >
+              <span className="sidebar-icon">🏢</span>
+              <span className="sidebar-text">Corporate Bookings</span>
+              <span className="sidebar-subtext">Corporate Requests</span>
+            </button>
+            {activeTab === 'corporate-bookings' && (
+              <>
+                <button
+                  className={corporateBookingView === 'all' ? 'active' : ''}
+                  onClick={() => {
+                    setCorporateBookingView('all');
+                    if (isMobile) setSidebarOpen(false);
+                  }}
+                  style={{
+                    marginLeft: '32px',
+                    paddingLeft: '16px',
+                    paddingRight: '32px',
+                    borderLeft: '3px solid rgba(255, 255, 255, 0.2)',
+                    fontSize: '14px',
+                    marginTop: '4px',
+                    whiteSpace: 'nowrap',
+                    width: 'calc(100% - 32px)',
+                    minWidth: 'max-content'
+                  }}
+                >
+                  <span className="sidebar-icon" style={{ fontSize: '16px' }}>📋</span>
+                  <span className="sidebar-text">Show All Bookings</span>
+                  <span className="sidebar-subtext">View All Requests</span>
+                </button>
+                <button
+                  className={corporateBookingView === 'assign-drivers' ? 'active' : ''}
+                  onClick={() => {
+                    setCorporateBookingView('assign-drivers');
+                    if (isMobile) setSidebarOpen(false);
+                  }}
+                  style={{
+                    marginLeft: '32px',
+                    paddingLeft: '16px',
+                    paddingRight: '32px',
+                    borderLeft: '3px solid rgba(255, 255, 255, 0.2)',
+                    fontSize: '14px',
+                    marginTop: '4px',
+                    whiteSpace: 'nowrap',
+                    width: 'calc(100% - 32px)',
+                    minWidth: 'max-content'
+                  }}
+                >
+                  <span className="sidebar-icon" style={{ fontSize: '16px' }}>👤</span>
+                  <span className="sidebar-text">Assign Drivers</span>
+                  <span className="sidebar-subtext">Driver Assignment</span>
+                </button>
+              </>
+            )}
+          </div>
+
+          <div className="sidebar-section">
+            <h3 className="sidebar-heading">Driver Management</h3>
+            <button
+              className={activeTab === 'register-drivers' ? 'active' : ''}
+              onClick={() => {
+                setActiveTab('register-drivers');
+                if (isMobile) setSidebarOpen(false);
+              }}
+            >
+              <span className="sidebar-icon">👨‍✈️</span>
+              <span className="sidebar-text">Register Drivers</span>
+              <span className="sidebar-subtext">Driver Registration</span>
+            </button>
           </div>
 
           <div className="sidebar-section">
@@ -625,7 +861,7 @@ const AdminDashboard = () => {
                   + Add Cab
                 </button>
               </div>
-              <div className="data-table-wrapper">
+              <div className="data-table-wrapper" style={{ overflowX: 'auto' }}>
                 <table className="data-table">
                 <thead>
                   <tr>
@@ -643,8 +879,8 @@ const AdminDashboard = () => {
                     <tr key={cab.id}>
                       <td>{cab.vehicle_number}</td>
                       <td>{cab.cab_type_name}</td>
-                      <td>{cab.driver_name || '-'}</td>
-                      <td>{cab.driver_phone || '-'}</td>
+                      <td>{cab.driver_name || cab.registered_driver_name || '-'}</td>
+                      <td>{cab.driver_phone || cab.registered_driver_phone || '-'}</td>
                       <td>{cab.is_available ? 'Yes' : 'No'}</td>
                       <td>{cab.is_active ? 'Active' : 'Inactive'}</td>
                       <td>
@@ -996,6 +1232,372 @@ const AdminDashboard = () => {
             </div>
           )}
 
+          {activeTab === 'corporate-bookings' && (
+            <div>
+              <div className="section-header bookings-header">
+                <h2>{corporateBookingView === 'assign-drivers' ? 'Assign Drivers' : 'Corporate Bookings'}</h2>
+                {corporateBookingView === 'all' && (
+                <div className="booking-filters">
+                  <div className="filter-group">
+                    <label>Status</label>
+                    <select
+                      value={corporateBookingFilters.status}
+                      onChange={(e) =>
+                        setCorporateBookingFilters((prev) => ({
+                          ...prev,
+                          status: e.target.value,
+                        }))
+                      }
+                    >
+                      <option value="all">All</option>
+                      <option value="pending">Pending</option>
+                      <option value="confirmed">Confirmed</option>
+                      <option value="in_progress">In Progress</option>
+                      <option value="completed">Completed</option>
+                      <option value="cancelled">Cancelled</option>
+                    </select>
+                  </div>
+                  <div className="filter-group filter-search">
+                    <label>Search</label>
+                    <input
+                      type="text"
+                      placeholder="Name, phone, company, locations..."
+                      value={corporateBookingFilters.search}
+                      onChange={(e) =>
+                        setCorporateBookingFilters((prev) => ({
+                          ...prev,
+                          search: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+                )}
+                {corporateBookingView === 'assign-drivers' && (
+                  <div style={{ marginTop: '20px', marginBottom: '20px' }}>
+                    <p style={{ color: '#6b7280' }}>
+                      Select a booking and assign an available driver based on pickup and drop locations
+                    </p>
+                  </div>
+                )}
+              </div>
+              <div className="data-table-wrapper">
+                {corporateBookingView === 'all' ? (
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Phone</th>
+                        <th>Company</th>
+                        <th>Pickup Point</th>
+                        <th>Drop Point</th>
+                        <th>Status</th>
+                        <th>Date</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {corporateBookings
+                        .filter((booking) => {
+                          // Status filter
+                          if (
+                            corporateBookingFilters.status !== 'all' &&
+                            booking.status !== corporateBookingFilters.status
+                          ) {
+                            return false;
+                          }
+
+                          // Search filter
+                          if (corporateBookingFilters.search) {
+                            const search = corporateBookingFilters.search.toLowerCase();
+                            const searchable = [
+                              booking.id,
+                              booking.name,
+                              booking.phone_number,
+                              booking.company_name,
+                              booking.pickup_point,
+                              booking.drop_point,
+                            ]
+                              .filter(Boolean)
+                              .join(' ')
+                              .toLowerCase();
+
+                            if (!searchable.includes(search)) {
+                              return false;
+                            }
+                          }
+
+                          return true;
+                        })
+                        .map((booking) => (
+                          <tr key={booking.id}>
+                            <td data-label="ID">{booking.id}</td>
+                            <td data-label="Name">{booking.name}</td>
+                            <td data-label="Phone">{booking.phone_number}</td>
+                            <td data-label="Company">{booking.company_name}</td>
+                            <td data-label="Pickup Point">{booking.pickup_point}</td>
+                            <td data-label="Drop Point">{booking.drop_point}</td>
+                            <td data-label="Status">
+                              <select
+                                value={booking.status}
+                                onChange={(e) =>
+                                  updateCorporateBookingStatus(
+                                    booking.id,
+                                    e.target.value
+                                  )
+                                }
+                                className="status-select"
+                              >
+                                <option value="pending">Pending</option>
+                                <option value="confirmed">Confirmed</option>
+                                <option value="in_progress">In Progress</option>
+                                <option value="completed">Completed</option>
+                                <option value="cancelled">Cancelled</option>
+                              </select>
+                            </td>
+                            <td data-label="Date">
+                              {new Date(booking.created_at).toLocaleString()}
+                            </td>
+                            <td data-label="Actions">
+                              <button
+                                onClick={() => openEditCorporateBooking(booking)}
+                                className="btn btn-secondary btn-sm"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleDeleteCorporateBooking(booking.id)}
+                                className="btn btn-danger btn-sm"
+                              >
+                                Delete
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      {corporateBookings.filter((booking) => {
+                        if (
+                          corporateBookingFilters.status !== 'all' &&
+                          booking.status !== corporateBookingFilters.status
+                        ) {
+                          return false;
+                        }
+                        if (corporateBookingFilters.search) {
+                          const search = corporateBookingFilters.search.toLowerCase();
+                          const searchable = [
+                            booking.id,
+                            booking.name,
+                            booking.phone_number,
+                            booking.company_name,
+                            booking.pickup_point,
+                            booking.drop_point,
+                          ]
+                            .filter(Boolean)
+                            .join(' ')
+                            .toLowerCase();
+                          if (!searchable.includes(search)) {
+                            return false;
+                          }
+                        }
+                        return true;
+                      }).length === 0 && (
+                        <tr>
+                          <td colSpan="9" style={{ textAlign: 'center', padding: '40px' }}>
+                            No corporate bookings found
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                ) : (
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Company</th>
+                        <th>Pickup Point</th>
+                        <th>Drop Point</th>
+                        <th>Assigned Driver</th>
+                        <th>Vehicle</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {corporateBookings.map((booking) => (
+                        <tr key={booking.id}>
+                          <td data-label="ID">{booking.id}</td>
+                          <td data-label="Name">{booking.name}</td>
+                          <td data-label="Company">{booking.company_name}</td>
+                          <td data-label="Pickup Point">{booking.pickup_point}</td>
+                          <td data-label="Drop Point">{booking.drop_point}</td>
+                          <td data-label="Assigned Driver">
+                            {booking.driver_name || booking.cab_driver_name ? (
+                              <div>
+                                <strong>{booking.driver_name || booking.cab_driver_name}</strong>
+                                {(booking.driver_phone || booking.cab_driver_phone) && (
+                                  <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                                    {booking.driver_phone || booking.cab_driver_phone}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span style={{ color: '#9ca3af', fontStyle: 'italic' }}>Not assigned</span>
+                            )}
+                          </td>
+                          <td data-label="Vehicle">
+                            {booking.vehicle_number ? (
+                              <div>
+                                <strong>{booking.vehicle_number}</strong>
+                                {booking.cab_type_name && (
+                                  <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                                    {booking.cab_type_name}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              '-'
+                            )}
+                          </td>
+                          <td data-label="Status">
+                            <span 
+                              className="status-badge" 
+                              style={{
+                                background: booking.status === 'completed' ? '#10b981' :
+                                           booking.status === 'confirmed' ? '#3b82f6' :
+                                           booking.status === 'in_progress' ? '#f59e0b' :
+                                           booking.status === 'cancelled' ? '#ef4444' :
+                                           '#6b7280',
+                                color: '#fff',
+                                padding: '4px 12px',
+                                borderRadius: '12px',
+                                fontSize: '12px',
+                                fontWeight: '600',
+                                textTransform: 'capitalize'
+                              }}
+                            >
+                              {booking.status || 'pending'}
+                            </span>
+                          </td>
+                          <td data-label="Actions">
+                            {(!booking.driver_name && !booking.cab_driver_name) ? (
+                              <button
+                                onClick={() => openDriverAssignmentModal(booking)}
+                                className="btn btn-primary btn-sm"
+                              >
+                                Assign Driver
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleUnassignDriver(booking.id)}
+                                className="btn btn-danger btn-sm"
+                              >
+                                Unassign
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                      {corporateBookings.length === 0 && (
+                        <tr>
+                          <td colSpan="9" style={{ textAlign: 'center', padding: '40px' }}>
+                            No corporate bookings found
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'register-drivers' && (
+            <div>
+              <div className="section-header">
+                <h2>Register Drivers</h2>
+                <button
+                  onClick={openCreateForm}
+                  className="btn btn-primary"
+                  style={{ color: '#000' }}
+                >
+                  + Register New Driver
+                </button>
+              </div>
+              <div className="data-table-wrapper" style={{ overflowX: 'auto' }}>
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Name</th>
+                      <th>Phone</th>
+                      <th>Email</th>
+                      <th>License Number</th>
+                      <th>Experience</th>
+                      <th>Assigned Cabs</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {drivers.map((driver) => (
+                      <tr key={driver.id}>
+                        <td data-label="ID">{driver.id}</td>
+                        <td data-label="Name">{driver.name}</td>
+                        <td data-label="Phone">{driver.phone}</td>
+                        <td data-label="Email">{driver.email || '-'}</td>
+                        <td data-label="License Number">{driver.license_number || '-'}</td>
+                        <td data-label="Experience">
+                          {driver.experience_years ? `${driver.experience_years} years` : '-'}
+                        </td>
+                        <td data-label="Assigned Cabs">
+                          {driver.assigned_cabs_count || 0}
+                        </td>
+                        <td data-label="Status">
+                          <span 
+                            className="status-badge" 
+                            style={{
+                              background: driver.is_active ? '#10b981' : '#ef4444',
+                              color: '#fff',
+                              padding: '4px 12px',
+                              borderRadius: '12px',
+                              fontSize: '12px',
+                              fontWeight: '600'
+                            }}
+                          >
+                            {driver.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td data-label="Actions">
+                          <button
+                            onClick={() => openEditForm(driver)}
+                            className="btn btn-secondary btn-sm"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDelete('drivers', driver.id)}
+                            className="btn btn-danger btn-sm"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {drivers.length === 0 && (
+                      <tr>
+                        <td colSpan="9" style={{ textAlign: 'center', padding: '40px' }}>
+                          No drivers registered yet
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           {activeTab === 'car-options' && (
             <div>
               <div className="section-header">
@@ -1070,7 +1672,7 @@ const AdminDashboard = () => {
           {showForm && (
             <div className="modal-overlay" onClick={() => setShowForm(false)}>
               <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-                <h3>{editingItem ? 'Edit' : 'Create'} {activeTab.replace('-', ' ')}</h3>
+                <h3>{editingItem ? 'Edit' : 'Create'} {activeTab === 'corporate-bookings' ? 'Corporate Booking' : activeTab === 'register-drivers' ? 'Driver' : activeTab.replace('-', ' ')}</h3>
                 <form onSubmit={handleSubmit}>
                   {activeTab === 'cab-types' && (
                     <>
@@ -1325,6 +1927,26 @@ const AdminDashboard = () => {
                         />
                       </div>
                       <div className="form-group">
+                        <label>Cab Type *</label>
+                        <select
+                          required
+                          value={formData.cab_type_id || ''}
+                          onChange={(e) =>
+                            setFormData({ ...formData, cab_type_id: e.target.value ? parseInt(e.target.value) : null })
+                          }
+                        >
+                          <option value="">Select Cab Type</option>
+                          {cabTypes.filter(ct => ct.is_active).map((ct) => (
+                            <option key={ct.id} value={ct.id}>
+                              {ct.name}
+                            </option>
+                          ))}
+                        </select>
+                        <small style={{ color: '#6b7280', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                          Every car must be assigned to a cab type
+                        </small>
+                      </div>
+                      <div className="form-group">
                         <label>Description</label>
                         <textarea
                           rows={4}
@@ -1377,21 +1999,58 @@ const AdminDashboard = () => {
                         />
                       </div>
                       <div className="form-group">
-                        <label>Cab Type *</label>
+                        <label>Select Car *</label>
                         <select
                           required
-                          value={formData.cab_type_id || ''}
-                          onChange={(e) =>
-                            setFormData({ ...formData, cab_type_id: parseInt(e.target.value) })
-                          }
+                          value={formData.car_option_id || ''}
+                          onChange={(e) => {
+                            const selectedCarId = e.target.value ? parseInt(e.target.value) : null;
+                            const selectedCar = carOptions.find(car => car.id === selectedCarId);
+                            setFormData({ 
+                              ...formData, 
+                              car_option_id: selectedCarId,
+                              cab_type_id: selectedCar && selectedCar.cab_type_id ? parseInt(selectedCar.cab_type_id) : null
+                            });
+                          }}
                         >
-                          <option value="">Select Cab Type</option>
-                          {cabTypes.map((ct) => (
-                            <option key={ct.id} value={ct.id}>
-                              {ct.name}
+                          <option value="">Select Car</option>
+                          {carOptions.filter(car => car.is_active && car.cab_type_id).map((car) => (
+                            <option key={car.id} value={car.id}>
+                              {car.name} {car.car_subtype ? `(${car.car_subtype})` : ''}
                             </option>
                           ))}
                         </select>
+                        {carOptions.filter(car => car.is_active && !car.cab_type_id).length > 0 && (
+                          <small style={{ color: '#f59e0b', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                            Note: Some cars are not shown because they are not assigned to a cab type.
+                          </small>
+                        )}
+                      </div>
+                      <div className="form-group">
+                        <label>Select Driver</label>
+                        <select
+                          value={formData.driver_id || ''}
+                          onChange={(e) => {
+                            const selectedDriverId = e.target.value ? parseInt(e.target.value) : null;
+                            const selectedDriver = drivers.find(d => d.id === selectedDriverId);
+                            setFormData({ 
+                              ...formData, 
+                              driver_id: selectedDriverId,
+                              driver_name: selectedDriver ? selectedDriver.name : '',
+                              driver_phone: selectedDriver ? selectedDriver.phone : ''
+                            });
+                          }}
+                        >
+                          <option value="">Select a registered driver (optional)</option>
+                          {drivers.filter(d => d.is_active).map((driver) => (
+                            <option key={driver.id} value={driver.id}>
+                              {driver.name} - {driver.phone} {driver.license_number ? `(${driver.license_number})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                        <small style={{ color: '#6b7280', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                          Or manually enter driver details below
+                        </small>
                       </div>
                       <div className="form-group">
                         <label>Driver Name</label>
@@ -1401,6 +2060,7 @@ const AdminDashboard = () => {
                           onChange={(e) =>
                             setFormData({ ...formData, driver_name: e.target.value })
                           }
+                          placeholder="Enter driver name if not selecting from list"
                         />
                       </div>
                       <div className="form-group">
@@ -1411,6 +2071,7 @@ const AdminDashboard = () => {
                           onChange={(e) =>
                             setFormData({ ...formData, driver_phone: e.target.value })
                           }
+                          placeholder="Enter driver phone if not selecting from list"
                         />
                       </div>
                       {editingItem && (
@@ -1444,6 +2105,194 @@ const AdminDashboard = () => {
                     </>
                   )}
 
+                  {activeTab === 'corporate-bookings' && (
+                    <>
+                      <div className="form-group">
+                        <label>Name *</label>
+                        <input
+                          type="text"
+                          required
+                          value={formData.name || ''}
+                          onChange={(e) =>
+                            setFormData({ ...formData, name: e.target.value })
+                          }
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Phone Number *</label>
+                        <input
+                          type="tel"
+                          required
+                          value={formData.phone_number || ''}
+                          onChange={(e) =>
+                            setFormData({ ...formData, phone_number: e.target.value })
+                          }
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Company Name *</label>
+                        <input
+                          type="text"
+                          required
+                          value={formData.company_name || ''}
+                          onChange={(e) =>
+                            setFormData({ ...formData, company_name: e.target.value })
+                          }
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Pickup Point *</label>
+                        <input
+                          type="text"
+                          required
+                          value={formData.pickup_point || ''}
+                          onChange={(e) =>
+                            setFormData({ ...formData, pickup_point: e.target.value })
+                          }
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Drop Point *</label>
+                        <input
+                          type="text"
+                          required
+                          value={formData.drop_point || ''}
+                          onChange={(e) =>
+                            setFormData({ ...formData, drop_point: e.target.value })
+                          }
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Status</label>
+                        <select
+                          value={formData.status || 'pending'}
+                          onChange={(e) =>
+                            setFormData({ ...formData, status: e.target.value })
+                          }
+                        >
+                          <option value="pending">Pending</option>
+                          <option value="confirmed">Confirmed</option>
+                          <option value="in_progress">In Progress</option>
+                          <option value="completed">Completed</option>
+                          <option value="cancelled">Cancelled</option>
+                        </select>
+                      </div>
+                      <div className="form-group">
+                        <label>Notes</label>
+                        <textarea
+                          value={formData.notes || ''}
+                          onChange={(e) =>
+                            setFormData({ ...formData, notes: e.target.value })
+                          }
+                          rows="3"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {activeTab === 'register-drivers' && (
+                    <>
+                      <div className="form-group">
+                        <label>Name *</label>
+                        <input
+                          type="text"
+                          required
+                          value={formData.name || ''}
+                          onChange={(e) =>
+                            setFormData({ ...formData, name: e.target.value })
+                          }
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Phone Number *</label>
+                        <input
+                          type="tel"
+                          required
+                          value={formData.phone || ''}
+                          onChange={(e) =>
+                            setFormData({ ...formData, phone: e.target.value })
+                          }
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Email</label>
+                        <input
+                          type="email"
+                          value={formData.email || ''}
+                          onChange={(e) =>
+                            setFormData({ ...formData, email: e.target.value })
+                          }
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>License Number</label>
+                        <input
+                          type="text"
+                          value={formData.license_number || ''}
+                          onChange={(e) =>
+                            setFormData({ ...formData, license_number: e.target.value })
+                          }
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Address</label>
+                        <textarea
+                          value={formData.address || ''}
+                          onChange={(e) =>
+                            setFormData({ ...formData, address: e.target.value })
+                          }
+                          rows="3"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Emergency Contact Name</label>
+                        <input
+                          type="text"
+                          value={formData.emergency_contact_name || ''}
+                          onChange={(e) =>
+                            setFormData({ ...formData, emergency_contact_name: e.target.value })
+                          }
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Emergency Contact Phone</label>
+                        <input
+                          type="tel"
+                          value={formData.emergency_contact_phone || ''}
+                          onChange={(e) =>
+                            setFormData({ ...formData, emergency_contact_phone: e.target.value })
+                          }
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Experience (Years)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={formData.experience_years || ''}
+                          onChange={(e) =>
+                            setFormData({ ...formData, experience_years: parseInt(e.target.value) || null })
+                          }
+                        />
+                      </div>
+                      {editingItem && (
+                        <div className="form-group">
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={formData.is_active !== 0 && formData.is_active !== false}
+                              onChange={(e) =>
+                                setFormData({ ...formData, is_active: e.target.checked })
+                              }
+                            />
+                            {' '}
+                            Active
+                          </label>
+                        </div>
+                      )}
+                    </>
+                  )}
+
                   <div className="form-actions">
                     <button
                       type="button"
@@ -1456,7 +2305,12 @@ const AdminDashboard = () => {
                     >
                       Cancel
                     </button>
-                    <button type="submit" disabled={loading} className="btn btn-primary">
+                    <button 
+                      type="submit" 
+                      disabled={loading} 
+                      className="btn btn-primary"
+                      style={activeTab === 'register-drivers' ? { color: '#000' } : {}}
+                    >
                       {loading ? 'Saving...' : editingItem ? 'Update' : 'Create'}
                     </button>
                   </div>
@@ -1533,6 +2387,145 @@ const AdminDashboard = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Driver Assignment Modal */}
+      {showDriverAssignmentModal && selectedBookingForDriver && (
+        <div className="modal-overlay" onClick={() => {
+          setShowDriverAssignmentModal(false);
+          setSelectedBookingForDriver(null);
+          setAvailableDrivers([]);
+          setAvailableVehicles([]);
+        }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '700px' }}>
+            <div className="modal-header">
+              <h3>Assign Driver to Booking #{selectedBookingForDriver.id}</h3>
+              <button
+                className="modal-close"
+                onClick={() => {
+                  setShowDriverAssignmentModal(false);
+                  setSelectedBookingForDriver(null);
+                  setAvailableDrivers([]);
+                }}
+              >
+                ×
+              </button>
+            </div>
+            
+            <div style={{ marginBottom: '20px', padding: '16px', background: '#f3f4f6', borderRadius: '8px' }}>
+              <div style={{ marginBottom: '8px' }}>
+                <strong>Pickup Point:</strong> {selectedBookingForDriver.pickup_point}
+              </div>
+              <div>
+                <strong>Drop Point:</strong> {selectedBookingForDriver.drop_point}
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '24px' }}>
+              <h4 style={{ marginBottom: '12px', color: '#374151' }}>Available Drivers ({availableDrivers.length})</h4>
+              {availableDrivers.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280', background: '#f9fafb', borderRadius: '8px' }}>
+                  <p>No available drivers found.</p>
+                  <p style={{ fontSize: '14px', marginTop: '8px' }}>
+                    Please register drivers in the "Register Drivers" section first.
+                  </p>
+                </div>
+              ) : (
+                <div style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '8px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead style={{ background: '#f9fafb', position: 'sticky', top: 0 }}>
+                      <tr>
+                        <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Name</th>
+                        <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Phone</th>
+                        <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Email</th>
+                        <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>License</th>
+                        <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Experience</th>
+                        <th style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid #e5e7eb' }}>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {availableDrivers.map((driver) => (
+                        <tr key={driver.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                          <td style={{ padding: '12px' }}>
+                            <strong>{driver.name || 'N/A'}</strong>
+                          </td>
+                          <td style={{ padding: '12px' }}>{driver.phone || '-'}</td>
+                          <td style={{ padding: '12px' }}>{driver.email || '-'}</td>
+                          <td style={{ padding: '12px' }}>{driver.license_number || '-'}</td>
+                          <td style={{ padding: '12px' }}>
+                            {driver.experience_years ? `${driver.experience_years} years` : '-'}
+                          </td>
+                          <td style={{ padding: '12px', textAlign: 'center' }}>
+                            <button
+                              onClick={() => handleAssignDriver(selectedBookingForDriver.id, driver.id)}
+                              className="btn btn-primary btn-sm"
+                              disabled={loading}
+                            >
+                              {loading ? 'Assigning...' : 'Assign'}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <h4 style={{ marginBottom: '12px', color: '#374151' }}>All Vehicles ({availableVehicles.length})</h4>
+              {availableVehicles.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280', background: '#f9fafb', borderRadius: '8px' }}>
+                  <p>No vehicles found.</p>
+                </div>
+              ) : (
+                <div style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '8px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead style={{ background: '#f9fafb', position: 'sticky', top: 0 }}>
+                      <tr>
+                        <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Vehicle Number</th>
+                        <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Cab Type</th>
+                        <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Driver Name</th>
+                        <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Driver Phone</th>
+                        <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Available</th>
+                        <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {availableVehicles.map((vehicle) => (
+                        <tr key={vehicle.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                          <td style={{ padding: '12px' }}>
+                            <strong>{vehicle.vehicle_number || 'N/A'}</strong>
+                          </td>
+                          <td style={{ padding: '12px' }}>{vehicle.cab_type_name || '-'}</td>
+                          <td style={{ padding: '12px' }}>{vehicle.driver_name || vehicle.registered_driver_name || '-'}</td>
+                          <td style={{ padding: '12px' }}>{vehicle.driver_phone || vehicle.registered_driver_phone || '-'}</td>
+                          <td style={{ padding: '12px' }}>{vehicle.is_available ? 'Yes' : 'No'}</td>
+                          <td style={{ padding: '12px' }}>{vehicle.is_active ? 'Active' : 'Inactive'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div className="modal-actions" style={{ marginTop: '20px' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDriverAssignmentModal(false);
+                  setSelectedBookingForDriver(null);
+                  setAvailableDrivers([]);
+                }}
+                className="btn btn-secondary"
+                disabled={loading}
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}

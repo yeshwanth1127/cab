@@ -9,6 +9,7 @@ import UserAuth from './pages/UserAuth';
 import AboutPage from './pages/AboutPage';
 import ContactPage from './pages/ContactPage';
 import AccountPage from './pages/AccountPage';
+import CorporateBookingPage from './pages/CorporateBookingPage';
 import CornerLogo from './components/CornerLogo';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -24,6 +25,7 @@ function App() {
           <Route path="/check-booking" element={<CheckBooking />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/contact" element={<ContactPage />} />
+          <Route path="/corporate" element={<CorporateBookingPage />} />
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/login" element={<UserAuth />} />
           <Route path="/account" element={<AccountPage />} />

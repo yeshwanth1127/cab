@@ -136,6 +136,7 @@ const MainNavbar = () => {
     { label: 'About Us', href: '/about' },
     { label: 'Contact', href: '/contact' },
     { label: 'Car Options', href: '/car-options' },
+    { label: 'Corporate', href: '/corporate' },
     { label: 'Check Booking', href: '/check-booking' },
   ];
 

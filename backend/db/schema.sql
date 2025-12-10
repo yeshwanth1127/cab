@@ -32,17 +32,35 @@ CREATE TABLE IF NOT EXISTS cab_types (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Drivers table (registered drivers)
+CREATE TABLE IF NOT EXISTS drivers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    phone TEXT NOT NULL UNIQUE,
+    email TEXT,
+    license_number TEXT UNIQUE,
+    address TEXT,
+    emergency_contact_name TEXT,
+    emergency_contact_phone TEXT,
+    experience_years INTEGER,
+    is_active INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Cabs table (individual vehicles)
 CREATE TABLE IF NOT EXISTS cabs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     cab_type_id INTEGER,
     vehicle_number TEXT UNIQUE NOT NULL,
+    driver_id INTEGER,
     driver_name TEXT,
     driver_phone TEXT,
     is_available INTEGER DEFAULT 1,
     is_active INTEGER DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (cab_type_id) REFERENCES cab_types(id) ON DELETE SET NULL
+    FOREIGN KEY (cab_type_id) REFERENCES cab_types(id) ON DELETE SET NULL,
+    FOREIGN KEY (driver_id) REFERENCES drivers(id) ON DELETE SET NULL
 );
 
 -- Routes table (popular routes with fixed fares)
@@ -90,6 +108,99 @@ CREATE TABLE IF NOT EXISTS car_options (
     is_active INTEGER DEFAULT 1,
     sort_order INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Corporate companies table
+CREATE TABLE IF NOT EXISTS corporate_companies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    domain TEXT,
+    contact_name TEXT NOT NULL,
+    contact_email TEXT NOT NULL,
+    contact_phone TEXT,
+    status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'disabled')),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(contact_email)
+);
+
+-- Corporate HR/auth users
+CREATE TABLE IF NOT EXISTS corporate_users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
+    role TEXT DEFAULT 'corporate_hr' CHECK (role IN ('corporate_hr')),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(company_id, email),
+    FOREIGN KEY (company_id) REFERENCES corporate_companies(id) ON DELETE CASCADE
+);
+
+-- Employee intake records
+CREATE TABLE IF NOT EXISTS corporate_employees (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL,
+    phone TEXT,
+    pickup_location TEXT,
+    drop_location TEXT,
+    shift_start TEXT,
+    shift_end TEXT,
+    notes TEXT,
+    status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'submitted', 'assigned', 'inactive')),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(company_id, email),
+    FOREIGN KEY (company_id) REFERENCES corporate_companies(id) ON DELETE CASCADE
+);
+
+-- Intake links generated for employees
+CREATE TABLE IF NOT EXISTS corporate_intake_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id INTEGER NOT NULL,
+    token TEXT NOT NULL UNIQUE,
+    expires_at DATETIME,
+    status TEXT DEFAULT 'active' CHECK (status IN ('active', 'expired', 'used')),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (company_id) REFERENCES corporate_companies(id) ON DELETE CASCADE
+);
+
+-- Vehicle assignments for corporate employees
+CREATE TABLE IF NOT EXISTS corporate_vehicle_assignments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_id INTEGER NOT NULL,
+    cab_id INTEGER,
+    vehicle_label TEXT,
+    route_info TEXT,
+    pickup_time TEXT,
+    status TEXT DEFAULT 'assigned' CHECK (status IN ('assigned', 'in_progress', 'completed', 'cancelled')),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (employee_id) REFERENCES corporate_employees(id) ON DELETE CASCADE,
+    FOREIGN KEY (cab_id) REFERENCES cabs(id) ON DELETE SET NULL,
+    UNIQUE(employee_id)
+);
+
+-- Corporate bookings table (public form submissions)
+CREATE TABLE IF NOT EXISTS corporate_bookings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    phone_number TEXT NOT NULL,
+    company_name TEXT NOT NULL,
+    pickup_point TEXT NOT NULL,
+    drop_point TEXT NOT NULL,
+    status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'in_progress', 'completed', 'cancelled')),
+    notes TEXT,
+    cab_id INTEGER,
+    driver_name TEXT,
+    driver_phone TEXT,
+    assigned_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (cab_id) REFERENCES cabs(id) ON DELETE SET NULL
 );
 
 -- Insert default service-type cab types (only if they don't exist)

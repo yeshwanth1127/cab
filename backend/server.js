@@ -28,6 +28,8 @@ app.use('/api/cabs', require('./routes/cabs'));
 app.use('/api/bookings', require('./routes/bookings'));
 app.use('/api/routes', require('./routes/routes'));
 app.use('/api/car-options', require('./routes/carOptions'));
+app.use('/api/corporate', require('./routes/corporate'));
+app.use('/api/drivers', require('./routes/drivers'));
 
 // Health check
 app.get('/api/health', (req, res) => {

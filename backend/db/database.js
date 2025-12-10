@@ -127,6 +127,19 @@ const initDatabase = () => {
             }
           }
 
+          // Migration: Check for cars without cab_type_id and log warning
+          try {
+            const carsWithoutCabType = await db.allAsync(
+              'SELECT id, name FROM car_options WHERE cab_type_id IS NULL AND is_active = 1'
+            );
+            if (carsWithoutCabType.length > 0) {
+              console.warn(`Warning: Found ${carsWithoutCabType.length} car(s) without cab_type_id. These cars need to be assigned to a cab type.`);
+              console.warn('Cars without cab_type_id:', carsWithoutCabType.map(c => `${c.name} (ID: ${c.id})`).join(', '));
+            }
+          } catch (migrationErr) {
+            console.log('Migration note (checking cars without cab_type_id):', migrationErr.message);
+          }
+
           // Migration to add number_of_hours to bookings
           try {
             await db.runAsync(
@@ -136,6 +149,63 @@ const initDatabase = () => {
           } catch (migrationErr) {
             if (!migrationErr.message.includes('duplicate column')) {
               console.log('Migration note (number_of_hours):', migrationErr.message);
+            }
+          }
+
+          // Migration to add driver assignment fields to corporate_bookings
+          try {
+            await db.runAsync(
+              `ALTER TABLE corporate_bookings ADD COLUMN cab_id INTEGER`
+            );
+            console.log('Migration: cab_id column added to corporate_bookings');
+          } catch (migrationErr) {
+            if (!migrationErr.message.includes('duplicate column')) {
+              console.log('Migration note (cab_id):', migrationErr.message);
+            }
+          }
+
+          try {
+            await db.runAsync(
+              `ALTER TABLE corporate_bookings ADD COLUMN driver_name TEXT`
+            );
+            console.log('Migration: driver_name column added to corporate_bookings');
+          } catch (migrationErr) {
+            if (!migrationErr.message.includes('duplicate column')) {
+              console.log('Migration note (driver_name):', migrationErr.message);
+            }
+          }
+
+          try {
+            await db.runAsync(
+              `ALTER TABLE corporate_bookings ADD COLUMN driver_phone TEXT`
+            );
+            console.log('Migration: driver_phone column added to corporate_bookings');
+          } catch (migrationErr) {
+            if (!migrationErr.message.includes('duplicate column')) {
+              console.log('Migration note (driver_phone):', migrationErr.message);
+            }
+          }
+
+          try {
+            await db.runAsync(
+              `ALTER TABLE corporate_bookings ADD COLUMN assigned_at DATETIME`
+            );
+            console.log('Migration: assigned_at column added to corporate_bookings');
+          } catch (migrationErr) {
+            if (!migrationErr.message.includes('duplicate column')) {
+              console.log('Migration note (assigned_at):', migrationErr.message);
+            }
+          }
+
+          // Migration to add driver_id to cabs table
+          try {
+            await db.runAsync(
+              `ALTER TABLE cabs ADD COLUMN driver_id INTEGER`
+            );
+            console.log('Migration: driver_id column added to cabs');
+          } catch (migrationErr) {
+            if (!migrationErr.message.includes('duplicate column')) {
+              console.log('Migration note (driver_id):', migrationErr.message);
             }
           }
 

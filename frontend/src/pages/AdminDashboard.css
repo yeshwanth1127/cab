@@ -54,11 +54,13 @@
   padding: 0;
   animation: fadeIn 0.8s ease-out;
   min-height: calc(100vh - 100px);
+  overflow-x: visible;
 }
 
 .sidebar {
-  width: 320px;
-  min-width: 320px;
+  width: max-content;
+  min-width: 300px;
+  max-width: 500px;
   background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
   backdrop-filter: blur(10px);
   padding: 0;
@@ -68,7 +70,7 @@
   left: 0;
   top: 0;
   overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: visible;
   border-right: 1px solid rgba(255, 255, 255, 0.1);
   animation: slideInLeft 0.6s ease-out;
   z-index: 100;
@@ -117,6 +119,9 @@
 .sidebar-section {
   padding: 20px 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  width: 100%;
+  min-width: max-content;
+  overflow: visible;
 }
 
 .sidebar-section:last-child {
@@ -135,7 +140,8 @@
 
 .sidebar button {
   width: 100%;
-  padding: 16px 24px;
+  min-width: max-content;
+  padding: 16px 24px 16px 24px;
   margin: 0;
   border: none;
   background: transparent;
@@ -145,11 +151,13 @@
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   color: rgba(255, 255, 255, 0.8);
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   display: flex;
   align-items: center;
   gap: 12px;
   border-left: 3px solid transparent;
+  white-space: nowrap;
+  box-sizing: border-box;
 }
 
 .sidebar button::before {
@@ -172,17 +180,26 @@
 }
 
 .sidebar-text {
-  flex: 1;
+  flex: 0 0 auto;
   font-weight: 600;
   font-size: 15px;
+  white-space: nowrap;
+  overflow: visible;
+  min-width: 0;
 }
 
 .sidebar-subtext {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.5);
   font-weight: 400;
-  margin-left: auto;
+  margin-left: 8px;
   text-align: right;
+  white-space: nowrap;
+  overflow: visible;
+  flex-shrink: 0 !important;
+  flex-grow: 0;
+  min-width: fit-content;
+  max-width: none;
 }
 
 .sidebar button:hover {
@@ -216,12 +233,14 @@
 
 .main-content {
   flex: 1;
-  margin-left: 320px;
+  margin-left: 350px;
+  min-width: 0;
   background: #f8fafc;
   padding: 40px;
   min-height: 100vh;
   animation: fadeIn 0.8s ease-out 0.2s both;
-  width: calc(100% - 320px);
+  width: calc(100vw - 350px);
+  transition: margin-left 0.3s ease, width 0.3s ease;
 }
 
 .stats-grid {
@@ -514,7 +533,7 @@
 .data-table .btn-secondary.btn-sm {
   background: #111827;
   border-color: #111827;
-  color: #f9fafb;
+  color: #f9fafb !important; /* Keep white on dark background */
   white-space: nowrap;
   margin-right: 8px;
   margin-bottom: 4px;
@@ -524,12 +543,13 @@
   background: #000000;
   border-color: #000000;
   box-shadow: 0 6px 16px rgba(15, 23, 42, 0.5);
+  color: #ffffff !important; /* Keep white on dark background */
 }
 
 .data-table .btn-primary.btn-sm {
   background: #facc15;
   border-color: #eab308;
-  color: #111827;
+  color: #000000 !important;
   white-space: nowrap;
   margin-right: 0;
   margin-bottom: 4px;
@@ -538,20 +558,21 @@
 .data-table .btn-primary.btn-sm:hover {
   background: #eab308;
   border-color: #ca8a04;
-  color: #000000;
+  color: #000000 !important;
   box-shadow: 0 6px 16px rgba(250, 204, 21, 0.4);
 }
 
 .data-table .btn-danger.btn-sm {
   background: #b91c1c;
   border-color: #7f1d1d;
-  color: #fef2f2;
+  color: #000000 !important;
 }
 
 .data-table .btn-danger.btn-sm:hover {
   background: #991b1b;
   border-color: #7f1d1d;
   box-shadow: 0 6px 16px rgba(185, 28, 28, 0.5);
+  color: #000000 !important;
 }
 
 .status-select {
@@ -962,14 +983,16 @@
 
 @media (max-width: 1024px) {
   .sidebar {
-    width: 280px;
-    min-width: 280px;
+    width: max-content;
+    min-width: 300px;
+    max-width: 500px;
   }
 
   .main-content {
-    margin-left: 280px;
-    width: calc(100% - 280px);
+    margin-left: 320px;
+    width: calc(100vw - 320px);
     padding: 30px 20px;
+    transition: margin-left 0.3s ease, width 0.3s ease;
   }
 
   .sidebar-header h2 {
@@ -1047,14 +1070,16 @@
 /* Tablet Styles */
 @media (max-width: 1024px) {
   .sidebar {
-    width: 280px;
-    min-width: 280px;
+    width: max-content;
+    min-width: 300px;
+    max-width: 500px;
   }
 
   .main-content {
-    margin-left: 280px;
-    width: calc(100% - 280px);
+    margin-left: 320px;
+    width: calc(100vw - 320px);
     padding: 30px 20px;
+    transition: margin-left 0.3s ease, width 0.3s ease;
   }
 
   .sidebar-header h2 {
@@ -1094,14 +1119,17 @@
   }
 
   .sidebar {
-    width: 280px;
+    width: auto;
+    min-width: 300px;
+    max-width: none;
     position: fixed;
-    left: -280px;
+    left: -100%;
     top: 0;
     height: 100vh;
     transition: left 0.3s ease;
     z-index: 999;
     box-shadow: 4px 0 20px rgba(0, 0, 0, 0.5);
+    overflow-x: visible;
   }
 
   .sidebar.open {
@@ -1109,7 +1137,7 @@
   }
 
   .main-content {
-    margin-left: 0;
+    margin-left: 0 !important;
     width: 100%;
     padding: 60px 15px 20px 15px;
   }
@@ -1379,15 +1407,24 @@
   .sidebar button {
     padding: 14px 18px;
     font-size: 14px;
+    white-space: nowrap;
   }
 
   .sidebar-icon {
     font-size: 18px;
     width: 20px;
+    flex-shrink: 0;
   }
 
   .sidebar-text {
     font-size: 14px;
+    white-space: nowrap;
+    overflow: visible;
+  }
+
+  .sidebar-subtext {
+    white-space: nowrap;
+    overflow: visible;
   }
 }
 
@@ -1505,14 +1542,14 @@
 .no-rates-message .btn-primary.btn-sm {
   background: #facc15;
   border-color: #eab308;
-  color: #111827;
+  color: #000000 !important;
   font-weight: 700;
 }
 
 .no-rates-message .btn-primary.btn-sm:hover {
   background: #eab308;
   border-color: #ca8a04;
-  color: #000000;
+  color: #000000 !important;
   box-shadow: 0 4px 12px rgba(250, 204, 21, 0.4);
 }
 
@@ -1560,42 +1597,42 @@
 .rate-meter-actions .btn-secondary.btn-sm {
   background: #111827;
   border-color: #111827;
-  color: #f9fafb;
+  color: #ffffff !important; /* Keep white on dark background */
   font-weight: 600;
 }
 
 .rate-meter-actions .btn-secondary.btn-sm:hover {
   background: #000000;
   border-color: #000000;
-  color: #ffffff;
+  color: #ffffff !important; /* Keep white on dark background */
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .rate-meter-actions .btn-danger.btn-sm {
   background: #dc2626;
   border-color: #b91c1c;
-  color: #ffffff;
+  color: #ffffff !important; /* Keep white on dark red background */
   font-weight: 600;
 }
 
 .rate-meter-actions .btn-danger.btn-sm:hover {
   background: #b91c1c;
   border-color: #991b1b;
-  color: #ffffff;
+  color: #ffffff !important; /* Keep white on dark red background */
   box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
 }
 
 .rate-meter-actions .btn-primary.btn-sm {
   background: #facc15;
   border-color: #eab308;
-  color: #111827;
+  color: #000000 !important;
   font-weight: 700;
 }
 
 .rate-meter-actions .btn-primary.btn-sm:hover {
   background: #eab308;
   border-color: #ca8a04;
-  color: #000000;
+  color: #000000 !important;
   box-shadow: 0 4px 12px rgba(250, 204, 21, 0.4);
 }
 
