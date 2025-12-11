@@ -22,6 +22,12 @@ if (!fs.existsSync(carOptionsUploadDir)) {
   fs.mkdirSync(carOptionsUploadDir, { recursive: true });
 }
 
+// File upload dir for drivers
+const driversUploadDir = path.join(__dirname, '..', 'uploads', 'drivers');
+if (!fs.existsSync(driversUploadDir)) {
+  fs.mkdirSync(driversUploadDir, { recursive: true });
+}
+
 // Receipts directory (shared with public bookings router)
 const receiptsDir = path.join(__dirname, '..', 'receipts');
 if (!fs.existsSync(receiptsDir)) {
@@ -30,7 +36,12 @@ if (!fs.existsSync(receiptsDir)) {
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, carOptionsUploadDir);
+    // decide folder based on route
+    if (req.originalUrl.includes('/drivers')) {
+      cb(null, driversUploadDir);
+    } else {
+      cb(null, carOptionsUploadDir);
+    }
   },
   filename: (req, file, cb) => {
     const timestamp = Date.now();
@@ -209,12 +220,24 @@ router.post('/cabs', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { vehicle_number, cab_type_id, driver_name, driver_phone } = req.body;
+    const { vehicle_number, cab_type_id, driver_name, driver_phone, driver_id } = req.body;
+
+    let resolvedDriverName = driver_name || null;
+    let resolvedDriverPhone = driver_phone || null;
+    let resolvedDriverId = driver_id || null;
+
+    if (driver_id) {
+      const driver = await db.getAsync('SELECT * FROM drivers WHERE id = ?', [driver_id]);
+      if (!driver) return res.status(404).json({ error: 'Driver not found' });
+      resolvedDriverName = driver.name;
+      resolvedDriverPhone = driver.phone;
+      resolvedDriverId = driver.id;
+    }
 
     const result = await db.runAsync(
-      `INSERT INTO cabs (vehicle_number, cab_type_id, driver_name, driver_phone)
-       VALUES (?, ?, ?, ?)`,
-      [vehicle_number, cab_type_id, driver_name || null, driver_phone || null]
+      `INSERT INTO cabs (vehicle_number, cab_type_id, driver_name, driver_phone, driver_id)
+       VALUES (?, ?, ?, ?, ?)`,
+      [vehicle_number, cab_type_id, resolvedDriverName, resolvedDriverPhone, resolvedDriverId]
     );
 
     const newCab = await db.getAsync('SELECT * FROM cabs WHERE id = ?', [result.lastID]);
@@ -232,7 +255,7 @@ router.post('/cabs', [
 router.put('/cabs/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { vehicle_number, cab_type_id, driver_name, driver_phone, is_available, is_active } = req.body;
+    const { vehicle_number, cab_type_id, driver_name, driver_phone, driver_id, is_available, is_active } = req.body;
 
     const updates = [];
     const values = [];
@@ -245,13 +268,33 @@ router.put('/cabs/:id', async (req, res) => {
       updates.push('cab_type_id = ?');
       values.push(cab_type_id);
     }
-    if (driver_name !== undefined) {
-      updates.push('driver_name = ?');
-      values.push(driver_name);
-    }
-    if (driver_phone !== undefined) {
-      updates.push('driver_phone = ?');
-      values.push(driver_phone);
+    if (driver_id !== undefined) {
+      if (driver_id) {
+        const driver = await db.getAsync('SELECT * FROM drivers WHERE id = ?', [driver_id]);
+        if (!driver) return res.status(404).json({ error: 'Driver not found' });
+        updates.push('driver_id = ?');
+        values.push(driver.id);
+        updates.push('driver_name = ?');
+        values.push(driver.name);
+        updates.push('driver_phone = ?');
+        values.push(driver.phone);
+      } else {
+        updates.push('driver_id = ?');
+        values.push(null);
+        updates.push('driver_name = ?');
+        values.push(null);
+        updates.push('driver_phone = ?');
+        values.push(null);
+      }
+    } else {
+      if (driver_name !== undefined) {
+        updates.push('driver_name = ?');
+        values.push(driver_name);
+      }
+      if (driver_phone !== undefined) {
+        updates.push('driver_phone = ?');
+        values.push(driver_phone);
+      }
     }
     if (is_available !== undefined) {
       updates.push('is_available = ?');
@@ -1053,6 +1096,217 @@ router.get('/car-options/available', async (req, res) => {
     res.json(normalized);
   } catch (error) {
     console.error('Error fetching available car options:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ========== DRIVERS MANAGEMENT ==========
+
+// List drivers
+router.get('/drivers', async (req, res) => {
+  try {
+    const drivers = await db.allAsync(
+      `SELECT * FROM drivers ORDER BY created_at DESC`
+    );
+    res.json(drivers);
+  } catch (error) {
+    console.error('Error fetching drivers:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Create driver
+router.post(
+  '/drivers',
+  upload.single('photo'),
+  [
+    body('name').notEmpty().withMessage('Name is required'),
+    body('phone').notEmpty().withMessage('Phone is required'),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const { name, phone, license_number, emergency_contact_name, emergency_contact_phone } = req.body;
+      let photoUrl = null;
+      if (req.file) {
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        photoUrl = `${baseUrl}/uploads/drivers/${req.file.filename}`;
+      }
+
+      const result = await db.runAsync(
+        `INSERT INTO drivers (name, phone, license_number, photo_url, emergency_contact_name, emergency_contact_phone)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [name, phone, license_number || null, photoUrl, emergency_contact_name || null, emergency_contact_phone || null]
+      );
+
+      const newDriver = await db.getAsync('SELECT * FROM drivers WHERE id = ?', [result.lastID]);
+      res.status(201).json(newDriver);
+    } catch (error) {
+      console.error('Error creating driver:', error);
+      if (error.message.includes('UNIQUE')) {
+        return res.status(400).json({ error: 'Driver phone or license already exists' });
+      }
+      res.status(500).json({ error: 'Server error' });
+    }
+  }
+);
+
+// Update driver
+router.put('/drivers/:id', upload.single('photo'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, phone, license_number, emergency_contact_name, emergency_contact_phone, is_active } = req.body;
+
+    const updates = [];
+    const values = [];
+
+    if (name !== undefined) { updates.push('name = ?'); values.push(name); }
+    if (phone !== undefined) { updates.push('phone = ?'); values.push(phone); }
+    if (license_number !== undefined) { updates.push('license_number = ?'); values.push(license_number || null); }
+    if (emergency_contact_name !== undefined) { updates.push('emergency_contact_name = ?'); values.push(emergency_contact_name || null); }
+    if (emergency_contact_phone !== undefined) { updates.push('emergency_contact_phone = ?'); values.push(emergency_contact_phone || null); }
+    if (is_active !== undefined) { updates.push('is_active = ?'); values.push(boolToInt(is_active)); }
+
+    if (req.file) {
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const photoUrl = `${baseUrl}/uploads/drivers/${req.file.filename}`;
+      updates.push('photo_url = ?');
+      values.push(photoUrl);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+    values.push(id);
+
+    await db.runAsync(
+      `UPDATE drivers SET ${updates.join(', ')} WHERE id = ?`,
+      values
+    );
+
+    const updated = await db.getAsync('SELECT * FROM drivers WHERE id = ?', [id]);
+    if (!updated) {
+      return res.status(404).json({ error: 'Driver not found' });
+    }
+
+    res.json(updated);
+  } catch (error) {
+    console.error('Error updating driver:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Delete driver
+router.delete('/drivers/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await db.runAsync('DELETE FROM drivers WHERE id = ?', [id]);
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'Driver not found' });
+    }
+    res.json({ message: 'Driver deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting driver:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ========== CORPORATE BOOKINGS (ADMIN) ==========
+
+router.get('/corporate-bookings', async (req, res) => {
+  try {
+    const rows = await db.allAsync(
+      `SELECT cb.*, 
+              d.name as driver_name_ref, d.phone as driver_phone_ref,
+              c.vehicle_number
+       FROM corporate_bookings cb
+       LEFT JOIN drivers d ON cb.driver_id = d.id
+       LEFT JOIN cabs c ON cb.cab_id = c.id
+       ORDER BY cb.created_at DESC`
+    );
+    res.json(rows);
+  } catch (error) {
+    console.error('Error fetching corporate bookings:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.put('/corporate-bookings/:id/assign', [
+  body('driver_id').optional({ nullable: true }).isInt().withMessage('driver_id must be int'),
+  body('cab_id').optional({ nullable: true }).isInt().withMessage('cab_id must be int'),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    const { id } = req.params;
+    const { driver_id, cab_id } = req.body;
+
+    const booking = await db.getAsync('SELECT * FROM corporate_bookings WHERE id = ?', [id]);
+    if (!booking) {
+      return res.status(404).json({ error: 'Corporate booking not found' });
+    }
+
+    let driverName = null;
+    let driverPhone = null;
+    if (driver_id) {
+      const driver = await db.getAsync('SELECT * FROM drivers WHERE id = ?', [driver_id]);
+      if (!driver) return res.status(404).json({ error: 'Driver not found' });
+      driverName = driver.name;
+      driverPhone = driver.phone;
+    }
+
+    if (cab_id) {
+      const cab = await db.getAsync('SELECT * FROM cabs WHERE id = ?', [cab_id]);
+      if (!cab) return res.status(404).json({ error: 'Cab not found' });
+    }
+
+    const updates = [];
+    const values = [];
+
+    if (driver_id !== undefined) {
+      updates.push('driver_id = ?');
+      values.push(driver_id || null);
+      updates.push('driver_name = ?');
+      values.push(driverName);
+      updates.push('driver_phone = ?');
+      values.push(driverPhone);
+    }
+    if (cab_id !== undefined) {
+      updates.push('cab_id = ?');
+      values.push(cab_id || null);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    updates.push("assigned_at = CURRENT_TIMESTAMP");
+    updates.push("status = 'confirmed'");
+
+    const sql = `UPDATE corporate_bookings SET ${updates.join(', ')} WHERE id = ?`;
+    values.push(id);
+
+    await db.runAsync(sql, values);
+
+    const updated = await db.getAsync(
+      `SELECT cb.*, d.name as driver_name_ref, d.phone as driver_phone_ref, c.vehicle_number
+       FROM corporate_bookings cb
+       LEFT JOIN drivers d ON cb.driver_id = d.id
+       LEFT JOIN cabs c ON cb.cab_id = c.id
+       WHERE cb.id = ?`,
+      [id]
+    );
+    res.json(updated);
+  } catch (error) {
+    console.error('Error assigning corporate booking:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

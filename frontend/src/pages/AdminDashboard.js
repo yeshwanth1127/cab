@@ -32,6 +32,11 @@ const AdminDashboard = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [rateMeters, setRateMeters] = useState([]);
   const [expandedServiceTypes, setExpandedServiceTypes] = useState({});
+  const [drivers, setDrivers] = useState([]);
+  const [corporateBookings, setCorporateBookings] = useState([]);
+  const [assignSelections, setAssignSelections] = useState({});
+  const [driverPhotoFile, setDriverPhotoFile] = useState(null);
+  const [reassigning, setReassigning] = useState({});
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -81,14 +86,32 @@ const AdminDashboard = () => {
         const allCarsResponse = await api.get('/admin/car-options/available');
         setAvailableCars(allCarsResponse.data);
       } else if (activeTab === 'cabs') {
-        const response = await api.get('/admin/cabs');
-        setCabs(response.data);
+        const [cabsRes, driversRes, carsRes] = await Promise.all([
+          api.get('/admin/cabs'),
+          api.get('/admin/drivers'),
+          api.get('/admin/car-options/available'),
+        ]);
+        setCabs(cabsRes.data);
+        setDrivers(driversRes.data || []);
+        setAvailableCars(carsRes.data || []);
       } else if (activeTab === 'bookings') {
         const response = await api.get('/admin/bookings');
         setBookings(response.data);
       } else if (activeTab === 'car-options') {
         const response = await api.get('/admin/car-options');
         setCarOptions(response.data);
+      } else if (activeTab === 'drivers') {
+        const response = await api.get('/admin/drivers');
+        setDrivers(response.data);
+      } else if (activeTab === 'corporate-all' || activeTab === 'corporate-assign') {
+        const [bookingsRes, driversRes, cabsRes] = await Promise.all([
+          api.get('/admin/corporate-bookings'),
+          api.get('/admin/drivers'),
+          api.get('/admin/cabs'),
+        ]);
+        setCorporateBookings(bookingsRes.data || []);
+        setDrivers(driversRes.data || []);
+        setCabs(cabsRes.data || []);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -117,7 +140,25 @@ const AdminDashboard = () => {
     setLoading(true);
 
     try {
-      if (activeTab === 'car-options') {
+      if (activeTab === 'drivers') {
+        const data = new FormData();
+        Object.entries(formData).forEach(([key, value]) => {
+          if (value !== undefined && value !== null) data.append(key, value);
+        });
+        if (driverPhotoFile) data.append('photo', driverPhotoFile);
+
+        if (editingItem) {
+          await api.put(`/admin/drivers/${editingItem.id}`, data, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+          alert('Driver updated successfully');
+        } else {
+          await api.post('/admin/drivers', data, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+          alert('Driver created successfully');
+        }
+      } else if (activeTab === 'car-options') {
         // Use multipart/form-data for car options to support image upload
         const data = new FormData();
         Object.entries(formData).forEach(([key, value]) => {
@@ -155,6 +196,7 @@ const AdminDashboard = () => {
       setShowForm(false);
       setEditingItem(null);
       setFormData({});
+      setDriverPhotoFile(null);
       setCarOptionImageFiles([]);
       fetchDashboardData();
     } catch (error) {
@@ -176,6 +218,7 @@ const AdminDashboard = () => {
     setEditingItem(null);
     setFormData({});
     setCarOptionImageFiles([]);
+    setDriverPhotoFile(null);
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -236,6 +279,25 @@ const AdminDashboard = () => {
       alert('Status updated successfully');
     } catch (error) {
       alert(error.response?.data?.error || 'Error updating status');
+    }
+  };
+
+  const handleAssignCorporate = async (bookingId) => {
+    try {
+      const sel = assignSelections[bookingId] || {};
+      const payload = {};
+      if (sel.driver_id) payload.driver_id = sel.driver_id;
+      if (sel.cab_id) payload.cab_id = sel.cab_id;
+      if (!payload.driver_id && !payload.cab_id) {
+        alert('Please select a driver or a cab to assign.');
+        return;
+      }
+      await api.put(`/admin/corporate-bookings/${bookingId}/assign`, payload);
+      alert('Assignment updated');
+      setReassigning((prev) => ({ ...prev, [bookingId]: false }));
+      fetchDashboardData();
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error assigning driver/cab');
     }
   };
 
@@ -441,6 +503,48 @@ const AdminDashboard = () => {
           </div>
 
           <div className="sidebar-section">
+            <h3 className="sidebar-heading">Corporate Bookings</h3>
+            <button
+              className={activeTab === 'corporate-all' ? 'active' : ''}
+              onClick={() => {
+                setActiveTab('corporate-all');
+                if (isMobile) setSidebarOpen(false);
+              }}
+            >
+              <span className="sidebar-icon">🏢</span>
+              <span className="sidebar-text">All Corporate Bookings</span>
+              <span className="sidebar-subtext">Submissions</span>
+            </button>
+            <button
+              className={activeTab === 'corporate-assign' ? 'active' : ''}
+              onClick={() => {
+                setActiveTab('corporate-assign');
+                if (isMobile) setSidebarOpen(false);
+              }}
+            >
+              <span className="sidebar-icon">🧭</span>
+              <span className="sidebar-text">Assign Drivers</span>
+              <span className="sidebar-subtext">Drivers & Cabs</span>
+            </button>
+          </div>
+
+          <div className="sidebar-section">
+            <h3 className="sidebar-heading">People</h3>
+            <button
+              className={activeTab === 'drivers' ? 'active' : ''}
+              onClick={() => {
+                setActiveTab('drivers');
+                if (isMobile) setSidebarOpen(false);
+                setShowForm(false);
+              }}
+            >
+              <span className="sidebar-icon">🧑‍✈️</span>
+              <span className="sidebar-text">Register Drivers</span>
+              <span className="sidebar-subtext">Manage drivers</span>
+            </button>
+          </div>
+
+          <div className="sidebar-section">
             <h3 className="sidebar-heading">Fleet Management</h3>
             <button
               className={activeTab === 'rate-meters' ? 'active' : ''}
@@ -621,7 +725,7 @@ const AdminDashboard = () => {
             <div>
               <div className="section-header">
                 <h2>Cab Details</h2>
-                <button onClick={openCreateForm} className="btn btn-primary">
+                <button onClick={openCreateForm} className="btn btn-primary" style={{ color: '#000' }}>
                   + Add Cab
                 </button>
               </div>
@@ -996,6 +1100,181 @@ const AdminDashboard = () => {
             </div>
           )}
 
+          {activeTab === 'corporate-all' && (
+            <div>
+              <div className="section-header">
+                <h2>Corporate Bookings</h2>
+              </div>
+              <div className="data-table-wrapper">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Name</th>
+                      <th>Phone</th>
+                      <th>Company</th>
+                      <th>Pickup</th>
+                      <th>Drop</th>
+                      <th>Status</th>
+                      <th>Driver</th>
+                      <th>Cab</th>
+                      <th>Created</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {corporateBookings.map((cb) => (
+                      <tr key={cb.id}>
+                        <td>{cb.id}</td>
+                        <td>{cb.name}</td>
+                        <td>{cb.phone_number}</td>
+                        <td>{cb.company_name}</td>
+                        <td>{cb.pickup_point}</td>
+                        <td>{cb.drop_point}</td>
+                        <td>{cb.status}</td>
+                        <td>{cb.driver_name || cb.driver_name_ref || '-'}</td>
+                        <td>{cb.vehicle_number || '-'}</td>
+                        <td>{new Date(cb.created_at).toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'corporate-assign' && (
+            <div>
+              <div className="section-header">
+                <h2>Assign / Reassign Drivers</h2>
+              </div>
+              <div className="data-table-wrapper">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Rider</th>
+                      <th>Company</th>
+                      <th>Pickup</th>
+                      <th>Drop</th>
+                      <th>Driver</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {corporateBookings.map((cb) => {
+                      const sel = assignSelections[cb.id] || {};
+                      const alreadyAssigned = !!cb.driver_id || cb.status === 'confirmed';
+                      const isReassigning = reassigning[cb.id];
+                      return (
+                        <tr key={cb.id}>
+                          <td>{cb.id}</td>
+                          <td>{cb.name} ({cb.phone_number})</td>
+                          <td>{cb.company_name}</td>
+                          <td>{cb.pickup_point}</td>
+                          <td>{cb.drop_point}</td>
+                          <td>
+                            {alreadyAssigned && !isReassigning && (
+                              <span>{cb.driver_name || cb.driver_name_ref || 'Assigned'}</span>
+                            )}
+                            {!alreadyAssigned || isReassigning ? (
+                              <select
+                                value={sel.driver_id || ''}
+                                onChange={(e) =>
+                                  setAssignSelections((prev) => ({
+                                    ...prev,
+                                    [cb.id]: { ...prev[cb.id], driver_id: e.target.value ? parseInt(e.target.value) : null },
+                                  }))
+                                }
+                              >
+                                <option value="">Select driver</option>
+                                {drivers.map((d) => (
+                                  <option key={d.id} value={d.id}>
+                                    {d.name} ({d.phone})
+                                  </option>
+                                ))}
+                              </select>
+                            ) : null}
+                          </td>
+                          <td>
+                            {(!alreadyAssigned || isReassigning) && (
+                              <button
+                                className="btn btn-primary btn-sm"
+                                onClick={() => handleAssignCorporate(cb.id)}
+                              >
+                                Save
+                              </button>
+                            )}
+                            {alreadyAssigned && !isReassigning && (
+                              <button
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => {
+                                  setReassigning((prev) => ({ ...prev, [cb.id]: true }));
+                                  setAssignSelections((prev) => ({
+                                    ...prev,
+                                    [cb.id]: { ...prev[cb.id], driver_id: null },
+                                  }));
+                                }}
+                              >
+                                Reassign
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'drivers' && (
+            <div>
+              <div className="section-header">
+                <h2>Drivers</h2>
+                <button onClick={openCreateForm} className="btn btn-primary" style={{ color: '#000' }}>
+                  + Register Driver
+                </button>
+              </div>
+              <div className="data-table-wrapper">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Phone</th>
+                      <th>License</th>
+                      <th>Emergency Contact</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {drivers.map((d) => (
+                      <tr key={d.id}>
+                        <td>{d.name}</td>
+                        <td>{d.phone}</td>
+                        <td>{d.license_number || '-'}</td>
+                        <td>
+                          {d.emergency_contact_name ? `${d.emergency_contact_name} (${d.emergency_contact_phone || '-'})` : '-'}
+                        </td>
+                        <td>{d.is_active ? 'Active' : 'Inactive'}</td>
+                        <td>
+                          <button onClick={() => openEditForm(d)} className="btn btn-secondary btn-sm">
+                            Edit
+                          </button>
+                          <button onClick={() => handleDelete('drivers', d.id)} className="btn btn-danger btn-sm">
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+
           {activeTab === 'car-options' && (
             <div>
               <div className="section-header">
@@ -1363,6 +1642,73 @@ const AdminDashboard = () => {
                     </>
                   )}
 
+                  {activeTab === 'drivers' && (
+                    <>
+                      <div className="form-group">
+                        <label>Name *</label>
+                        <input
+                          type="text"
+                          required
+                          value={formData.name || ''}
+                          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Phone *</label>
+                        <input
+                          type="tel"
+                          required
+                          value={formData.phone || ''}
+                          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>License Number</label>
+                        <input
+                          type="text"
+                          value={formData.license_number || ''}
+                          onChange={(e) => setFormData({ ...formData, license_number: e.target.value })}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Emergency Contact Name</label>
+                        <input
+                          type="text"
+                          value={formData.emergency_contact_name || ''}
+                          onChange={(e) => setFormData({ ...formData, emergency_contact_name: e.target.value })}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Emergency Contact Phone</label>
+                        <input
+                          type="tel"
+                          value={formData.emergency_contact_phone || ''}
+                          onChange={(e) => setFormData({ ...formData, emergency_contact_phone: e.target.value })}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Upload ID Photo (optional)</label>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => setDriverPhotoFile(e.target.files && e.target.files[0] ? e.target.files[0] : null)}
+                        />
+                      </div>
+                      {editingItem && (
+                        <div className="form-group">
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={formData.is_active !== false}
+                              onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                            />
+                            Active
+                          </label>
+                        </div>
+                      )}
+                    </>
+                  )}
+
                   {activeTab === 'cabs' && (
                     <>
                       <div className="form-group">
@@ -1377,18 +1723,47 @@ const AdminDashboard = () => {
                         />
                       </div>
                       <div className="form-group">
-                        <label>Cab Type *</label>
+                        <label>Select Car *</label>
                         <select
                           required
-                          value={formData.cab_type_id || ''}
-                          onChange={(e) =>
-                            setFormData({ ...formData, cab_type_id: parseInt(e.target.value) })
-                          }
+                          value={formData.car_option_id || ''}
+                          onChange={(e) => {
+                            const val = e.target.value ? parseInt(e.target.value, 10) : '';
+                            const car = availableCars.find((c) => c.id === val);
+                            setFormData({
+                              ...formData,
+                              car_option_id: val || undefined,
+                              cab_type_id: car ? car.cab_type_id || '' : '',
+                            });
+                          }}
                         >
-                          <option value="">Select Cab Type</option>
-                          {cabTypes.map((ct) => (
-                            <option key={ct.id} value={ct.id}>
-                              {ct.name}
+                          <option value="">Select Car</option>
+                          {availableCars.map((car) => (
+                            <option key={car.id} value={car.id}>
+                              {car.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="form-group">
+                        <label>Driver (optional)</label>
+                        <select
+                          value={formData.driver_id || ''}
+                          onChange={(e) => {
+                            const val = e.target.value ? parseInt(e.target.value, 10) : null;
+                            setFormData({
+                              ...formData,
+                              driver_id: val,
+                              // clear manual fields when selecting from dropdown
+                              driver_name: val ? undefined : formData.driver_name,
+                              driver_phone: val ? undefined : formData.driver_phone,
+                            });
+                          }}
+                        >
+                          <option value="">Select Driver</option>
+                          {drivers.map((d) => (
+                            <option key={d.id} value={d.id}>
+                              {d.name} ({d.phone})
                             </option>
                           ))}
                         </select>
@@ -1411,6 +1786,7 @@ const AdminDashboard = () => {
                           onChange={(e) =>
                             setFormData({ ...formData, driver_phone: e.target.value })
                           }
+                          disabled={!!formData.driver_id}
                         />
                       </div>
                       {editingItem && (

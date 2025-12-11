@@ -342,6 +342,84 @@ const runMigrations = async () => {
       }
     }
 
+    // Migration: add driver_id to cabs
+    try {
+      await db.runAsync(
+        `ALTER TABLE cabs ADD COLUMN driver_id INTEGER`
+      );
+      console.log('Migration: driver_id column added to cabs');
+    } catch (migrationErr) {
+      const errMsg = migrationErr.message || '';
+      if (!errMsg.includes('duplicate column') && !errMsg.includes('Duplicate column')) {
+        console.log('Migration note (driver_id on cabs):', migrationErr.message);
+      }
+    }
+
+    // Migration: add driver_id to corporate_bookings
+    try {
+      await db.runAsync(
+        `ALTER TABLE corporate_bookings ADD COLUMN driver_id INTEGER`
+      );
+      console.log('Migration: driver_id column added to corporate_bookings');
+    } catch (migrationErr) {
+      const errMsg = migrationErr.message || '';
+      if (!errMsg.includes('duplicate column') && !errMsg.includes('Duplicate column')) {
+        console.log('Migration note (driver_id on corporate_bookings):', migrationErr.message);
+      }
+    }
+
+    // Migration: create drivers table if missing (for existing DBs)
+    try {
+      const driversSQL = DB_TYPE === 'mysql'
+        ? `CREATE TABLE IF NOT EXISTS drivers (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            name VARCHAR(255) NOT NULL,
+            phone VARCHAR(50) NOT NULL UNIQUE,
+            license_number VARCHAR(255) UNIQUE,
+            photo_url TEXT,
+            emergency_contact_name VARCHAR(255),
+            emergency_contact_phone VARCHAR(50),
+            is_active INT DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          )`
+        : `CREATE TABLE IF NOT EXISTS drivers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            phone TEXT NOT NULL UNIQUE,
+            license_number TEXT UNIQUE,
+            photo_url TEXT,
+            emergency_contact_name TEXT,
+            emergency_contact_phone TEXT,
+            is_active INTEGER DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          )`;
+      await db.runAsync(driversSQL);
+      console.log('Migration: drivers table ensured');
+    } catch (migrationErr) {
+      console.log('Migration note (drivers table):', migrationErr.message);
+    }
+
+    // Migration: add missing driver columns (for legacy tables)
+    const driverColumns = [
+      { name: 'photo_url', type: 'TEXT' },
+      { name: 'emergency_contact_name', type: 'TEXT' },
+      { name: 'emergency_contact_phone', type: 'TEXT' },
+      { name: 'license_number', type: 'TEXT' },
+    ];
+    for (const col of driverColumns) {
+      try {
+        await db.runAsync(`ALTER TABLE drivers ADD COLUMN ${col.name} ${col.type}`);
+        console.log(`Migration: ${col.name} column added to drivers`);
+      } catch (migrationErr) {
+        const errMsg = migrationErr.message || '';
+        if (!errMsg.includes('duplicate column') && !errMsg.includes('Duplicate column')) {
+          console.log(`Migration note (${col.name} on drivers):`, migrationErr.message);
+        }
+      }
+    }
+
     // Migration to add driver assignment fields to corporate_bookings
     try {
       await db.runAsync(
