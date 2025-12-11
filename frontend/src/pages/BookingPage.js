@@ -85,18 +85,26 @@ const BookingPage = () => {
         ? `/car-options?service_type=${serviceTypeFilter}`
         : '/car-options';
       const response = await api.get(url);
-      setCarOptionCards(response.data || []);
+      // Ensure we always set an array
+      const data = response.data;
+      setCarOptionCards(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Error fetching public car options:', error);
+      // Ensure we always have an array even on error
+      setCarOptionCards([]);
     }
   };
 
   const fetchAllCarOptions = async () => {
     try {
       const response = await api.get('/car-options');
-      setAllCarOptions(response.data || []);
+      // Ensure we always set an array
+      const data = response.data;
+      setAllCarOptions(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Error fetching all car options:', error);
+      // Ensure we always have an array even on error
+      setAllCarOptions([]);
     }
   };
 
@@ -347,10 +355,12 @@ const BookingPage = () => {
                     <div className="form-group">
                       <label>Select Car *</label>
                       <div className="booking-car-options-grid">
-                        {carOptionCards.map((opt) => {
+                        {Array.isArray(carOptionCards) && carOptionCards.map((opt) => {
                           const isSelected = selectedCarOptionId === opt.id;
                           const carImageIndex = carImageIndices[opt.id] || 0;
-                          const carImages = opt.image_urls || (opt.image_url ? [opt.image_url] : []);
+                          const carImages = Array.isArray(opt.image_urls) 
+                            ? opt.image_urls 
+                            : (opt.image_url ? [opt.image_url] : []);
                           
                           return (
                             <div
@@ -360,7 +370,7 @@ const BookingPage = () => {
                               }`}
                               onClick={() => handleCarSelection(opt.id)}
                             >
-                              {carImages.length > 0 && (
+                              {Array.isArray(carImages) && carImages.length > 0 && (
                                 <div className="booking-car-option-image-wrapper">
                                   {carImages.length > 1 ? (
                                     <div className="booking-car-image-gallery">
@@ -771,10 +781,10 @@ const BookingPage = () => {
           <h2>Available Car Options</h2>
           <p className="section-subtitle">Explore all available cars from our fleet.</p>
           <div className="cars-grid">
-            {allCarOptions.length === 0 && (
+            {(!Array.isArray(allCarOptions) || allCarOptions.length === 0) && (
               <p className="section-subtitle">No car options available yet.</p>
             )}
-            {allCarOptions.map((opt) => (
+            {Array.isArray(allCarOptions) && allCarOptions.map((opt) => (
               <div key={opt.id} className="car-option-button">
                 <div className="car-option-main">
                   <div>
@@ -802,7 +812,7 @@ const BookingPage = () => {
                     </div>
                   </div>
                 </div>
-                {expandedCarKey === opt.id && opt.image_urls && opt.image_urls.length > 0 && (
+                {expandedCarKey === opt.id && Array.isArray(opt.image_urls) && opt.image_urls.length > 0 && (
                   <div className="car-option-image-wrap">
                     {opt.image_urls.map((url) => (
                       <img key={url} src={url} alt={opt.name} />

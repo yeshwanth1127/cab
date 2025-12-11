@@ -13,34 +13,37 @@ import CorporateBookingPage from './pages/CorporateBookingPage';
 import CornerLogo from './components/CornerLogo';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import ErrorBoundary from './components/ErrorBoundary';
 import './App.css';
 
 function App() {
   return (
-    <AuthProvider>
-      <Router>
-        <Routes>
-          <Route path="/" element={<BookingPage />} />
-          <Route path="/car-options" element={<CarOptions />} />
-          <Route path="/check-booking" element={<CheckBooking />} />
-          <Route path="/about" element={<AboutPage />} />
-          <Route path="/contact" element={<ContactPage />} />
-          <Route path="/corporate" element={<CorporateBookingPage />} />
-          <Route path="/admin/login" element={<AdminLogin />} />
-          <Route path="/login" element={<UserAuth />} />
-          <Route path="/account" element={<AccountPage />} />
-          <Route
-            path="/admin"
-            element={
-              <ProtectedRoute>
-                <AdminDashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Router>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <Router>
+          <Routes>
+            <Route path="/" element={<BookingPage />} />
+            <Route path="/car-options" element={<CarOptions />} />
+            <Route path="/check-booking" element={<CheckBooking />} />
+            <Route path="/about" element={<AboutPage />} />
+            <Route path="/contact" element={<ContactPage />} />
+            <Route path="/corporate" element={<CorporateBookingPage />} />
+            <Route path="/admin/login" element={<AdminLogin />} />
+            <Route path="/login" element={<UserAuth />} />
+            <Route path="/account" element={<AccountPage />} />
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute>
+                  <AdminDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Router>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 
