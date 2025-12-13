@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { gsap } from 'gsap';
 
-const MainNavbar = () => {
+const MainNavbar = ({ logoOnly = false }) => {
   const { user, logout } = useAuth();
   const [hidden, setHidden] = useState(false);
   const [lastScrollY, setLastScrollY] = useState(0);
@@ -130,30 +130,33 @@ const MainNavbar = () => {
   const navbarClass = `navbar${hidden ? ' navbar--hidden' : ''}`;
   const linksClass = `nav-links${menuOpen ? ' nav-links--open' : ''}`;
 
-  // Build nav items array
-  const navItems = [
-    { label: 'Home', href: '/' },
-    { label: 'About Us', href: '/about' },
-    { label: 'Contact', href: '/contact' },
-    { label: 'Car Options', href: '/car-options' },
-    { label: 'Corporate', href: '/corporate' },
-    { label: 'Check Booking', href: '/check-booking' },
-  ];
+  // Build nav items array (skip when logoOnly)
+  const navItems = logoOnly
+    ? []
+    : [
+        { label: 'Home', href: '/' },
+        { label: 'About Us', href: '/about' },
+        { label: 'Contact', href: '/contact' },
+        { label: 'Car Options', href: '/car-options' },
+        { label: 'Check Booking', href: '/check-booking' },
+      ];
 
-  if (user) {
-    navItems.push({
-      label: `👤 ${user.username}`,
-      href: user.role === 'admin' ? '/admin' : '/account'
-    });
-    navItems.push({
-      label: 'Logout',
-      href: '#',
-      onClick: () => { logout(); closeMenu(); },
-      isButton: true
-    });
-  } else {
-    navItems.push({ label: 'Login', href: '/login' });
-    navItems.push({ label: 'Admin', href: '/admin/login' });
+  if (!logoOnly) {
+    if (user) {
+      navItems.push({
+        label: `👤 ${user.username}`,
+        href: user.role === 'admin' ? '/admin' : '/account'
+      });
+      navItems.push({
+        label: 'Logout',
+        href: '#',
+        onClick: () => { logout(); closeMenu(); },
+        isButton: true
+      });
+    } else {
+      navItems.push({ label: 'Login', href: '/login' });
+      navItems.push({ label: 'Admin', href: '/admin/login' });
+    }
   }
 
   return (
@@ -170,72 +173,76 @@ const MainNavbar = () => {
             alt="Namma Cabs – Adventure Awaits, Since 2015"
           />
         </a>
-        <button
-          className={`nav-toggle${menuOpen ? ' nav-toggle--open' : ''}`}
-          type="button"
-          onClick={() => setMenuOpen((open) => !open)}
-          aria-label="Toggle navigation"
-        >
-          <span />
-          <span />
-          <span />
-        </button>
-        <div className={linksClass}>
-          <ul className="pill-list">
-            {navItems.map((item, i) => (
-              <React.Fragment key={item.href || `item-${i}`}>
-                {i > 0 && (
-                  <li className="nav-separator-wrapper">
-                    <span className="nav-separator" />
-                  </li>
-                )}
-                <li>
-                  {item.isButton ? (
-                    <button
-                      type="button"
-                      className="pill nav-pill-button"
-                      onClick={item.onClick}
-                      onMouseEnter={() => handleEnter(i)}
-                      onMouseLeave={() => handleLeave(i)}
-                    >
-                      <span
-                        className="hover-circle"
-                        aria-hidden="true"
-                        ref={el => { circleRefs.current[i] = el; }}
-                      />
-                      <span className="label-stack">
-                        <span className="pill-label">{item.label}</span>
-                        <span className="pill-label-hover" aria-hidden="true">
-                          {item.label}
-                        </span>
-                      </span>
-                    </button>
-                  ) : (
-                    <a
-                      href={item.href}
-                      className="pill"
-                      onClick={closeMenu}
-                      onMouseEnter={() => handleEnter(i)}
-                      onMouseLeave={() => handleLeave(i)}
-                    >
-                      <span
-                        className="hover-circle"
-                        aria-hidden="true"
-                        ref={el => { circleRefs.current[i] = el; }}
-                      />
-                      <span className="label-stack">
-                        <span className="pill-label">{item.label}</span>
-                        <span className="pill-label-hover" aria-hidden="true">
-                          {item.label}
-                        </span>
-                      </span>
-                    </a>
-                  )}
-                </li>
-              </React.Fragment>
-            ))}
-          </ul>
-        </div>
+        {!logoOnly && (
+          <>
+            <button
+              className={`nav-toggle${menuOpen ? ' nav-toggle--open' : ''}`}
+              type="button"
+              onClick={() => setMenuOpen((open) => !open)}
+              aria-label="Toggle navigation"
+            >
+              <span />
+              <span />
+              <span />
+            </button>
+            <div className={linksClass}>
+              <ul className="pill-list">
+                {navItems.map((item, i) => (
+                  <React.Fragment key={item.href || `item-${i}`}>
+                    {i > 0 && (
+                      <li className="nav-separator-wrapper">
+                        <span className="nav-separator" />
+                      </li>
+                    )}
+                    <li>
+                      {item.isButton ? (
+                        <button
+                          type="button"
+                          className="pill nav-pill-button"
+                          onClick={item.onClick}
+                          onMouseEnter={() => handleEnter(i)}
+                          onMouseLeave={() => handleLeave(i)}
+                        >
+                          <span
+                            className="hover-circle"
+                            aria-hidden="true"
+                            ref={el => { circleRefs.current[i] = el; }}
+                          />
+                          <span className="label-stack">
+                            <span className="pill-label">{item.label}</span>
+                            <span className="pill-label-hover" aria-hidden="true">
+                              {item.label}
+                            </span>
+                          </span>
+                        </button>
+                      ) : (
+                        <a
+                          href={item.href}
+                          className="pill"
+                          onClick={closeMenu}
+                          onMouseEnter={() => handleEnter(i)}
+                          onMouseLeave={() => handleLeave(i)}
+                        >
+                          <span
+                            className="hover-circle"
+                            aria-hidden="true"
+                            ref={el => { circleRefs.current[i] = el; }}
+                          />
+                          <span className="label-stack">
+                            <span className="pill-label">{item.label}</span>
+                            <span className="pill-label-hover" aria-hidden="true">
+                              {item.label}
+                            </span>
+                          </span>
+                        </a>
+                      )}
+                    </li>
+                  </React.Fragment>
+                ))}
+              </ul>
+            </div>
+          </>
+        )}
       </div>
     </nav>
   );

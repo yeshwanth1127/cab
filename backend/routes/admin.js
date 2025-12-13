@@ -461,15 +461,20 @@ router.delete('/routes/:id', async (req, res) => {
 // Get all bookings
 router.get('/bookings', async (req, res) => {
   try {
-    const result = await db.allAsync(
-      `SELECT b.*, ct.name as cab_type_name, co.name as car_option_name,
+    const { limit } = req.query;
+    let query = `SELECT b.*, ct.name as cab_type_name, co.name as car_option_name,
               c.vehicle_number, c.driver_name, c.driver_phone
        FROM bookings b
        LEFT JOIN cab_types ct ON b.cab_type_id = ct.id
        LEFT JOIN car_options co ON b.car_option_id = co.id
        LEFT JOIN cabs c ON b.cab_id = c.id
-       ORDER BY b.id DESC`
-    );
+       ORDER BY b.booking_date DESC, b.id DESC`;
+    
+    if (limit) {
+      query += ` LIMIT ${parseInt(limit)}`;
+    }
+    
+    const result = await db.allAsync(query);
     res.json(result);
   } catch (error) {
     console.error('Error fetching bookings:', error);
@@ -481,6 +486,8 @@ router.get('/bookings', async (req, res) => {
 router.get('/bookings/:id/receipt', async (req, res) => {
   try {
     const { id } = req.params;
+    const { withGST } = req.query;
+    const includeGST = withGST === 'true' || withGST === true;
 
     const booking = await db.getAsync(
       `SELECT b.*, u.username, u.email, ct.name as cab_type_name, co.name as car_option_name
@@ -495,6 +502,12 @@ router.get('/bookings/:id/receipt', async (req, res) => {
     if (!booking) {
       return res.status(404).json({ error: 'Booking not found' });
     }
+
+    // Calculate GST (5% for cab services in India)
+    const GST_RATE = 0.05;
+    const baseFare = parseFloat(booking.fare_amount) || 0;
+    const gstAmount = includeGST ? baseFare * GST_RATE : 0;
+    const totalAmount = includeGST ? baseFare + gstAmount : baseFare;
 
     const doc = new PDFDocument({ margin: 50 });
 
@@ -562,8 +575,20 @@ router.get('/bookings/:id/receipt', async (req, res) => {
 
     // Fare
     doc.fontSize(14).text('Fare Summary', { underline: true }).moveDown(0.5);
-    doc.fontSize(12).text(`Total Fare: ₹${booking.fare_amount.toFixed(2)}`);
-    doc.text(`Status: ${booking.booking_status}`);
+    doc.fontSize(12).text(`Base Fare: ₹${baseFare.toFixed(2)}`);
+    
+    if (includeGST) {
+      doc.text(`GST (5%): ₹${gstAmount.toFixed(2)}`);
+      doc.moveDown(0.3);
+      doc.fontSize(13).font('Helvetica-Bold').text(`Total Amount (incl. GST): ₹${totalAmount.toFixed(2)}`);
+      doc.font('Helvetica');
+    } else {
+      doc.moveDown(0.3);
+      doc.fontSize(13).font('Helvetica-Bold').text(`Total Fare: ₹${baseFare.toFixed(2)}`);
+      doc.font('Helvetica');
+    }
+    
+    doc.fontSize(12).moveDown(0.5).text(`Status: ${booking.booking_status}`);
     if (booking.notes) {
       doc.moveDown(0.5).text(`Notes: ${booking.notes}`);
     }
@@ -845,6 +870,28 @@ const normalizeCarOptionImages = (row) => {
     }
   }
 
+  // Convert absolute URLs to relative URLs to avoid mixed content issues
+  // Relative URLs will use the same protocol as the page (HTTP or HTTPS)
+  imageUrls = imageUrls.map(url => {
+    if (typeof url === 'string') {
+      // Convert http:// or https:// URLs to relative paths
+      const urlMatch = url.match(/https?:\/\/[^\/]+(\/uploads\/car-options\/.+)/);
+      if (urlMatch) {
+        return urlMatch[1]; // Return the relative path
+      }
+      // If already protocol-relative (//domain.com/path), convert to relative
+      const protocolRelativeMatch = url.match(/\/\/([^\/]+)(\/uploads\/car-options\/.+)/);
+      if (protocolRelativeMatch) {
+        return protocolRelativeMatch[2]; // Return the relative path
+      }
+      // If already relative, return as is
+      if (url.startsWith('/uploads/')) {
+        return url;
+      }
+    }
+    return url;
+  });
+
   return {
     ...row,
     image_urls: imageUrls,
@@ -882,9 +929,9 @@ router.post(
 
       let imageUrls = [];
       if (req.files && req.files.length > 0) {
-        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        // Use relative URLs to avoid mixed content issues
         imageUrls = req.files.map(
-          (file) => `${baseUrl}/uploads/car-options/${file.filename}`
+          (file) => `/uploads/car-options/${file.filename}`
         );
       }
 
@@ -939,9 +986,9 @@ router.put('/car-options/:id', upload.array('images', 10), async (req, res) => {
         }
       }
 
-      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      // Use relative URLs to avoid mixed content issues
       const newUrls = req.files.map(
-        (file) => `${baseUrl}/uploads/car-options/${file.filename}`
+        (file) => `/uploads/car-options/${file.filename}`
       );
 
       const combined = [...existingUrls, ...newUrls];
@@ -1017,7 +1064,7 @@ router.get('/cab-types/:cabTypeId/cars', async (req, res) => {
       `SELECT co.*, ct.name as cab_type_name
        FROM car_options co
        LEFT JOIN cab_types ct ON co.cab_type_id = ct.id
-       WHERE co.cab_type_id = ? AND co.is_active = 1
+       WHERE co.cab_type_id = ?
        ORDER BY co.car_subtype, co.sort_order ASC`,
       [cabTypeId]
     );
@@ -1042,7 +1089,7 @@ router.get('/cab-types/:cabTypeId/cars', async (req, res) => {
 // Assign car to cab type and subtype
 router.post('/cab-types/:cabTypeId/assign-car', [
   body('car_option_id').isInt().withMessage('Car option ID is required'),
-  body('car_subtype').optional().notEmpty().withMessage('Car subtype must not be empty'),
+  body('car_subtype').notEmpty().withMessage('Car subtype is required'),
 ], async (req, res) => {
   try {
     const errors = validationResult(req);

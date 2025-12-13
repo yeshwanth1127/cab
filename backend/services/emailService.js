@@ -92,15 +92,29 @@ const sendBookingConfirmationEmail = async (booking) => {
               
               <h3>Booking Details:</h3>
               
+              ${booking.service_type === 'outstation' ? (
+                booking.trip_type ? `
+              <div class="info-row">
+                <span class="label">Trip Type:</span>
+                <span class="value">${
+                  booking.trip_type === 'one_way' ? 'One Way Trip' :
+                  booking.trip_type === 'round_trip' ? 'Round Trip' :
+                  booking.trip_type === 'multiple_way' ? 'Multiple Way' :
+                  booking.trip_type
+                }</span>
+              </div>
+              ` : ''
+              ) : `
               <div class="info-row">
                 <span class="label">From:</span>
-                <span class="value">${booking.from_location}</span>
+                <span class="value">${booking.from_location || 'N/A'}</span>
               </div>
               
               <div class="info-row">
                 <span class="label">To:</span>
-                <span class="value">${booking.to_location}</span>
+                <span class="value">${booking.to_location || 'N/A'}</span>
               </div>
+              `}
               
               <div class="info-row">
                 <span class="label">Service Type:</span>
@@ -195,8 +209,15 @@ const sendBookingConfirmationEmail = async (booking) => {
         
         Booking Details:
         Service Type: ${booking.service_type === 'local' ? 'Local' : booking.service_type === 'airport' ? 'Airport' : 'Outstation'}
-        From: ${booking.from_location}
-        To: ${booking.to_location}
+        ${booking.service_type === 'outstation' && booking.trip_type ? 
+          `Trip Type: ${
+            booking.trip_type === 'one_way' ? 'One Way Trip' :
+            booking.trip_type === 'round_trip' ? 'Round Trip' :
+            booking.trip_type === 'multiple_way' ? 'Multiple Way' :
+            booking.trip_type
+          }` :
+          `From: ${booking.from_location || 'N/A'}\n        To: ${booking.to_location || 'N/A'}`
+        }
         Cab Type: ${booking.cab_type_name || 'N/A'}
         Distance: ${booking.distance_km} km
         Estimated Time: ${booking.estimated_time_minutes} minutes

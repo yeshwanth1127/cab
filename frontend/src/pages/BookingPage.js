@@ -13,6 +13,13 @@ const BookingPage = () => {
   const [serviceType, setServiceType] = useState(null); // 'local', 'airport', 'outstation'
   const [fromLocation, setFromLocation] = useState('');
   const [toLocation, setToLocation] = useState('');
+  const [tripType, setTripType] = useState(''); // For outstation: 'one_way', 'round_trip', 'multiple_way'
+  // For outstation multiple way trips
+  const [pickupLocation, setPickupLocation] = useState('');
+  const [stopA, setStopA] = useState('');
+  const [stopB, setStopB] = useState('');
+  const [dropLocation, setDropLocation] = useState('');
+  const [additionalStops, setAdditionalStops] = useState([]); // Array of stop locations
   const [userLocation, setUserLocation] = useState(null);
   const [selectedCarOptionId, setSelectedCarOptionId] = useState(null);
   const [numberOfHours, setNumberOfHours] = useState(''); // For local bookings only
@@ -43,8 +50,6 @@ const BookingPage = () => {
     if (!consent || consent === 'granted') {
       requestUserLocation();
     }
-    // Fetch all car options for the Available Car Options section
-    fetchAllCarOptions();
   }, []);
 
   // Fetch car options when service type is selected
@@ -55,11 +60,23 @@ const BookingPage = () => {
       setSelectedCarOptionId(null);
       setCarImageIndices({});
       setNumberOfHours(''); // Reset hours when service type changes
+      setTripType(''); // Reset trip type when service type changes
+      setPickupLocation('');
+      setStopA('');
+      setStopB('');
+      setDropLocation('');
+      setAdditionalStops([]);
     } else {
       // If no service type selected, show all cars (or empty)
       setCarOptionCards([]);
       setSelectedCarOptionId(null);
       setNumberOfHours('');
+      setTripType('');
+      setPickupLocation('');
+      setStopA('');
+      setStopB('');
+      setDropLocation('');
+      setAdditionalStops([]);
     }
   }, [serviceType]);
 
@@ -115,7 +132,30 @@ const BookingPage = () => {
         alert('Please fill in all fields');
         return;
       }
+    } else if (serviceType === 'outstation') {
+      if (!serviceType || !tripType || !selectedCarOptionId) {
+        alert('Please fill in all fields');
+        return;
+      }
+      // Validate based on trip type
+      if (tripType === 'one_way') {
+        if (!pickupLocation || !dropLocation) {
+          alert('Please fill in pickup and drop locations');
+          return;
+        }
+      } else if (tripType === 'round_trip') {
+        if (!pickupLocation) {
+          alert('Please fill in pickup location');
+          return;
+        }
+      } else if (tripType === 'multiple_way') {
+        if (!pickupLocation || !stopA || !stopB || !dropLocation) {
+          alert('Please fill in all required locations (Pickup, Stop A, Stop B, and Drop)');
+          return;
+        }
+      }
     } else {
+      // airport
       if (!serviceType || !fromLocation || !toLocation || !selectedCarOptionId) {
         alert('Please fill in all fields');
         return;
@@ -125,14 +165,31 @@ const BookingPage = () => {
     setCalculating(true);
     try {
       const requestData = {
-        from_location: fromLocation,
         service_type: serviceType,
         cab_type_id: selectedCarOptionId, // Pass selected car option ID for rate meter lookup
       };
 
       if (serviceType === 'local') {
+        requestData.from_location = fromLocation;
         requestData.number_of_hours = parseInt(numberOfHours);
+      } else if (serviceType === 'outstation') {
+        requestData.trip_type = tripType;
+        if (tripType === 'one_way') {
+          requestData.from_location = pickupLocation;
+          requestData.to_location = dropLocation;
+        } else if (tripType === 'round_trip') {
+          requestData.from_location = pickupLocation;
+          requestData.to_location = pickupLocation; // Round trip returns to pickup
+        } else if (tripType === 'multiple_way') {
+          requestData.from_location = pickupLocation;
+          // Combine all stops and drop location
+          const allStops = [stopA, stopB, ...additionalStops, dropLocation].filter(Boolean);
+          requestData.to_location = allStops.join(' → ');
+          requestData.stops = allStops;
+        }
       } else {
+        // airport
+        requestData.from_location = fromLocation;
         requestData.to_location = toLocation;
       }
 
@@ -159,7 +216,6 @@ const BookingPage = () => {
 
     try {
       const bookingPayload = {
-        from_location: fromLocation,
         service_type: serviceType,
         car_option_id: selectedCarOptionId,
         passenger_name: bookingData.passenger_name,
@@ -171,10 +227,29 @@ const BookingPage = () => {
       };
 
       if (serviceType === 'local') {
+        bookingPayload.from_location = fromLocation;
         bookingPayload.number_of_hours = parseInt(numberOfHours);
         bookingPayload.distance_km = 0; // Local bookings don't use distance
         bookingPayload.estimated_time_minutes = parseInt(numberOfHours) * 60;
+      } else if (serviceType === 'outstation') {
+        bookingPayload.trip_type = tripType;
+        if (tripType === 'one_way') {
+          bookingPayload.from_location = pickupLocation;
+          bookingPayload.to_location = dropLocation;
+        } else if (tripType === 'round_trip') {
+          bookingPayload.from_location = pickupLocation;
+          bookingPayload.to_location = pickupLocation; // Round trip returns to pickup
+        } else if (tripType === 'multiple_way') {
+          bookingPayload.from_location = pickupLocation;
+          const allStops = [stopA, stopB, ...additionalStops, dropLocation].filter(Boolean);
+          bookingPayload.to_location = allStops.join(' → ');
+          bookingPayload.stops = JSON.stringify(allStops);
+        }
+        bookingPayload.distance_km = fare.distance_km || 0;
+        bookingPayload.estimated_time_minutes = fare.estimated_time_minutes || 0;
       } else {
+        // airport
+        bookingPayload.from_location = fromLocation;
         bookingPayload.to_location = toLocation;
         bookingPayload.distance_km = fare.distance_km;
         bookingPayload.estimated_time_minutes = fare.estimated_time_minutes;
@@ -189,6 +264,12 @@ const BookingPage = () => {
       // Reset form
       setFromLocation('');
       setToLocation('');
+      setTripType('');
+      setPickupLocation('');
+      setStopA('');
+      setStopB('');
+      setDropLocation('');
+      setAdditionalStops([]);
       setSelectedCarOptionId(null);
       setNumberOfHours('');
       setFare(null);
@@ -328,6 +409,148 @@ const BookingPage = () => {
                             <option value="12">12 hours</option>
                           </select>
                         </div>
+                      </>
+                    ) : serviceType === 'outstation' ? (
+                      <>
+                        <div className="form-group">
+                          <label>Trip Type *</label>
+                          <select
+                            value={tripType}
+                            onChange={(e) => {
+                              setTripType(e.target.value);
+                              // Reset locations when trip type changes
+                              setPickupLocation('');
+                              setStopA('');
+                              setStopB('');
+                              setDropLocation('');
+                              setAdditionalStops([]);
+                            }}
+                            required
+                            className="hours-select"
+                          >
+                            <option value="">Select trip type</option>
+                            <option value="one_way">One Way Trip</option>
+                            <option value="round_trip">Round Trip</option>
+                            <option value="multiple_way">Multiple Way</option>
+                          </select>
+                        </div>
+
+                        {tripType === 'one_way' && (
+                          <>
+                            <LocationInput
+                              label="Pickup Location *"
+                              value={pickupLocation}
+                              onChange={setPickupLocation}
+                              placeholder="Enter pickup location or click 📍 for current location"
+                              userLocation={userLocation}
+                              onLocationRequest={handleLocationUpdate}
+                              showCurrentLocation={true}
+                            />
+                            <LocationInput
+                              label="Drop Location *"
+                              value={dropLocation}
+                              onChange={setDropLocation}
+                              placeholder="Enter drop location"
+                              userLocation={userLocation}
+                              showCurrentLocation={false}
+                            />
+                          </>
+                        )}
+
+                        {tripType === 'round_trip' && (
+                          <LocationInput
+                            label="Pickup Location *"
+                            value={pickupLocation}
+                            onChange={setPickupLocation}
+                            placeholder="Enter pickup location or click 📍 for current location"
+                            userLocation={userLocation}
+                            onLocationRequest={handleLocationUpdate}
+                            showCurrentLocation={true}
+                          />
+                        )}
+
+                        {tripType === 'multiple_way' && (
+                          <>
+                            <LocationInput
+                              label="Pickup Location *"
+                              value={pickupLocation}
+                              onChange={setPickupLocation}
+                              placeholder="Enter pickup location or click 📍 for current location"
+                              userLocation={userLocation}
+                              onLocationRequest={handleLocationUpdate}
+                              showCurrentLocation={true}
+                            />
+                            <LocationInput
+                              label="Stop A *"
+                              value={stopA}
+                              onChange={setStopA}
+                              placeholder="Enter first stop location"
+                              userLocation={userLocation}
+                              showCurrentLocation={false}
+                            />
+                            <LocationInput
+                              label="Stop B *"
+                              value={stopB}
+                              onChange={setStopB}
+                              placeholder="Enter second stop location"
+                              userLocation={userLocation}
+                              showCurrentLocation={false}
+                            />
+                            {additionalStops.map((stop, index) => (
+                              <LocationInput
+                                key={index}
+                                label={`Stop ${String.fromCharCode(67 + index)} *`}
+                                value={stop}
+                                onChange={(value) => {
+                                  const newStops = [...additionalStops];
+                                  newStops[index] = value;
+                                  setAdditionalStops(newStops);
+                                }}
+                                placeholder={`Enter stop ${String.fromCharCode(67 + index)} location`}
+                                userLocation={userLocation}
+                                showCurrentLocation={false}
+                              />
+                            ))}
+                            <button
+                              type="button"
+                              onClick={() => setAdditionalStops([...additionalStops, ''])}
+                              className="btn btn-secondary"
+                              style={{ marginBottom: '10px' }}
+                            >
+                              + Add Another Stop
+                            </button>
+                            {additionalStops.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setAdditionalStops(additionalStops.slice(0, -1))}
+                                className="btn btn-secondary"
+                                style={{ marginBottom: '10px', marginLeft: '10px' }}
+                              >
+                                - Remove Last Stop
+                              </button>
+                            )}
+                            <LocationInput
+                              label="Drop Location *"
+                              value={dropLocation}
+                              onChange={setDropLocation}
+                              placeholder="Enter final drop location"
+                              userLocation={userLocation}
+                              showCurrentLocation={false}
+                            />
+
+                            <div className="form-group" style={{ 
+                              marginTop: '20px', 
+                              padding: '15px', 
+                              backgroundColor: 'rgba(250, 204, 21, 0.1)', 
+                              borderRadius: '8px',
+                              border: '1px solid rgba(250, 204, 21, 0.3)'
+                            }}>
+                              <p style={{ margin: 0, fontWeight: 600, color: '#ffffff' }}>
+                                📞 Need assistance? Contact us at: <a href="tel:+915547444589" style={{ color: '#facc15', textDecoration: 'none' }}>+91 5547444589</a>
+                              </p>
+                            </div>
+                          </>
+                        )}
                       </>
                     ) : (
                       <>
@@ -472,9 +695,15 @@ const BookingPage = () => {
                     onClick={calculateFare}
                     disabled={
                       calculating || 
-                      !fromLocation || 
                       !selectedCarOptionId ||
-                      (serviceType === 'local' ? !numberOfHours : !toLocation)
+                      (serviceType === 'local' ? (!fromLocation || !numberOfHours) : 
+                       serviceType === 'outstation' ? (
+                         !tripType || 
+                         (tripType === 'one_way' && (!pickupLocation || !dropLocation)) ||
+                         (tripType === 'round_trip' && !pickupLocation) ||
+                         (tripType === 'multiple_way' && (!pickupLocation || !stopA || !stopB || !dropLocation))
+                       ) :
+                       (!fromLocation || !toLocation))
                     }
                     className="btn btn-primary btn-block"
                   >
@@ -625,23 +854,89 @@ const BookingPage = () => {
                       </span>
                     </div>
                     
-                    <div className="booking-summary-item">
-                      <span className="booking-summary-label">
-                        {serviceType === 'local' ? 'Pickup Location:' : 'From:'}
-                      </span>
-                      <span className="booking-summary-value">{fromLocation}</span>
-                    </div>
+                    {serviceType === 'local' && (
+                      <>
+                        <div className="booking-summary-item">
+                          <span className="booking-summary-label">Pickup Location:</span>
+                          <span className="booking-summary-value">{fromLocation}</span>
+                        </div>
+                        <div className="booking-summary-item">
+                          <span className="booking-summary-label">Number of Hours:</span>
+                          <span className="booking-summary-value">{numberOfHours} hours</span>
+                        </div>
+                      </>
+                    )}
                     
-                    {serviceType === 'local' ? (
-                      <div className="booking-summary-item">
-                        <span className="booking-summary-label">Number of Hours:</span>
-                        <span className="booking-summary-value">{numberOfHours} hours</span>
-                      </div>
-                    ) : (
-                      <div className="booking-summary-item">
-                        <span className="booking-summary-label">To:</span>
-                        <span className="booking-summary-value">{toLocation}</span>
-                      </div>
+                    {serviceType === 'airport' && (
+                      <>
+                        <div className="booking-summary-item">
+                          <span className="booking-summary-label">From:</span>
+                          <span className="booking-summary-value">{fromLocation}</span>
+                        </div>
+                        <div className="booking-summary-item">
+                          <span className="booking-summary-label">To:</span>
+                          <span className="booking-summary-value">{toLocation}</span>
+                        </div>
+                      </>
+                    )}
+
+                    {serviceType === 'outstation' && (
+                      <>
+                        <div className="booking-summary-item">
+                          <span className="booking-summary-label">Trip Type:</span>
+                          <span className="booking-summary-value">
+                            {tripType === 'one_way' ? 'One Way Trip' :
+                             tripType === 'round_trip' ? 'Round Trip' :
+                             tripType === 'multiple_way' ? 'Multiple Way' : tripType}
+                          </span>
+                        </div>
+                        {tripType === 'one_way' && (
+                          <>
+                            <div className="booking-summary-item">
+                              <span className="booking-summary-label">Pickup:</span>
+                              <span className="booking-summary-value">{pickupLocation}</span>
+                            </div>
+                            <div className="booking-summary-item">
+                              <span className="booking-summary-label">Drop:</span>
+                              <span className="booking-summary-value">{dropLocation}</span>
+                            </div>
+                          </>
+                        )}
+                        {tripType === 'round_trip' && (
+                          <div className="booking-summary-item">
+                            <span className="booking-summary-label">Pickup (Round Trip):</span>
+                            <span className="booking-summary-value">{pickupLocation}</span>
+                          </div>
+                        )}
+                        {tripType === 'multiple_way' && (
+                          <>
+                            <div className="booking-summary-item">
+                              <span className="booking-summary-label">Pickup:</span>
+                              <span className="booking-summary-value">{pickupLocation}</span>
+                            </div>
+                            <div className="booking-summary-item">
+                              <span className="booking-summary-label">Stop A:</span>
+                              <span className="booking-summary-value">{stopA}</span>
+                            </div>
+                            <div className="booking-summary-item">
+                              <span className="booking-summary-label">Stop B:</span>
+                              <span className="booking-summary-value">{stopB}</span>
+                            </div>
+                            {additionalStops.map((stop, index) => (
+                              <div key={index} className="booking-summary-item">
+                                <span className="booking-summary-label">
+                                  Stop {String.fromCharCode(67 + index)}:
+                                </span>
+                                <span className="booking-summary-value">{stop}</span>
+                              </div>
+                            ))}
+                            <div className="booking-summary-item">
+                              <span className="booking-summary-label">Drop:</span>
+                              <span className="booking-summary-value">{dropLocation}</span>
+                            </div>
+                          </>
+                        )}
+                      </>
                     )}
                     
                     {(() => {
@@ -751,7 +1046,7 @@ const BookingPage = () => {
         </div>
         <div className="home-section-inner">
           <h2>About Us</h2>
-          <h3>Airport Taxi Service, Local Cars and Outstation Taxi</h3>
+          <h3>Airport Taxi Service, Local Cars, Outstation Taxi & Corporate Cab Solutions</h3>
           <p>
             Welcome to <strong>Namma Cabs</strong>! We offer affordable taxi services in
             Bangalore, Karnataka with no hidden charges. Choose from a wide array of
@@ -769,58 +1064,204 @@ const BookingPage = () => {
             provides trusted outstation taxi and local cab booking services so you can
             move around Bangalore and beyond with complete peace of mind.
           </p>
+          
+          {/* Corporate Services Section */}
+          <div className="corporate-services-highlight">
+            <h3 style={{ 
+              fontSize: '28px', 
+              fontWeight: '700', 
+              color: '#facc15', 
+              marginTop: '40px', 
+              marginBottom: '20px',
+              textAlign: 'center'
+            }}>
+              🏢 Corporate Cab Services – Your Business Travel Partner
+            </h3>
+            <p style={{ 
+              fontSize: '18px', 
+              lineHeight: '1.8', 
+              marginBottom: '20px',
+              textAlign: 'center',
+              color: '#e5e7eb'
+            }}>
+              <strong>Elevate your company&apos;s transportation with Namma Cabs Corporate Solutions!</strong>
+            </p>
+            <p style={{ 
+              fontSize: '16px', 
+              lineHeight: '1.8', 
+              marginBottom: '16px',
+              color: '#cbd5e1'
+            }}>
+              We understand that businesses need more than just rides – they need <strong>reliability, 
+              accountability, and seamless employee transportation</strong>. That&apos;s why Namma Cabs 
+              offers dedicated corporate cab services designed specifically for companies, startups, 
+              and organizations across Bangalore.
+            </p>
+            <p style={{ 
+              fontSize: '16px', 
+              lineHeight: '1.8', 
+              marginBottom: '16px',
+              color: '#cbd5e1'
+            }}>
+              Our corporate fleet management ensures your employees arrive on time, every time. 
+              From <strong>daily office commutes</strong> to <strong>client meetings, airport transfers, 
+              and team outings</strong>, we provide professional drivers, well-maintained vehicles, 
+              and dedicated account management for hassle-free business travel.
+            </p>
+            <div style={{ 
+              background: 'linear-gradient(135deg, rgba(250, 204, 21, 0.15) 0%, rgba(234, 179, 8, 0.1) 100%)',
+              border: '2px solid rgba(250, 204, 21, 0.3)',
+              borderRadius: '16px',
+              padding: '30px',
+              marginTop: '30px',
+              marginBottom: '20px'
+            }}>
+              <h4 style={{ 
+                fontSize: '22px', 
+                fontWeight: '700', 
+                color: '#facc15', 
+                marginBottom: '20px',
+                textAlign: 'center'
+              }}>
+                Why Choose Our Corporate Services?
+              </h4>
+              <ul style={{ 
+                listStyle: 'none', 
+                padding: 0, 
+                fontSize: '16px',
+                lineHeight: '2',
+                color: '#e5e7eb'
+              }}>
+                <li style={{ marginBottom: '12px' }}>
+                  <strong style={{ color: '#facc15' }}>✓</strong> <strong>Dedicated Fleet Management</strong> – 
+                  Assigned vehicles and drivers for consistent, reliable service
+                </li>
+                <li style={{ marginBottom: '12px' }}>
+                  <strong style={{ color: '#facc15' }}>✓</strong> <strong>Flexible Billing & Invoicing</strong> – 
+                  Monthly billing cycles, GST-compliant invoices, and detailed usage reports
+                </li>
+                <li style={{ marginBottom: '12px' }}>
+                  <strong style={{ color: '#facc15' }}>✓</strong> <strong>Cost-Effective Solutions</strong> – 
+                  Volume discounts, fixed monthly rates, and transparent pricing with no hidden charges
+                </li>
+                <li style={{ marginBottom: '12px' }}>
+                  <strong style={{ color: '#facc15' }}>✓</strong> <strong>Employee Safety First</strong> – 
+                  Verified drivers, insured vehicles, and comprehensive safety protocols
+                </li>
+                <li style={{ marginBottom: '12px' }}>
+                  <strong style={{ color: '#facc15' }}>✓</strong> <strong>Customized Routes & Schedules</strong> – 
+                  Tailored transportation plans for shift-based employees and regular commutes
+                </li>
+              </ul>
+            </div>
+            <p style={{ 
+              fontSize: '17px', 
+              lineHeight: '1.8', 
+              marginTop: '30px',
+              textAlign: 'center',
+              color: '#facc15',
+              fontWeight: '600'
+            }}>
+              Ready to streamline your company&apos;s transportation? 
+              <a href="/corporate" style={{ 
+                color: '#facc15', 
+                textDecoration: 'underline',
+                marginLeft: '8px',
+                fontWeight: '700'
+              }}>
+                Get Started with Corporate Booking →
+              </a>
+            </p>
+          </div>
         </div>
       </section>
 
-      {/* Available Cars section */}
-      <section id="cars" className="cars-section">
-        <div className="cars-map-wrapper">
+      {/* Reviews section */}
+      <section id="reviews" className="reviews-section">
+        <div className="reviews-map-wrapper">
           <AnimatedMapBackground />
         </div>
-        <div className="cars-section-inner">
-          <h2>Available Car Options</h2>
-          <p className="section-subtitle">Explore all available cars from our fleet.</p>
-          <div className="cars-grid">
-            {(!Array.isArray(allCarOptions) || allCarOptions.length === 0) && (
-              <p className="section-subtitle">No car options available yet.</p>
-            )}
-            {Array.isArray(allCarOptions) && allCarOptions.map((opt) => (
-              <div key={opt.id} className="car-option-button">
-                <div className="car-option-main">
-                  <div>
-                    <h3>{opt.name}</h3>
-                    {opt.description && <p>{opt.description}</p>}
-                  </div>
-                  <div className="car-option-right">
-                    <div className="car-option-actions">
-                      {opt.image_urls && opt.image_urls.length > 0 && (
-                        <button
-                          className="btn btn-secondary car-option-cta"
-                          type="button"
-                          onClick={() => toggleCarImages(opt.id)}
-                        >
-                          {expandedCarKey === opt.id ? 'Hide images' : 'View images'}
-                        </button>
-                      )}
-                      <button
-                        className="btn btn-primary car-option-cta"
-                        type="button"
-                        onClick={() => navigate('/car-options')}
-                      >
-                        View details
-                      </button>
-                    </div>
-                  </div>
+        <div className="reviews-section-inner">
+          <h2>Customer Reviews</h2>
+          <p className="section-subtitle">What our customers say about us</p>
+          <div className="reviews-grid">
+            <div className="review-card">
+              <div className="review-header">
+                <div className="review-stars">⭐⭐⭐⭐⭐</div>
+                <div className="review-author">
+                  <strong>Rajesh Kumar</strong>
+                  <span className="review-date">2 weeks ago</span>
                 </div>
-                {expandedCarKey === opt.id && Array.isArray(opt.image_urls) && opt.image_urls.length > 0 && (
-                  <div className="car-option-image-wrap">
-                    {opt.image_urls.map((url) => (
-                      <img key={url} src={url} alt={opt.name} />
-                    ))}
-                  </div>
-                )}
               </div>
-            ))}
+              <p className="review-text">
+                "Excellent service! The driver was on time and very professional. The car was clean and comfortable. Highly recommend Namma Cabs for airport transfers."
+              </p>
+            </div>
+
+            <div className="review-card">
+              <div className="review-header">
+                <div className="review-stars">⭐⭐⭐⭐⭐</div>
+                <div className="review-author">
+                  <strong>Priya Sharma</strong>
+                  <span className="review-date">1 month ago</span>
+                </div>
+              </div>
+              <p className="review-text">
+                "Used their outstation service for a family trip. Very reliable and safe. The driver was courteous and the pricing was transparent. Will definitely book again!"
+              </p>
+            </div>
+
+            <div className="review-card">
+              <div className="review-header">
+                <div className="review-stars">⭐⭐⭐⭐⭐</div>
+                <div className="review-author">
+                  <strong>Mohammed Ali</strong>
+                  <span className="review-date">3 weeks ago</span>
+                </div>
+              </div>
+              <p className="review-text">
+                "Best cab service in Bangalore! Prompt response, good vehicles, and reasonable rates. The round trip option is very convenient for day trips."
+              </p>
+            </div>
+
+            <div className="review-card">
+              <div className="review-header">
+                <div className="review-stars">⭐⭐⭐⭐⭐</div>
+                <div className="review-author">
+                  <strong>Anjali Reddy</strong>
+                  <span className="review-date">1 week ago</span>
+                </div>
+              </div>
+              <p className="review-text">
+                "Great experience with Namma Cabs! Booked for local sightseeing and they were very flexible with timing. The car was in excellent condition."
+              </p>
+            </div>
+
+            <div className="review-card">
+              <div className="review-header">
+                <div className="review-stars">⭐⭐⭐⭐⭐</div>
+                <div className="review-author">
+                  <strong>Vikram Singh</strong>
+                  <span className="review-date">2 months ago</span>
+                </div>
+              </div>
+              <p className="review-text">
+                "Multiple way trip was handled perfectly. They accommodated all our stops without any issues. Professional service from start to finish!"
+              </p>
+            </div>
+
+            <div className="review-card">
+              <div className="review-header">
+                <div className="review-stars">⭐⭐⭐⭐⭐</div>
+                <div className="review-author">
+                  <strong>Sneha Patel</strong>
+                  <span className="review-date">3 days ago</span>
+                </div>
+              </div>
+              <p className="review-text">
+                "Affordable pricing and reliable service. Used for airport pickup at early morning hours and they were punctual. Highly satisfied!"
+              </p>
+            </div>
           </div>
         </div>
       </section>

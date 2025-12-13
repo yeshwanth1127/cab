@@ -18,9 +18,10 @@ const router = express.Router();
 
 // Calculate fare
 router.post('/calculate-fare', [
-  body('from_location').notEmpty().withMessage('From location is required'),
-  body('to_location').optional().notEmpty().withMessage('To location is required for non-local bookings'),
+  body('from_location').optional().notEmpty().withMessage('From location is required for local and airport bookings'),
+  body('to_location').optional().notEmpty().withMessage('To location is required for airport bookings'),
   body('service_type').isIn(['local', 'airport', 'outstation']).withMessage('Service type must be local, airport, or outstation'),
+  body('trip_type').optional().isIn(['one_way', 'round_trip', 'multiple_way']).withMessage('Trip type must be one_way, round_trip, or multiple_way'),
   body('number_of_hours').optional().isInt({ min: 1 }).withMessage('Number of hours must be a positive integer'),
   body('cab_type_id').optional().isInt().withMessage('Cab type ID must be an integer'),
   body('distance_km').optional().isNumeric().withMessage('Distance must be a number'),
@@ -31,10 +32,13 @@ router.post('/calculate-fare', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { from_location, to_location, cab_type_id, service_type, distance_km, estimated_time_minutes, number_of_hours } = req.body;
+    const { from_location, to_location, cab_type_id, service_type, trip_type, distance_km, estimated_time_minutes, number_of_hours } = req.body;
 
     // Validate local bookings require number_of_hours (strict validation)
     if (service_type === 'local') {
+      if (!from_location) {
+        return res.status(400).json({ error: 'From location is required for local bookings' });
+      }
       if (!number_of_hours || number_of_hours <= 0) {
         return res.status(400).json({ error: 'Number of hours is required and must be greater than 0 for local bookings' });
       }
@@ -42,11 +46,16 @@ router.post('/calculate-fare', [
       if (!Number.isInteger(Number(number_of_hours))) {
         return res.status(400).json({ error: 'Number of hours must be a valid integer for local bookings' });
       }
-    }
-
-    // Validate non-local bookings require to_location
-    if (service_type !== 'local' && !to_location) {
-      return res.status(400).json({ error: 'To location is required for this service type' });
+    } else if (service_type === 'outstation') {
+      // Validate outstation bookings require trip_type
+      if (!trip_type || (typeof trip_type === 'string' && !trip_type.trim())) {
+        return res.status(400).json({ error: 'Trip type is required for outstation bookings' });
+      }
+    } else {
+      // Validate airport bookings require from_location and to_location
+      if (!from_location || !to_location) {
+        return res.status(400).json({ error: 'From location and To location are required for airport bookings' });
+      }
     }
 
     // Resolve rate meter: use service_type and car_category from car_option
@@ -125,9 +134,14 @@ router.post('/calculate-fare', [
       } else {
         return res.status(400).json({ error: 'Number of hours is required for local bookings' });
       }
+    } else if (service_type === 'outstation') {
+      // For outstation, we don't have from/to locations, so use defaults
+      // The fare will be calculated based on base fare and trip type multiplier
+      distance = 0;
+      time = 0;
     } else {
-      // For airport/outstation, check if route exists in database
-      if (!distance && to_location) {
+      // For airport, check if route exists in database
+      if (!distance && to_location && from_location) {
         const route = await db.getAsync(
           `SELECT distance_km, estimated_time_minutes FROM routes 
            WHERE LOWER(from_location) = LOWER(?) AND LOWER(to_location) = LOWER(?) AND is_active = 1`,
@@ -160,8 +174,20 @@ router.post('/calculate-fare', [
         fare = baseFare + hourCharge;
         distanceCharge = 0;
         timeCharge = hourCharge;
+      } else if (service_type === 'outstation' && trip_type) {
+        // Outstation bookings: apply trip type multiplier
+        const tripMultipliers = {
+          'one_way': 1.0,
+          'round_trip': 1.8, // 80% extra for round trip
+          'multiple_way': 2.2, // 120% extra for multiple way
+        };
+        const tripMultiplier = tripMultipliers[trip_type] || 1.0;
+        // For outstation, use base fare with trip type multiplier
+        fare = baseFare * tripMultiplier;
+        distanceCharge = 0;
+        timeCharge = 0;
       } else {
-        // Airport/Outstation use per_km and per_minute
+        // Airport use per_km and per_minute
         distanceCharge = distance * parseFloat(rateMeter.per_km_rate);
         timeCharge = time * parseFloat(rateMeter.per_minute_rate || 0);
         fare = baseFare + distanceCharge + timeCharge;
@@ -174,6 +200,16 @@ router.post('/calculate-fare', [
         'outstation': 1.5, // 50% extra for outstation
       };
       multiplier = serviceMultipliers[service_type] || 1.0;
+      
+      if (service_type === 'outstation' && trip_type) {
+        // Apply trip type multiplier for outstation
+        const tripMultipliers = {
+          'one_way': 1.0,
+          'round_trip': 1.8,
+          'multiple_way': 2.2,
+        };
+        multiplier = multiplier * (tripMultipliers[trip_type] || 1.0);
+      }
       
       baseFare = parseFloat(cabType.base_fare);
       distanceCharge = distance * parseFloat(cabType.per_km_rate);
@@ -205,9 +241,10 @@ router.post('/calculate-fare', [
 
 // Create booking (attaches user_id if authenticated)
 router.post('/', [
-  body('from_location').notEmpty().withMessage('From location is required'),
-  body('to_location').optional().notEmpty().withMessage('To location is required for non-local bookings'),
+  body('from_location').optional().notEmpty().withMessage('From location is required for local and airport bookings'),
+  body('to_location').optional().notEmpty().withMessage('To location is required for airport bookings'),
   body('service_type').isIn(['local', 'airport', 'outstation']).withMessage('Service type must be local, airport, or outstation'),
+  body('trip_type').optional().isIn(['one_way', 'round_trip', 'multiple_way']).withMessage('Trip type must be one_way, round_trip, or multiple_way'),
   body('number_of_hours').optional().isInt({ min: 1 }).withMessage('Number of hours must be a positive integer'),
   body('cab_type_id').optional().isInt().withMessage('Cab type ID must be an integer'),
   body('car_option_id').optional().isInt().withMessage('Car option ID must be an integer'),
@@ -226,6 +263,8 @@ router.post('/', [
       to_location,
       cab_type_id,
       service_type,
+      trip_type,
+      stops,
       passenger_name,
       passenger_phone,
       passenger_email,
@@ -237,14 +276,24 @@ router.post('/', [
       number_of_hours,
     } = req.body;
 
-    // Validate local bookings require number_of_hours
-    if (service_type === 'local' && !number_of_hours) {
-      return res.status(400).json({ error: 'Number of hours is required for local bookings' });
-    }
-
-    // Validate non-local bookings require to_location
-    if (service_type !== 'local' && !to_location) {
-      return res.status(400).json({ error: 'To location is required for this service type' });
+    // Validate local bookings require number_of_hours and from_location
+    if (service_type === 'local') {
+      if (!from_location) {
+        return res.status(400).json({ error: 'From location is required for local bookings' });
+      }
+      if (!number_of_hours) {
+        return res.status(400).json({ error: 'Number of hours is required for local bookings' });
+      }
+    } else if (service_type === 'outstation') {
+      // Validate outstation bookings require trip_type
+      if (!trip_type || (typeof trip_type === 'string' && !trip_type.trim())) {
+        return res.status(400).json({ error: 'Trip type is required for outstation bookings' });
+      }
+    } else {
+      // Validate airport bookings require from_location and to_location
+      if (!from_location || !to_location) {
+        return res.status(400).json({ error: 'From location and To location are required for airport bookings' });
+      }
     }
 
     // Try to attach user_id if a valid token is provided
@@ -349,7 +398,13 @@ router.post('/', [
           time = number_of_hours * 60; // Convert hours to minutes
           distance = 0; // Local bookings don't use distance
         }
-      } else if (!distance && to_location) {
+      } else if (service_type === 'outstation') {
+        // For outstation, we don't have from/to locations, so use defaults
+        // The fare will be calculated based on base fare and trip type multiplier
+        distance = 0; // Will be calculated later if needed
+        time = 0; // Will be calculated later if needed
+      } else if (!distance && to_location && from_location) {
+        // Airport bookings: try to find route
         const route = await db.getAsync(
           `SELECT distance_km, estimated_time_minutes FROM routes 
            WHERE LOWER(from_location) = LOWER(?) AND LOWER(to_location) = LOWER(?) AND is_active = 1`,
@@ -378,8 +433,20 @@ router.post('/', [
             fare = baseFare + hourCharge;
             distanceCharge = 0;
             timeCharge = hourCharge;
+          } else if (service_type === 'outstation') {
+            // Outstation bookings: apply trip type multiplier
+            const tripMultipliers = {
+              'one_way': 1.0,
+              'round_trip': 1.8, // 80% extra for round trip
+              'multiple_way': 2.2, // 120% extra for multiple way
+            };
+            const tripMultiplier = tripMultipliers[trip_type] || 1.0;
+            // For outstation, use base fare with trip type multiplier
+            fare = baseFare * tripMultiplier;
+            distanceCharge = 0;
+            timeCharge = 0;
           } else {
-            // Airport/Outstation use per_km and per_minute
+            // Airport use per_km and per_minute
             distanceCharge = distance * parseFloat(rateMeter.per_km_rate);
             timeCharge = time * parseFloat(rateMeter.per_minute_rate || 0);
             fare = baseFare + distanceCharge + timeCharge;
@@ -391,7 +458,18 @@ router.post('/', [
             'airport': 1.2,
             'outstation': 1.5,
           };
-          const multiplier = serviceMultipliers[service_type] || 1.0;
+          let multiplier = serviceMultipliers[service_type] || 1.0;
+          
+          if (service_type === 'outstation' && trip_type) {
+            // Apply trip type multiplier for outstation
+            const tripMultipliers = {
+              'one_way': 1.0,
+              'round_trip': 1.8,
+              'multiple_way': 2.2,
+            };
+            multiplier = multiplier * (tripMultipliers[trip_type] || 1.0);
+          }
+          
           const subtotal = parseFloat(cabType.base_fare) + 
                           (distance * parseFloat(cabType.per_km_rate)) + 
                           (time * parseFloat(cabType.per_minute_rate || 0));
@@ -421,26 +499,41 @@ router.post('/', [
       `INSERT INTO bookings (
         user_id, cab_id, cab_type_id, car_option_id, from_location, to_location, distance_km, 
         estimated_time_minutes, fare_amount, booking_status, passenger_name, passenger_phone, 
-        passenger_email, travel_date, notes, service_type, number_of_hours
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        passenger_email, travel_date, notes, service_type, number_of_hours, trip_type
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         userId,
         cab_id,
         cab_type_id,
         req.body.car_option_id || null,
-        from_location,
-        service_type === 'local' ? 'N/A' : (to_location || 'N/A'), // Set 'N/A' for local bookings to satisfy NOT NULL constraint
-        distance,
-        time,
+        from_location || null,
+        (service_type === 'local') ? 'N/A' : (to_location || 'N/A'), // Set 'N/A' only for local bookings
+        distance || 0,
+        time || 0,
         fare,
         'pending',
         passenger_name,
         passenger_phone,
         passenger_email, // Now required
         travel_date || null,
-        notes || null,
+        (() => {
+          // For multiple way trips, add stops to notes
+          if (service_type === 'outstation' && trip_type === 'multiple_way' && stops) {
+            try {
+              const stopsArray = typeof stops === 'string' ? JSON.parse(stops) : stops;
+              if (Array.isArray(stopsArray) && stopsArray.length > 0) {
+                const stopsText = `Stops: ${stopsArray.join(' → ')}`;
+                return notes ? `${notes}\n${stopsText}` : stopsText;
+              }
+            } catch (e) {
+              // If parsing fails, just use original notes
+            }
+          }
+          return notes || null;
+        })(),
         service_type || 'local',
         service_type === 'local' ? (number_of_hours ? parseInt(number_of_hours) : null) : null,
+        service_type === 'outstation' ? (trip_type && trip_type.trim() ? trip_type.trim() : null) : null,
       ]
     );
 

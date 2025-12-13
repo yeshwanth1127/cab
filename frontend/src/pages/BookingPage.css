@@ -98,6 +98,20 @@
   text-decoration: none;
   flex-shrink: 0;
   height: 100%;
+  position: relative;
+}
+
+.navbar-logo::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 120px;
+  height: 120px;
+  background-color: white;
+  border-radius: 50%;
+  z-index: -1;
 }
 
 .navbar-logo img {
@@ -106,6 +120,8 @@
   object-fit: contain;
   display: block;
   filter: brightness(1.2) drop-shadow(0 0 8px rgba(250, 204, 21, 0.3));
+  position: relative;
+  z-index: 1;
 }
 
 .nav-toggle {
@@ -793,31 +809,48 @@
 
 /* Dark theme form inputs */
 .booking-card .form-group label {
-  color: #e5e7eb;
+  color: #facc15;
 }
 
 .booking-card .form-group input,
+.booking-card .form-group select,
 .booking-card .form-group textarea {
-  background: rgba(30, 41, 59, 0.8);
+  background: rgba(30, 41, 59, 0.8) !important;
   border: 2px solid rgba(148, 163, 184, 0.4);
-  color: #e5e7eb;
+  color: #e5e7eb !important;
+  -webkit-text-fill-color: #e5e7eb !important;
 }
 
 .booking-card .form-group input::placeholder,
-.booking-card .form-group textarea::placeholder {
-  color: #9ca3af;
+.booking-card .form-group textarea::placeholder,
+.booking-card .form-group select::placeholder {
+  color: #9ca3af !important;
+  -webkit-text-fill-color: #9ca3af !important;
+  opacity: 1;
 }
 
 .booking-card .form-group input:focus,
+.booking-card .form-group select:focus,
 .booking-card .form-group textarea:focus {
   border-color: #facc15;
   box-shadow: 0 0 0 4px rgba(250, 204, 21, 0.2);
-  background: rgba(30, 41, 59, 1);
+  background: rgba(30, 41, 59, 1) !important;
+  color: #e5e7eb !important;
+  -webkit-text-fill-color: #e5e7eb !important;
 }
 
 .booking-card .form-group input:hover,
+.booking-card .form-group select:hover,
 .booking-card .form-group textarea:hover {
   border-color: rgba(148, 163, 184, 0.6);
+}
+
+.booking-card .form-group input:-webkit-autofill,
+.booking-card .form-group input:-webkit-autofill:hover,
+.booking-card .form-group input:-webkit-autofill:focus,
+.booking-card .form-group input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 30px rgba(30, 41, 59, 0.8) inset !important;
+  -webkit-text-fill-color: #e5e7eb !important;
 }
 
 .success-banner {
@@ -1056,7 +1089,8 @@
   }
 }
 
-.cars-section {
+.cars-section,
+.reviews-section {
   position: relative;
   min-height: 100vh;
   padding: 60px 0;
@@ -1064,14 +1098,16 @@
   background: #000000;
 }
 
-.cars-map-wrapper {
+.cars-map-wrapper,
+.reviews-map-wrapper {
   position: absolute;
   inset: 0;
   z-index: 0;
   overflow: hidden;
 }
 
-.cars-section-inner {
+.cars-section-inner,
+.reviews-section-inner {
   position: relative;
   z-index: 1;
   max-width: 1200px;
@@ -1080,6 +1116,7 @@
 }
 
 .cars-section h2,
+.reviews-section h2,
 .about-section h2,
 .contact-section h2 {
   font-size: 26px;
@@ -1213,6 +1250,96 @@
   height: auto;
 }
 
+/* Reviews section */
+.reviews-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 24px;
+  margin-top: 40px;
+}
+
+.review-card {
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(10px);
+  border: 2px solid rgba(250, 204, 21, 0.3);
+  border-radius: 16px;
+  padding: 24px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.review-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #facc15 0%, #eab308 100%);
+  transform: scaleX(0);
+  transition: transform 0.3s ease;
+}
+
+.review-card:hover::before {
+  transform: scaleX(1);
+}
+
+.review-card:hover {
+  background: rgba(15, 23, 42, 0.8);
+  border-color: #facc15;
+  transform: translateY(-4px);
+  box-shadow: 0 12px 30px rgba(250, 204, 21, 0.3);
+}
+
+.review-header {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.review-stars {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.review-author {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.review-author strong {
+  color: #facc15;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.review-date {
+  color: #9ca3af;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.review-text {
+  color: #e5e7eb;
+  font-size: 15px;
+  line-height: 1.7;
+  margin: 0;
+  font-style: italic;
+}
+
+@media (max-width: 768px) {
+  .reviews-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  
+  .review-card {
+    padding: 20px;
+  }
+}
 
 /* Booking confirmation summary */
 .booking-confirmation-summary {
@@ -1446,6 +1573,11 @@
   
   .navbar {
     min-height: 110px;
+  }
+
+  .navbar-logo::before {
+    width: 70px;
+    height: 70px;
   }
 
   .navbar-logo img {

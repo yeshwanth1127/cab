@@ -215,11 +215,43 @@ const initDatabase = () => {
   return new Promise(async (resolve, reject) => {
     // Prevent multiple initializations
     if (isInitialized) {
+      console.log('Database already initialized, skipping...');
       resolve();
       return;
     }
 
     try {
+      // Check if database already has tables (data exists)
+      let tablesExist = false;
+      if (DB_TYPE === 'mysql') {
+        try {
+          const [rows] = await db.pool.execute(
+            "SELECT COUNT(*) as count FROM information_schema.tables WHERE table_schema = ? AND table_name = 'bookings'",
+            [process.env.DB_NAME || 'mydbname']
+          );
+          tablesExist = rows[0].count > 0;
+        } catch (e) {
+          // Ignore errors
+        }
+      } else {
+        try {
+          const result = await db.getAsync(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='bookings'"
+          );
+          tablesExist = result !== null && result !== undefined;
+        } catch (e) {
+          // Ignore errors
+        }
+      }
+
+      if (tablesExist) {
+        console.log('⚠️  Database tables already exist - skipping schema initialization to protect existing data');
+        await runMigrations();
+        isInitialized = true;
+        resolve();
+        return;
+      }
+
       const schemaPath = path.join(__dirname, 'schema.sql');
       let schema = fs.readFileSync(schemaPath, 'utf8');
       
@@ -251,7 +283,7 @@ const initDatabase = () => {
         } finally {
           connection.release();
         }
-        console.log('Database schema initialized successfully (MySQL)');
+        console.log('✅ Database schema initialized successfully (MySQL)');
         await runMigrations();
         isInitialized = true;
         resolve();
@@ -259,17 +291,18 @@ const initDatabase = () => {
         // SQLite execution
         db.exec(schema, async (err) => {
           if (err) {
-            console.error('Error initializing database:', err.message);
+            console.error('❌ Error initializing database:', err.message);
             reject(err);
             return;
           }
-          console.log('Database schema initialized successfully (SQLite)');
+          console.log('✅ Database schema initialized successfully (SQLite)');
           await runMigrations();
           isInitialized = true;
           resolve();
         });
       }
     } catch (error) {
+      console.error('❌ Database initialization error:', error);
       reject(error);
     }
   });
@@ -339,6 +372,19 @@ const runMigrations = async () => {
       const errMsg = migrationErr.message || '';
       if (!errMsg.includes('duplicate column') && !errMsg.includes('Duplicate column')) {
         console.log('Migration note (number_of_hours):', migrationErr.message);
+      }
+    }
+
+    // Migration to add trip_type to bookings
+    try {
+      await db.runAsync(
+        `ALTER TABLE bookings ADD COLUMN trip_type TEXT CHECK (trip_type IN ('one_way', 'round_trip', 'multiple_way'))`
+      );
+      console.log('Migration: trip_type column added to bookings');
+    } catch (migrationErr) {
+      const errMsg = migrationErr.message || '';
+      if (!errMsg.includes('duplicate column') && !errMsg.includes('Duplicate column')) {
+        console.log('Migration note (trip_type):', migrationErr.message);
       }
     }
 
@@ -611,10 +657,13 @@ const runMigrations = async () => {
   }
 };
 
-// Initialize on module load (only once)
+// Initialize on module load (only once, and only if tables don't exist)
+// This ensures data is NEVER lost on server restart
 initDatabase().catch((err) => {
-  console.error('Database initialization error:', err);
-  isInitialized = false;
+  console.error('❌ Database initialization error:', err);
+  // Don't set isInitialized to false on error - let it retry on next require
+  // This prevents data loss if there's a temporary error
+  // The table existence check will prevent re-initialization even if isInitialized is false
 });
 
 module.exports = db;

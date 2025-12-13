@@ -47,7 +47,7 @@
 }
 
 .corporate-booking-container {
-  padding-top: 240px;
+  padding-top: 150px; /* move section further upward */
   position: relative;
   z-index: 1;
   max-width: 1200px;
@@ -68,14 +68,14 @@
   font-weight: 700;
   text-align: center;
   margin-bottom: 16px;
-  color: #facc15;
+  color: #000000 !important; /* force pure black */
   text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.5);
 }
 
 .corporate-booking-subtitle {
   text-align: center;
   font-size: 1.1rem;
-  color: #e5e7eb;
+  color: #000000 !important; /* force pure black */
   margin-bottom: 40px;
   line-height: 1.6;
 }
@@ -225,7 +225,7 @@
 
   .corporate-booking-container {
     padding: 20px 10px;
-    padding-top: 180px;
+    padding-top: 120px; /* move up further on mobile */
   }
 }
 

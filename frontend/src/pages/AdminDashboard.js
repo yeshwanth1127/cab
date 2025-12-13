@@ -3,6 +3,25 @@ import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import './AdminDashboard.css';
 
+// Helper to get the backend base URL for images
+const getImageUrl = (relativePath) => {
+  if (!relativePath) return null;
+  
+  // If already absolute URL, return as is
+  if (relativePath.startsWith('http://') || relativePath.startsWith('https://')) {
+    return relativePath;
+  }
+  
+  // Get API base URL and extract the base (without /api)
+  const apiBaseURL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+  const backendBaseURL = apiBaseURL.replace('/api', '');
+  
+  // Ensure relative path starts with /
+  const path = relativePath.startsWith('/') ? relativePath : `/${relativePath}`;
+  
+  return `${backendBaseURL}${path}`;
+};
+
 const AdminDashboard = () => {
   const { user, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -28,6 +47,7 @@ const AdminDashboard = () => {
   const [showAddCarModal, setShowAddCarModal] = useState(false);
   const [selectedCabTypeForCar, setSelectedCabTypeForCar] = useState(null);
   const [availableCars, setAvailableCars] = useState([]);
+  const [selectedCarDetails, setSelectedCarDetails] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [rateMeters, setRateMeters] = useState([]);
@@ -37,6 +57,10 @@ const AdminDashboard = () => {
   const [assignSelections, setAssignSelections] = useState({});
   const [driverPhotoFile, setDriverPhotoFile] = useState(null);
   const [reassigning, setReassigning] = useState({});
+  const [recentBookings, setRecentBookings] = useState([]);
+  const [selectedBooking, setSelectedBooking] = useState(null);
+  const [showBookingModal, setShowBookingModal] = useState(false);
+  const [receiptWithGST, setReceiptWithGST] = useState(true);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -59,8 +83,16 @@ const AdminDashboard = () => {
     setLoading(true);
     try {
       if (activeTab === 'dashboard') {
-        const response = await api.get('/admin/dashboard/stats');
-        setStats(response.data);
+        const [statsResponse, bookingsResponse] = await Promise.all([
+          api.get('/admin/dashboard/stats'),
+          api.get('/admin/bookings?limit=10')
+        ]);
+        setStats(statsResponse.data);
+        // Sort bookings by most recent first
+        const sortedBookings = bookingsResponse.data.sort((a, b) => 
+          new Date(b.booking_date) - new Date(a.booking_date)
+        );
+        setRecentBookings(sortedBookings);
       } else if (activeTab === 'rate-meters') {
         const response = await api.get('/admin/rate-meters');
         setRateMeters(response.data);
@@ -75,26 +107,51 @@ const AdminDashboard = () => {
         for (const cabType of response.data) {
           try {
             const carsResponse = await api.get(`/admin/cab-types/${cabType.id}/cars`);
-            carsData[cabType.id] = carsResponse.data;
+            // Ensure we have an object (the API returns grouped object by subtype)
+            const cars = carsResponse.data && typeof carsResponse.data === 'object' 
+              ? carsResponse.data 
+              : {};
+            // Store with the cab type ID as number (consistent with cabTypes array)
+            const id = Number(cabType.id);
+            carsData[id] = cars;
           } catch (error) {
             console.error(`Error fetching cars for cab type ${cabType.id}:`, error);
-            carsData[cabType.id] = {};
+            const id = Number(cabType.id);
+            carsData[id] = {};
           }
         }
         setCabTypeCars(carsData);
-        // Also fetch all available cars for the add car modal
-        const allCarsResponse = await api.get('/admin/car-options/available');
-        setAvailableCars(allCarsResponse.data);
+        
+        // Auto-expand cab types that have cars assigned (preserve existing expansions)
+        setExpandedCabTypes(prev => {
+          const expanded = { ...prev };
+          for (const cabType of response.data) {
+            const cabTypeId = Number(cabType.id);
+            const cars = carsData[cabTypeId] || {};
+            const hasCars = Object.keys(cars).length > 0;
+            // If has cars and not explicitly set to false, set to true
+            if (hasCars && expanded[cabTypeId] !== false) {
+              expanded[cabTypeId] = true;
+            }
+          }
+          return expanded;
+        });
+        // Also fetch all cars (including inactive) for the add car modal
+        const allCarsResponse = await api.get('/admin/car-options');
+        setAvailableCars(allCarsResponse.data || []);
       } else if (activeTab === 'cabs') {
         const [cabsRes, driversRes, carsRes] = await Promise.all([
           api.get('/admin/cabs'),
           api.get('/admin/drivers'),
-          api.get('/admin/car-options/available'),
+          api.get('/admin/car-options'),
         ]);
         setCabs(cabsRes.data);
         setDrivers(driversRes.data || []);
         setAvailableCars(carsRes.data || []);
       } else if (activeTab === 'bookings') {
+        const response = await api.get('/admin/bookings');
+        setBookings(response.data);
+      } else if (activeTab === 'bills-invoices') {
         const response = await api.get('/admin/bookings');
         setBookings(response.data);
       } else if (activeTab === 'car-options') {
@@ -224,16 +281,45 @@ const AdminDashboard = () => {
   };
 
   const toggleCabTypeExpansion = (cabTypeId) => {
+    const id = Number(cabTypeId);
     setExpandedCabTypes(prev => ({
       ...prev,
-      [cabTypeId]: !prev[cabTypeId]
+      [id]: !prev[id]
     }));
   };
 
   const openAddCarModal = (cabTypeId) => {
     setSelectedCabTypeForCar(cabTypeId);
     setFormData({ car_option_id: '', car_subtype: '' });
+    setSelectedCarDetails(null);
     setShowAddCarModal(true);
+  };
+
+  // Fetch car details when a car is selected
+  const handleCarSelection = async (carOptionId) => {
+    if (!carOptionId) {
+      setSelectedCarDetails(null);
+      setFormData(prev => ({ ...prev, car_option_id: '' }));
+      return;
+    }
+
+    try {
+      // Find the car in availableCars first (faster)
+      const car = availableCars.find(c => c.id === parseInt(carOptionId, 10));
+      if (car) {
+        setSelectedCarDetails(car);
+        setFormData(prev => ({ ...prev, car_option_id: parseInt(carOptionId, 10) }));
+      } else {
+        // If not found, fetch from API
+        const response = await api.get(`/admin/car-options/${carOptionId}`);
+        setSelectedCarDetails(response.data);
+        setFormData(prev => ({ ...prev, car_option_id: parseInt(carOptionId, 10) }));
+      }
+    } catch (error) {
+      console.error('Error fetching car details:', error);
+      alert('Error fetching car details');
+      setSelectedCarDetails(null);
+    }
   };
 
   const handleAssignCar = async (e) => {
@@ -241,15 +327,83 @@ const AdminDashboard = () => {
     setLoading(true);
     try {
       const { car_option_id, car_subtype } = formData;
-      await api.post(`/admin/cab-types/${selectedCabTypeForCar}/assign-car`, {
-        car_option_id,
-        car_subtype
+      
+      // Validate inputs
+      if (!car_option_id || !car_subtype) {
+        alert('Please select both a car and a subtype');
+        setLoading(false);
+        return;
+      }
+      
+      console.log('Assigning car:', { car_option_id, car_subtype, cabTypeId: selectedCabTypeForCar });
+      
+      const response = await api.post(`/admin/cab-types/${selectedCabTypeForCar}/assign-car`, {
+        car_option_id: parseInt(car_option_id, 10),
+        car_subtype: car_subtype.trim()
       });
+      
+      console.log('Car assignment response:', response.data);
       alert('Car assigned successfully');
       setShowAddCarModal(false);
       setFormData({ car_option_id: '', car_subtype: '' });
-      fetchDashboardData();
+      setSelectedCarDetails(null);
+      
+      // Store the cab type ID to expand after refresh
+      const cabTypeIdNum = Number(selectedCabTypeForCar);
+      
+      // Use the same refresh logic as fetchDashboardData for consistency
+      if (activeTab === 'cab-types') {
+        // Fetch all cab types and their cars (same as fetchDashboardData)
+        try {
+          const response = await api.get('/admin/cab-types');
+          setCabTypes(response.data);
+          
+          // Fetch cars for each cab type
+          const carsData = {};
+          for (const cabType of response.data) {
+            try {
+              const carsResponse = await api.get(`/admin/cab-types/${cabType.id}/cars`);
+              const cars = carsResponse.data && typeof carsResponse.data === 'object' 
+                ? carsResponse.data 
+                : {};
+              const id = Number(cabType.id);
+              carsData[id] = cars;
+            } catch (error) {
+              console.error(`Error fetching cars for cab type ${cabType.id}:`, error);
+              const id = Number(cabType.id);
+              carsData[id] = {};
+            }
+          }
+          
+          setCabTypeCars(carsData);
+          
+          // Auto-expand the cab type we just assigned to, and any others with cars
+          setExpandedCabTypes(prev => {
+            const expanded = { ...prev };
+            for (const cabType of response.data) {
+              const ctId = Number(cabType.id);
+              const cars = carsData[ctId] || {};
+              const hasCars = Object.keys(cars).length > 0;
+              // If has cars and not explicitly set to false, set to true
+              if (hasCars && expanded[ctId] !== false) {
+                expanded[ctId] = true;
+              }
+            }
+            // Ensure the one we just assigned to is expanded
+            expanded[cabTypeIdNum] = true;
+            return expanded;
+          });
+        } catch (error) {
+          console.error('Error refreshing after assignment:', error);
+          // Fallback to full refresh
+          await fetchDashboardData();
+        }
+      } else {
+        await fetchDashboardData();
+      }
     } catch (error) {
+      console.error('Error assigning car:', error);
+      console.error('Error response:', error.response?.data);
       alert(error.response?.data?.error || 'Error assigning car');
     } finally {
       setLoading(false);
@@ -275,6 +429,10 @@ const AdminDashboard = () => {
   const updateBookingStatus = async (bookingId, status) => {
     try {
       await api.put(`/admin/bookings/${bookingId}/status`, { status });
+      // Update the selected booking in modal
+      if (selectedBooking && selectedBooking.id === bookingId) {
+        setSelectedBooking({ ...selectedBooking, booking_status: status });
+      }
       fetchDashboardData();
       alert('Status updated successfully');
     } catch (error) {
@@ -390,9 +548,10 @@ const AdminDashboard = () => {
     });
   };
 
-  const downloadReceipt = async (bookingId) => {
+  const downloadReceipt = async (bookingId, withGST = true) => {
     try {
       const response = await api.get(`/admin/bookings/${bookingId}/receipt`, {
+        params: { withGST: withGST },
         responseType: 'blob',
       });
 
@@ -401,7 +560,7 @@ const AdminDashboard = () => {
       );
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `booking-${bookingId}-receipt.pdf`);
+      link.setAttribute('download', `booking-${bookingId}-receipt${withGST ? '-with-gst' : ''}.pdf`);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -409,6 +568,26 @@ const AdminDashboard = () => {
     } catch (error) {
       console.error('Error downloading receipt:', error);
       alert(error.response?.data?.error || 'Error downloading receipt');
+    }
+  };
+
+  const handleGenerateInvoice = async (bookingId, withGST) => {
+    try {
+      await downloadReceipt(bookingId, withGST);
+    } catch (error) {
+      console.error('Error generating invoice:', error);
+      alert('Error generating invoice. Please try again.');
+    }
+  };
+
+  const handleBookingClick = (booking) => {
+    setSelectedBooking(booking);
+    setShowBookingModal(true);
+  };
+
+  const handlePrintReceipt = () => {
+    if (selectedBooking) {
+      downloadReceipt(selectedBooking.id, receiptWithGST);
     }
   };
 
@@ -503,6 +682,21 @@ const AdminDashboard = () => {
           </div>
 
           <div className="sidebar-section">
+            <h3 className="sidebar-heading">Billing</h3>
+            <button
+              className={activeTab === 'bills-invoices' ? 'active' : ''}
+              onClick={() => {
+                setActiveTab('bills-invoices');
+                if (isMobile) setSidebarOpen(false);
+              }}
+            >
+              <span className="sidebar-icon">🧾</span>
+              <span className="sidebar-text">Bills and Invoices</span>
+              <span className="sidebar-subtext">Generate Invoices</span>
+            </button>
+          </div>
+
+          <div className="sidebar-section">
             <h3 className="sidebar-heading">Corporate Bookings</h3>
             <button
               className={activeTab === 'corporate-all' ? 'active' : ''}
@@ -538,7 +732,7 @@ const AdminDashboard = () => {
                 setShowForm(false);
               }}
             >
-              <span className="sidebar-icon">🧑‍✈️</span>
+              <span className="sidebar-icon">👤</span>
               <span className="sidebar-text">Register Drivers</span>
               <span className="sidebar-subtext">Manage drivers</span>
             </button>
@@ -597,22 +791,324 @@ const AdminDashboard = () => {
           {loading && <div className="loading">Loading...</div>}
 
           {activeTab === 'dashboard' && stats && (
-            <div className="stats-grid">
-              <div className="stat-card">
-                <h3>Total Bookings</h3>
-                <p className="stat-number">{stats.totalBookings}</p>
+            <div className="dashboard-layout">
+              <div className="stats-grid">
+                <div className="stat-card">
+                  <h3>Total Bookings</h3>
+                  <p className="stat-number">{stats.totalBookings}</p>
+                </div>
+                <div className="stat-card">
+                  <h3>Active Cabs</h3>
+                  <p className="stat-number">{stats.totalCabs}</p>
+                </div>
+                <div className="stat-card">
+                  <h3>Cab Types</h3>
+                  <p className="stat-number">{stats.totalCabTypes}</p>
+                </div>
+                <div className="stat-card">
+                  <h3>Recent Bookings (7 days)</h3>
+                  <p className="stat-number">{stats.recentBookings}</p>
+                </div>
               </div>
-              <div className="stat-card">
-                <h3>Active Cabs</h3>
-                <p className="stat-number">{stats.totalCabs}</p>
+              
+              <div className="recent-bookings-panel">
+                <h3 className="recent-bookings-title">Recent Bookings</h3>
+                <div className="recent-bookings-list">
+                  {recentBookings.length === 0 ? (
+                    <p className="no-bookings">No recent bookings</p>
+                  ) : (
+                    recentBookings.map((booking) => (
+                      <div
+                        key={booking.id}
+                        className="recent-booking-item"
+                        onClick={() => handleBookingClick(booking)}
+                      >
+                        <div className="recent-booking-header">
+                          <span className="recent-booking-id">#{booking.id}</span>
+                          <span className={`recent-booking-status ${booking.booking_status}`}>
+                            {booking.booking_status}
+                          </span>
+                        </div>
+                        <div className="recent-booking-info">
+                          <p className="recent-booking-passenger">{booking.passenger_name}</p>
+                          <p className="recent-booking-service">
+                            {booking.service_type === 'local' ? 'Local' : 
+                             booking.service_type === 'airport' ? 'Airport' : 
+                             booking.service_type === 'outstation' ? (
+                               booking.trip_type ? (
+                                 `Outstation - ${booking.trip_type === 'one_way' ? 'One Way' :
+                                                booking.trip_type === 'round_trip' ? 'Round Trip' :
+                                                booking.trip_type === 'multiple_way' ? 'Multiple Way' : booking.trip_type}${booking.from_location ? ` • ${booking.from_location}` : ''}`
+                               ) : (
+                                 `Outstation${booking.from_location ? ` • ${booking.from_location}` : ''}`
+                               )
+                             ) : booking.service_type}
+                          </p>
+                          <p className="recent-booking-date">
+                            {new Date(booking.booking_date).toLocaleString()}
+                          </p>
+                          <p className="recent-booking-fare">₹{booking.fare_amount}</p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
-              <div className="stat-card">
-                <h3>Cab Types</h3>
-                <p className="stat-number">{stats.totalCabTypes}</p>
-              </div>
-              <div className="stat-card">
-                <h3>Recent Bookings (7 days)</h3>
-                <p className="stat-number">{stats.recentBookings}</p>
+            </div>
+          )}
+
+          {/* Booking Details Modal */}
+          {showBookingModal && selectedBooking && (
+            <div className="modal-overlay" onClick={() => setShowBookingModal(false)}>
+              <div className="booking-modal glass-modal" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">
+                  <h2>Booking Details - #{selectedBooking.id}</h2>
+                  <button
+                    className="modal-close"
+                    onClick={() => setShowBookingModal(false)}
+                  >
+                    ✕
+                  </button>
+                </div>
+                
+                <div className="modal-content">
+                  <div className="detail-item">
+                    <div className="detail-heading">Booking ID</div>
+                    <div className="detail-divider"></div>
+                    <div className="detail-text">#{selectedBooking.id}</div>
+                  </div>
+
+                  <div className="detail-item">
+                    <div className="detail-heading">Status</div>
+                    <div className="detail-divider"></div>
+                    <select
+                      value={selectedBooking.booking_status}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        updateBookingStatus(selectedBooking.id, e.target.value);
+                      }}
+                      className="detail-select"
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="confirmed">Confirmed</option>
+                      <option value="in_progress">In Progress</option>
+                      <option value="completed">Completed</option>
+                      <option value="cancelled">Cancelled</option>
+                    </select>
+                  </div>
+
+                  <div className="detail-item">
+                    <div className="detail-heading">Service Type</div>
+                    <div className="detail-divider"></div>
+                    <div className="detail-text">
+                      {selectedBooking.service_type === 'local' ? 'Local' : 
+                       selectedBooking.service_type === 'airport' ? 'Airport' : 
+                       selectedBooking.service_type === 'outstation' ? (
+                         selectedBooking.trip_type ? (
+                           <>
+                             Outstation ({selectedBooking.trip_type === 'one_way' ? 'One Way' :
+                              selectedBooking.trip_type === 'round_trip' ? 'Round Trip' :
+                              selectedBooking.trip_type === 'multiple_way' ? 'Multiple Way' : selectedBooking.trip_type})
+                           </>
+                         ) : 'Outstation'
+                       ) : selectedBooking.service_type}
+                    </div>
+                  </div>
+
+                  {selectedBooking.service_type === 'local' ? (
+                    <>
+                      <div className="detail-item">
+                        <div className="detail-heading">Pickup Location</div>
+                        <div className="detail-divider"></div>
+                        <div className="detail-text">{selectedBooking.from_location || 'N/A'}</div>
+                      </div>
+                      {selectedBooking.number_of_hours && (
+                        <div className="detail-item">
+                          <div className="detail-heading">Duration</div>
+                          <div className="detail-divider"></div>
+                          <div className="detail-text">{selectedBooking.number_of_hours} hours</div>
+                        </div>
+                      )}
+                    </>
+                  ) : selectedBooking.service_type === 'airport' ? (
+                    <>
+                      <div className="detail-item">
+                        <div className="detail-heading">From</div>
+                        <div className="detail-divider"></div>
+                        <div className="detail-text">{selectedBooking.from_location || 'N/A'}</div>
+                      </div>
+                      <div className="detail-item">
+                        <div className="detail-heading">To</div>
+                        <div className="detail-divider"></div>
+                        <div className="detail-text">{selectedBooking.to_location && selectedBooking.to_location !== 'N/A' ? selectedBooking.to_location : 'N/A'}</div>
+                      </div>
+                    </>
+                  ) : selectedBooking.service_type === 'outstation' && selectedBooking.trip_type === 'one_way' ? (
+                    <>
+                      <div className="detail-item">
+                        <div className="detail-heading">From</div>
+                        <div className="detail-divider"></div>
+                        <div className="detail-text">{selectedBooking.from_location || 'N/A'}</div>
+                      </div>
+                      <div className="detail-item">
+                        <div className="detail-heading">To</div>
+                        <div className="detail-divider"></div>
+                        <div className="detail-text">{selectedBooking.to_location && selectedBooking.to_location !== 'N/A' ? selectedBooking.to_location : 'N/A'}</div>
+                      </div>
+                    </>
+                  ) : selectedBooking.service_type === 'outstation' && selectedBooking.trip_type === 'round_trip' ? (
+                    <>
+                      <div className="detail-item">
+                        <div className="detail-heading">Pickup Location</div>
+                        <div className="detail-divider"></div>
+                        <div className="detail-text">{selectedBooking.from_location || 'N/A'}</div>
+                      </div>
+                    </>
+                  ) : selectedBooking.service_type === 'outstation' && selectedBooking.trip_type === 'multiple_way' ? (
+                    <>
+                      {selectedBooking.from_location && (
+                        <div className="detail-item">
+                          <div className="detail-heading">From</div>
+                          <div className="detail-divider"></div>
+                          <div className="detail-text">{selectedBooking.from_location}</div>
+                        </div>
+                      )}
+                      {selectedBooking.to_location && selectedBooking.to_location !== 'N/A' && (
+                        <div className="detail-item">
+                          <div className="detail-heading">Route</div>
+                          <div className="detail-divider"></div>
+                          <div className="detail-text">{selectedBooking.to_location}</div>
+                        </div>
+                      )}
+                    </>
+                  ) : selectedBooking.service_type === 'outstation' ? (
+                    <>
+                      {selectedBooking.from_location && (
+                        <div className="detail-item">
+                          <div className="detail-heading">From</div>
+                          <div className="detail-divider"></div>
+                          <div className="detail-text">{selectedBooking.from_location}</div>
+                        </div>
+                      )}
+                      {selectedBooking.to_location && selectedBooking.to_location !== 'N/A' && (
+                        <div className="detail-item">
+                          <div className="detail-heading">To</div>
+                          <div className="detail-divider"></div>
+                          <div className="detail-text">{selectedBooking.to_location}</div>
+                        </div>
+                      )}
+                    </>
+                  ) : null}
+
+                  {selectedBooking.distance_km > 0 && (
+                    <div className="detail-item">
+                      <div className="detail-heading">Distance</div>
+                      <div className="detail-divider"></div>
+                      <div className="detail-text">{selectedBooking.distance_km} km</div>
+                    </div>
+                  )}
+
+                  {selectedBooking.cab_type_name && (
+                    <div className="detail-item">
+                      <div className="detail-heading">Cab Type</div>
+                      <div className="detail-divider"></div>
+                      <div className="detail-text">{selectedBooking.cab_type_name}</div>
+                    </div>
+                  )}
+
+                  {selectedBooking.car_option_name && (
+                    <div className="detail-item">
+                      <div className="detail-heading">Car Option</div>
+                      <div className="detail-divider"></div>
+                      <div className="detail-text">{selectedBooking.car_option_name}</div>
+                    </div>
+                  )}
+
+                  <div className="detail-item">
+                    <div className="detail-heading">Passenger Name</div>
+                    <div className="detail-divider"></div>
+                    <div className="detail-text">{selectedBooking.passenger_name}</div>
+                  </div>
+
+                  <div className="detail-item">
+                    <div className="detail-heading">Phone</div>
+                    <div className="detail-divider"></div>
+                    <div className="detail-text">{selectedBooking.passenger_phone}</div>
+                  </div>
+
+                  <div className="detail-item">
+                    <div className="detail-heading">Email</div>
+                    <div className="detail-divider"></div>
+                    <div className="detail-text">{selectedBooking.passenger_email}</div>
+                  </div>
+
+                  <div className="detail-item">
+                    <div className="detail-heading">Fare Amount</div>
+                    <div className="detail-divider"></div>
+                    <div className="detail-text">₹{selectedBooking.fare_amount}</div>
+                  </div>
+
+                  <div className="detail-item">
+                    <div className="detail-heading">Booking Date</div>
+                    <div className="detail-divider"></div>
+                    <div className="detail-text">{new Date(selectedBooking.booking_date).toLocaleString()}</div>
+                  </div>
+
+                  {selectedBooking.travel_date && (
+                    <div className="detail-item">
+                      <div className="detail-heading">Travel Date</div>
+                      <div className="detail-divider"></div>
+                      <div className="detail-text">{new Date(selectedBooking.travel_date).toLocaleString()}</div>
+                    </div>
+                  )}
+
+                  {selectedBooking.notes && (
+                    <div className="detail-item">
+                      <div className="detail-heading">Notes</div>
+                      <div className="detail-divider"></div>
+                      <div className="detail-text">{selectedBooking.notes}</div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="modal-footer">
+                  <div className="receipt-options">
+                    <label className="gst-option-label">
+                      <input
+                        type="radio"
+                        checked={receiptWithGST}
+                        onChange={() => setReceiptWithGST(true)}
+                      />
+                      <span>With GST</span>
+                    </label>
+                    <label className="gst-option-label">
+                      <input
+                        type="radio"
+                        checked={!receiptWithGST}
+                        onChange={() => setReceiptWithGST(false)}
+                      />
+                      <span>Without GST</span>
+                    </label>
+                  </div>
+                  <div className="footer-actions">
+                    <button
+                      className="btn btn-secondary"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigator.clipboard.writeText(selectedBooking.id);
+                        alert('Booking ID copied!');
+                      }}
+                    >
+                      Copy ID
+                    </button>
+                    <button
+                      className="btn btn-primary"
+                      onClick={handlePrintReceipt}
+                    >
+                      Print Receipt
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -627,27 +1123,37 @@ const AdminDashboard = () => {
               </div>
               
               <div className="cab-types-hierarchical">
-                {cabTypes.map((ct) => {
-                  const isExpanded = expandedCabTypes[ct.id];
-                  const carsBySubtype = cabTypeCars[ct.id] || {};
-                  const subtypes = Object.keys(carsBySubtype).sort();
+                {cabTypes.map((cabType) => {
+                  const cabTypeId = Number(cabType.id);
+                  const carsData = cabTypeCars[cabTypeId] || {};
+                  const subtypeNames = Object.keys(carsData).sort();
+                  const hasCars = subtypeNames.length > 0;
+                  
+                  // Determine if expanded: default to true if has cars, unless explicitly set to false
+                  const isExpanded = expandedCabTypes[cabTypeId] !== undefined 
+                    ? expandedCabTypes[cabTypeId] 
+                    : hasCars;
                   
                   return (
-                    <div key={ct.id} className="cab-type-section">
-                      <div className="cab-type-header" onClick={() => toggleCabTypeExpansion(ct.id)}>
+                    <div key={cabType.id} className="cab-type-section">
+                      {/* Header - Clickable to expand/collapse */}
+                      <div 
+                        className="cab-type-header" 
+                        onClick={() => toggleCabTypeExpansion(cabTypeId)}
+                      >
                         <div className="cab-type-header-left">
                           <span className="expand-icon">{isExpanded ? '▼' : '▶'}</span>
-                          <h3>{ct.name}</h3>
+                          <h3>{cabType.name}</h3>
                           <span className="cab-type-info">
-                            ₹{ct.base_fare} base + ₹{ct.per_km_rate}/km
-                            {ct.per_minute_rate > 0 && ` + ₹${ct.per_minute_rate}/min`}
+                            ₹{cabType.base_fare} base + ₹{cabType.per_km_rate}/km
+                            {cabType.per_minute_rate > 0 && ` + ₹${cabType.per_minute_rate}/min`}
                           </span>
                         </div>
                         <div className="cab-type-header-right">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              openEditForm(ct);
+                              openEditForm(cabType);
                             }}
                             className="btn btn-secondary btn-sm"
                           >
@@ -656,7 +1162,7 @@ const AdminDashboard = () => {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleDelete('cab-types', ct.id);
+                              handleDelete('cab-types', cabType.id);
                             }}
                             className="btn btn-danger btn-sm"
                           >
@@ -665,7 +1171,7 @@ const AdminDashboard = () => {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              openAddCarModal(ct.id);
+                              openAddCarModal(cabTypeId);
                             }}
                             className="btn btn-primary btn-sm"
                           >
@@ -674,43 +1180,118 @@ const AdminDashboard = () => {
                         </div>
                       </div>
                       
+                      {/* Content - Shows when expanded */}
                       {isExpanded && (
                         <div className="cab-type-content">
-                          {subtypes.length === 0 ? (
+                          {!hasCars ? (
                             <div className="no-cars-message">
                               <p>No cars assigned to this cab type yet.</p>
                               <button
-                                onClick={() => openAddCarModal(ct.id)}
+                                onClick={() => openAddCarModal(cabTypeId)}
                                 className="btn btn-primary btn-sm"
                               >
                                 + Add Car
                               </button>
                             </div>
                           ) : (
-                            subtypes.map((subtype) => (
-                              <div key={subtype} className="car-subtype-section">
-                                <h4 className="subtype-header">{subtype}</h4>
-                                <div className="cars-grid">
-                                  {carsBySubtype[subtype].map((car) => (
-                                    <div key={car.id} className="car-card">
-                                      {car.image_url && (
-                                        <img src={car.image_url} alt={car.name} className="car-card-image" />
-                                      )}
-                                      <div className="car-card-content">
-                                        <h5>{car.name}</h5>
-                                        {car.description && <p>{car.description}</p>}
-                                      </div>
-                                      <button
-                                        onClick={() => handleRemoveCarFromCabType(car.id)}
-                                        className="btn btn-danger btn-sm car-remove-btn"
-                                      >
-                                        Remove
-                                      </button>
-                                    </div>
-                                  ))}
+                            subtypeNames.map((subtypeName) => {
+                              const carsInSubtype = Array.isArray(carsData[subtypeName]) 
+                                ? carsData[subtypeName] 
+                                : [];
+                              
+                              return (
+                                <div key={`${cabTypeId}-${subtypeName}`} className="car-subtype-section">
+                                  <h4 className="subtype-header">{subtypeName}</h4>
+                                  <div className="cars-grid">
+                                    {carsInSubtype.map((car) => {
+                                      // Get image URL - try image_urls array first, then image_url
+                                      // The normalizeCarOptionImages function returns both
+                                      let imageUrl = null;
+                                      if (car.image_urls && Array.isArray(car.image_urls) && car.image_urls.length > 0) {
+                                        imageUrl = car.image_urls[0];
+                                      } else if (car.image_url) {
+                                        imageUrl = car.image_url;
+                                      }
+                                      
+                                      // If image_url is a JSON string, try to parse it
+                                      if (!imageUrl && car.image_url && typeof car.image_url === 'string' && car.image_url.startsWith('[')) {
+                                        try {
+                                          const parsed = JSON.parse(car.image_url);
+                                          if (Array.isArray(parsed) && parsed.length > 0) {
+                                            imageUrl = parsed[0];
+                                          }
+                                        } catch (e) {
+                                          console.error('Error parsing image_url JSON:', e);
+                                        }
+                                      }
+                                      
+                                      // Convert absolute http:// or https:// URLs to relative URLs to avoid mixed content
+                                      if (imageUrl && typeof imageUrl === 'string') {
+                                        // Check if it's an absolute URL with http:// or https://
+                                        if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+                                          const httpMatch = imageUrl.match(/https?:\/\/[^\/]+(\/uploads\/car-options\/.+)/);
+                                          if (httpMatch) {
+                                            imageUrl = httpMatch[1]; // Use relative path
+                                          }
+                                        } else if (imageUrl.startsWith('//')) {
+                                          // Handle protocol-relative URLs
+                                          const protocolRelativeMatch = imageUrl.match(/\/\/([^\/]+)(\/uploads\/car-options\/.+)/);
+                                          if (protocolRelativeMatch) {
+                                            imageUrl = protocolRelativeMatch[2]; // Use relative path
+                                          }
+                                        }
+                                        
+                                        // Convert relative URL to full backend URL
+                                        if (imageUrl.startsWith('/uploads/')) {
+                                          imageUrl = getImageUrl(imageUrl);
+                                        }
+                                      }
+                                      
+                                      return (
+                                        <div key={car.id} className="car-card">
+                                          {imageUrl ? (
+                                            <img 
+                                              src={imageUrl} 
+                                              alt={car.name} 
+                                              className="car-card-image"
+                                              onError={(e) => {
+                                                console.error(`Failed to load image for ${car.name}:`, imageUrl);
+                                                console.error('Car object:', car);
+                                                e.target.style.display = 'none';
+                                              }}
+                                              onLoad={() => {
+                                                console.log(`Successfully loaded image for ${car.name}:`, imageUrl);
+                                              }}
+                                            />
+                                          ) : (
+                                            <div className="car-card-image" style={{
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              justifyContent: 'center',
+                                              background: '#e5e7eb',
+                                              color: '#6b7280',
+                                              fontSize: '12px'
+                                            }}>
+                                              No Image
+                                            </div>
+                                          )}
+                                          <div className="car-card-content">
+                                            <h5>{car.name}</h5>
+                                            {car.description && <p>{car.description}</p>}
+                                          </div>
+                                          <button
+                                            onClick={() => handleRemoveCarFromCabType(car.id)}
+                                            className="btn btn-danger btn-sm car-remove-btn"
+                                          >
+                                            Remove
+                                          </button>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
                                 </div>
-                              </div>
-                            ))
+                              );
+                            })
                           )}
                         </div>
                       )}
@@ -987,9 +1568,7 @@ const AdminDashboard = () => {
                     <tr>
                       <th>ID</th>
                       <th>Service</th>
-                      <th>From</th>
-                      <th>To</th>
-                      <th>Hours</th>
+                      <th>Details</th>
                       <th>Cab Type</th>
                       <th>Car Option</th>
                       <th>Passenger</th>
@@ -1005,7 +1584,7 @@ const AdminDashboard = () => {
                     ([groupKey, group]) => (
                       <React.Fragment key={groupKey}>
                         <tr className="booking-group-row">
-                          <td colSpan="13">
+                          <td colSpan="11">
                             <div className="booking-group-header">
                               <span className="booking-group-title">
                                 {group.userLabel}
@@ -1018,24 +1597,99 @@ const AdminDashboard = () => {
                           </td>
                         </tr>
                         {group.bookings.map((booking) => (
-                          <tr key={booking.id}>
-                            <td data-label="ID">{booking.id}</td>
+                          <tr 
+                            key={booking.id}
+                            className="booking-table-row"
+                            onClick={() => handleBookingClick(booking)}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            <td data-label="ID">#{booking.id}</td>
                             <td data-label="Service">
                               <span className={`service-badge ${booking.service_type || 'local'}`}>
                                 {(booking.service_type || 'local').charAt(0).toUpperCase() + (booking.service_type || 'local').slice(1)}
                               </span>
                             </td>
-                            <td data-label="From">{booking.from_location}</td>
-                            <td data-label="To">
-                              {booking.service_type === 'local' || booking.to_location === 'N/A' 
-                                ? <span className="text-muted">Local</span> 
-                                : booking.to_location}
-                            </td>
-                            <td data-label="Hours">
+                            <td data-label="Details">
                               {booking.service_type === 'local' ? (
-                                booking.number_of_hours 
-                                  ? <span style={{ fontWeight: 600, color: '#111827' }}>{booking.number_of_hours} hrs</span>
-                                  : <span style={{ color: '#dc2626', fontStyle: 'italic', fontWeight: 600 }}>⚠ Missing</span>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  <div>
+                                    <strong>From:</strong> {booking.from_location || '-'}
+                                  </div>
+                                  {booking.number_of_hours && (
+                                    <div>
+                                      <strong>Hours:</strong> {booking.number_of_hours} hrs
+                                    </div>
+                                  )}
+                                </div>
+                              ) : booking.service_type === 'airport' ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  <div>
+                                    <strong>From:</strong> {booking.from_location || '-'}
+                                  </div>
+                                  <div>
+                                    <strong>To:</strong> {booking.to_location && booking.to_location !== 'N/A' ? booking.to_location : '-'}
+                                  </div>
+                                </div>
+                              ) : booking.service_type === 'outstation' ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  {booking.trip_type ? (
+                                    <>
+                                      <div>
+                                        <strong>Trip Type:</strong>{' '}
+                                        {booking.trip_type === 'one_way' ? 'One Way' :
+                                         booking.trip_type === 'round_trip' ? 'Round Trip' :
+                                         booking.trip_type === 'multiple_way' ? 'Multiple Way' :
+                                         booking.trip_type}
+                                      </div>
+                                      {booking.trip_type === 'one_way' && (
+                                        <>
+                                          {booking.from_location && (
+                                            <div>
+                                              <strong>From:</strong> {booking.from_location}
+                                            </div>
+                                          )}
+                                          {booking.to_location && booking.to_location !== 'N/A' && (
+                                            <div>
+                                              <strong>To:</strong> {booking.to_location}
+                                            </div>
+                                          )}
+                                        </>
+                                      )}
+                                      {booking.trip_type === 'round_trip' && booking.from_location && (
+                                        <div>
+                                          <strong>Pickup:</strong> {booking.from_location}
+                                        </div>
+                                      )}
+                                      {booking.trip_type === 'multiple_way' && (
+                                        <>
+                                          {booking.from_location && (
+                                            <div>
+                                              <strong>From:</strong> {booking.from_location}
+                                            </div>
+                                          )}
+                                          {booking.to_location && booking.to_location !== 'N/A' && (
+                                            <div>
+                                              <strong>Route:</strong> {booking.to_location}
+                                            </div>
+                                          )}
+                                        </>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <>
+                                      {booking.from_location && (
+                                        <div>
+                                          <strong>From:</strong> {booking.from_location}
+                                        </div>
+                                      )}
+                                      {booking.to_location && booking.to_location !== 'N/A' && (
+                                        <div>
+                                          <strong>To:</strong> {booking.to_location}
+                                        </div>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
                               ) : (
                                 <span className="text-muted">-</span>
                               )}
@@ -1072,7 +1726,8 @@ const AdminDashboard = () => {
                             </td>
                             <td data-label="Actions">
                               <button
-                                onClick={() => {
+                                onClick={(e) => {
+                                  e.stopPropagation();
                                   navigator.clipboard.writeText(booking.id);
                                   alert('Booking ID copied!');
                                 }}
@@ -1081,9 +1736,10 @@ const AdminDashboard = () => {
                                 Copy ID
                               </button>
                               <button
-                                onClick={() =>
-                                  downloadReceipt(booking.id)
-                                }
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  downloadReceipt(booking.id);
+                                }}
                                 className="btn btn-primary btn-sm"
                               >
                                 Receipt
@@ -1096,6 +1752,107 @@ const AdminDashboard = () => {
                   )}
                 </tbody>
               </table>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'bills-invoices' && (
+            <div>
+              <div className="section-header">
+                <h2>Bills and Invoices</h2>
+              </div>
+              <div className="data-table-wrapper">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Booking ID</th>
+                      <th>Passenger</th>
+                      <th>Service Type</th>
+                      <th>From</th>
+                      <th>To</th>
+                      <th>Fare (₹)</th>
+                      <th>Status</th>
+                      <th>Date</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bookings.length === 0 ? (
+                      <tr>
+                        <td colSpan="9" style={{ textAlign: 'center', padding: '40px' }}>
+                          <p className="text-muted">No bookings found</p>
+                        </td>
+                      </tr>
+                    ) : (
+                      bookings.map((booking) => (
+                        <tr key={booking.id} className="booking-table-row">
+                          <td>
+                            <strong style={{ color: '#facc15' }}>#{booking.id}</strong>
+                          </td>
+                          <td>
+                            <div>
+                              <strong>{booking.passenger_name || '-'}</strong>
+                              <br />
+                              <small style={{ color: '#6b7280' }}>{booking.passenger_phone || '-'}</small>
+                            </div>
+                          </td>
+                          <td>
+                            <span className={`service-badge ${booking.service_type || 'local'}`}>
+                              {booking.service_type === 'local' ? 'Local' : 
+                               booking.service_type === 'airport' ? 'Airport' : 
+                               booking.service_type === 'outstation' ? 'Outstation' : 'Local'}
+                            </span>
+                          </td>
+                          <td>{booking.from_location || 'N/A'}</td>
+                          <td>{booking.to_location || 'N/A'}</td>
+                          <td>
+                            <strong style={{ color: '#facc15', fontSize: '16px' }}>
+                              ₹{parseFloat(booking.fare_amount || 0).toFixed(2)}
+                            </strong>
+                          </td>
+                          <td>
+                            <span className={`status-badge ${booking.booking_status || 'pending'}`}>
+                              {booking.booking_status || 'pending'}
+                            </span>
+                          </td>
+                          <td>
+                            {booking.booking_date 
+                              ? new Date(booking.booking_date).toLocaleDateString('en-IN', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric'
+                                })
+                              : '-'}
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleGenerateInvoice(booking.id, false);
+                                }}
+                                className="btn btn-secondary btn-sm"
+                                title="Generate Invoice without GST"
+                              >
+                                Invoice (No GST)
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleGenerateInvoice(booking.id, true);
+                                }}
+                                className="btn btn-primary btn-sm"
+                                title="Generate Invoice with GST"
+                              >
+                                Invoice (GST)
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
@@ -1862,16 +2619,62 @@ const AdminDashboard = () => {
                 <select
                   required
                   value={formData.car_option_id || ''}
-                  onChange={(e) => setFormData({ ...formData, car_option_id: parseInt(e.target.value) })}
+                  onChange={(e) => handleCarSelection(e.target.value)}
                 >
                   <option value="">Choose a car...</option>
-                  {availableCars.map((car) => (
-                    <option key={car.id} value={car.id}>
-                      {car.name} {car.description ? `- ${car.description}` : ''}
-                    </option>
-                  ))}
+                  {availableCars.length === 0 ? (
+                    <option value="" disabled>No cars available. Please add cars in Car Options section first.</option>
+                  ) : (
+                    availableCars.map((car) => (
+                      <option key={car.id} value={car.id}>
+                        {car.name} {car.description ? `- ${car.description}` : ''}
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
+
+              {/* Display selected car details */}
+              {selectedCarDetails && (
+                <div className="selected-car-preview" style={{
+                  marginBottom: '20px',
+                  padding: '16px',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '8px',
+                  background: '#f9fafb'
+                }}>
+                  <h4 style={{ margin: '0 0 12px 0', color: '#111827' }}>Selected Car Details</h4>
+                  {selectedCarDetails.image_url && (
+                    <div style={{ marginBottom: '12px' }}>
+                      <img 
+                        src={selectedCarDetails.image_url} 
+                        alt={selectedCarDetails.name}
+                        style={{
+                          width: '100%',
+                          maxWidth: '300px',
+                          height: '200px',
+                          objectFit: 'cover',
+                          borderRadius: '8px',
+                          border: '1px solid #e5e7eb'
+                        }}
+                      />
+                    </div>
+                  )}
+                  <div style={{ marginBottom: '8px' }}>
+                    <strong>Name:</strong> {selectedCarDetails.name}
+                  </div>
+                  {selectedCarDetails.description && (
+                    <div style={{ marginBottom: '8px' }}>
+                      <strong>Description:</strong> {selectedCarDetails.description}
+                    </div>
+                  )}
+                  {selectedCarDetails.car_subtype && (
+                    <div style={{ marginBottom: '8px' }}>
+                      <strong>Current Subtype:</strong> {selectedCarDetails.car_subtype}
+                    </div>
+                  )}
+                </div>
+              )}
               
               <div className="form-group">
                 <label>Car Subtype (e.g., Sedan, SUV, Innova) *</label>

@@ -123,7 +123,7 @@ const CorporateBookingPage = () => {
 
   return (
     <div className="corporate-booking-page">
-      <MainNavbar />
+      <MainNavbar logoOnly />
       
       <div className="flowing-banner">
         <div className="flowing-banner-content">
