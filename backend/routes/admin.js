@@ -870,28 +870,6 @@ const normalizeCarOptionImages = (row) => {
     }
   }
 
-  // Convert absolute URLs to relative URLs to avoid mixed content issues
-  // Relative URLs will use the same protocol as the page (HTTP or HTTPS)
-  imageUrls = imageUrls.map(url => {
-    if (typeof url === 'string') {
-      // Convert http:// or https:// URLs to relative paths
-      const urlMatch = url.match(/https?:\/\/[^\/]+(\/uploads\/car-options\/.+)/);
-      if (urlMatch) {
-        return urlMatch[1]; // Return the relative path
-      }
-      // If already protocol-relative (//domain.com/path), convert to relative
-      const protocolRelativeMatch = url.match(/\/\/([^\/]+)(\/uploads\/car-options\/.+)/);
-      if (protocolRelativeMatch) {
-        return protocolRelativeMatch[2]; // Return the relative path
-      }
-      // If already relative, return as is
-      if (url.startsWith('/uploads/')) {
-        return url;
-      }
-    }
-    return url;
-  });
-
   return {
     ...row,
     image_urls: imageUrls,
@@ -929,9 +907,9 @@ router.post(
 
       let imageUrls = [];
       if (req.files && req.files.length > 0) {
-        // Use relative URLs to avoid mixed content issues
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
         imageUrls = req.files.map(
-          (file) => `/uploads/car-options/${file.filename}`
+          (file) => `${baseUrl}/uploads/car-options/${file.filename}`
         );
       }
 
@@ -986,9 +964,9 @@ router.put('/car-options/:id', upload.array('images', 10), async (req, res) => {
         }
       }
 
-      // Use relative URLs to avoid mixed content issues
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
       const newUrls = req.files.map(
-        (file) => `/uploads/car-options/${file.filename}`
+        (file) => `${baseUrl}/uploads/car-options/${file.filename}`
       );
 
       const combined = [...existingUrls, ...newUrls];
@@ -1064,7 +1042,7 @@ router.get('/cab-types/:cabTypeId/cars', async (req, res) => {
       `SELECT co.*, ct.name as cab_type_name
        FROM car_options co
        LEFT JOIN cab_types ct ON co.cab_type_id = ct.id
-       WHERE co.cab_type_id = ?
+       WHERE co.cab_type_id = ? AND co.is_active = 1
        ORDER BY co.car_subtype, co.sort_order ASC`,
       [cabTypeId]
     );
@@ -1089,7 +1067,7 @@ router.get('/cab-types/:cabTypeId/cars', async (req, res) => {
 // Assign car to cab type and subtype
 router.post('/cab-types/:cabTypeId/assign-car', [
   body('car_option_id').isInt().withMessage('Car option ID is required'),
-  body('car_subtype').notEmpty().withMessage('Car subtype is required'),
+  body('car_subtype').optional().notEmpty().withMessage('Car subtype must not be empty'),
 ], async (req, res) => {
   try {
     const errors = validationResult(req);

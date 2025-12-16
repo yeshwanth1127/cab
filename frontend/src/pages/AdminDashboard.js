@@ -3,25 +3,6 @@ import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import './AdminDashboard.css';
 
-// Helper to get the backend base URL for images
-const getImageUrl = (relativePath) => {
-  if (!relativePath) return null;
-  
-  // If already absolute URL, return as is
-  if (relativePath.startsWith('http://') || relativePath.startsWith('https://')) {
-    return relativePath;
-  }
-  
-  // Get API base URL and extract the base (without /api)
-  const apiBaseURL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
-  const backendBaseURL = apiBaseURL.replace('/api', '');
-  
-  // Ensure relative path starts with /
-  const path = relativePath.startsWith('/') ? relativePath : `/${relativePath}`;
-  
-  return `${backendBaseURL}${path}`;
-};
-
 const AdminDashboard = () => {
   const { user, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -47,7 +28,6 @@ const AdminDashboard = () => {
   const [showAddCarModal, setShowAddCarModal] = useState(false);
   const [selectedCabTypeForCar, setSelectedCabTypeForCar] = useState(null);
   const [availableCars, setAvailableCars] = useState([]);
-  const [selectedCarDetails, setSelectedCarDetails] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [rateMeters, setRateMeters] = useState([]);
@@ -107,35 +87,13 @@ const AdminDashboard = () => {
         for (const cabType of response.data) {
           try {
             const carsResponse = await api.get(`/admin/cab-types/${cabType.id}/cars`);
-            // Ensure we have an object (the API returns grouped object by subtype)
-            const cars = carsResponse.data && typeof carsResponse.data === 'object' 
-              ? carsResponse.data 
-              : {};
-            // Store with the cab type ID as number (consistent with cabTypes array)
-            const id = Number(cabType.id);
-            carsData[id] = cars;
+            carsData[cabType.id] = carsResponse.data;
           } catch (error) {
             console.error(`Error fetching cars for cab type ${cabType.id}:`, error);
-            const id = Number(cabType.id);
-            carsData[id] = {};
+            carsData[cabType.id] = {};
           }
         }
         setCabTypeCars(carsData);
-        
-        // Auto-expand cab types that have cars assigned (preserve existing expansions)
-        setExpandedCabTypes(prev => {
-          const expanded = { ...prev };
-          for (const cabType of response.data) {
-            const cabTypeId = Number(cabType.id);
-            const cars = carsData[cabTypeId] || {};
-            const hasCars = Object.keys(cars).length > 0;
-            // If has cars and not explicitly set to false, set to true
-            if (hasCars && expanded[cabTypeId] !== false) {
-              expanded[cabTypeId] = true;
-            }
-          }
-          return expanded;
-        });
         // Also fetch all cars (including inactive) for the add car modal
         const allCarsResponse = await api.get('/admin/car-options');
         setAvailableCars(allCarsResponse.data || []);
@@ -281,45 +239,16 @@ const AdminDashboard = () => {
   };
 
   const toggleCabTypeExpansion = (cabTypeId) => {
-    const id = Number(cabTypeId);
     setExpandedCabTypes(prev => ({
       ...prev,
-      [id]: !prev[id]
+      [cabTypeId]: !prev[cabTypeId]
     }));
   };
 
   const openAddCarModal = (cabTypeId) => {
     setSelectedCabTypeForCar(cabTypeId);
     setFormData({ car_option_id: '', car_subtype: '' });
-    setSelectedCarDetails(null);
     setShowAddCarModal(true);
-  };
-
-  // Fetch car details when a car is selected
-  const handleCarSelection = async (carOptionId) => {
-    if (!carOptionId) {
-      setSelectedCarDetails(null);
-      setFormData(prev => ({ ...prev, car_option_id: '' }));
-      return;
-    }
-
-    try {
-      // Find the car in availableCars first (faster)
-      const car = availableCars.find(c => c.id === parseInt(carOptionId, 10));
-      if (car) {
-        setSelectedCarDetails(car);
-        setFormData(prev => ({ ...prev, car_option_id: parseInt(carOptionId, 10) }));
-      } else {
-        // If not found, fetch from API
-        const response = await api.get(`/admin/car-options/${carOptionId}`);
-        setSelectedCarDetails(response.data);
-        setFormData(prev => ({ ...prev, car_option_id: parseInt(carOptionId, 10) }));
-      }
-    } catch (error) {
-      console.error('Error fetching car details:', error);
-      alert('Error fetching car details');
-      setSelectedCarDetails(null);
-    }
   };
 
   const handleAssignCar = async (e) => {
@@ -327,83 +256,15 @@ const AdminDashboard = () => {
     setLoading(true);
     try {
       const { car_option_id, car_subtype } = formData;
-      
-      // Validate inputs
-      if (!car_option_id || !car_subtype) {
-        alert('Please select both a car and a subtype');
-        setLoading(false);
-        return;
-      }
-      
-      console.log('Assigning car:', { car_option_id, car_subtype, cabTypeId: selectedCabTypeForCar });
-      
-      const response = await api.post(`/admin/cab-types/${selectedCabTypeForCar}/assign-car`, {
-        car_option_id: parseInt(car_option_id, 10),
-        car_subtype: car_subtype.trim()
+      await api.post(`/admin/cab-types/${selectedCabTypeForCar}/assign-car`, {
+        car_option_id,
+        car_subtype
       });
-      
-      console.log('Car assignment response:', response.data);
       alert('Car assigned successfully');
       setShowAddCarModal(false);
       setFormData({ car_option_id: '', car_subtype: '' });
-      setSelectedCarDetails(null);
-      
-      // Store the cab type ID to expand after refresh
-      const cabTypeIdNum = Number(selectedCabTypeForCar);
-      
-      // Use the same refresh logic as fetchDashboardData for consistency
-      if (activeTab === 'cab-types') {
-        // Fetch all cab types and their cars (same as fetchDashboardData)
-        try {
-          const response = await api.get('/admin/cab-types');
-          setCabTypes(response.data);
-          
-          // Fetch cars for each cab type
-          const carsData = {};
-          for (const cabType of response.data) {
-            try {
-              const carsResponse = await api.get(`/admin/cab-types/${cabType.id}/cars`);
-              const cars = carsResponse.data && typeof carsResponse.data === 'object' 
-                ? carsResponse.data 
-                : {};
-              const id = Number(cabType.id);
-              carsData[id] = cars;
-            } catch (error) {
-              console.error(`Error fetching cars for cab type ${cabType.id}:`, error);
-              const id = Number(cabType.id);
-              carsData[id] = {};
-            }
-          }
-          
-          setCabTypeCars(carsData);
-          
-          // Auto-expand the cab type we just assigned to, and any others with cars
-          setExpandedCabTypes(prev => {
-            const expanded = { ...prev };
-            for (const cabType of response.data) {
-              const ctId = Number(cabType.id);
-              const cars = carsData[ctId] || {};
-              const hasCars = Object.keys(cars).length > 0;
-              // If has cars and not explicitly set to false, set to true
-              if (hasCars && expanded[ctId] !== false) {
-                expanded[ctId] = true;
-              }
-            }
-            // Ensure the one we just assigned to is expanded
-            expanded[cabTypeIdNum] = true;
-            return expanded;
-          });
-        } catch (error) {
-          console.error('Error refreshing after assignment:', error);
-          // Fallback to full refresh
-          await fetchDashboardData();
-        }
-      } else {
-        await fetchDashboardData();
-      }
+      fetchDashboardData();
     } catch (error) {
-      console.error('Error assigning car:', error);
-      console.error('Error response:', error.response?.data);
       alert(error.response?.data?.error || 'Error assigning car');
     } finally {
       setLoading(false);
@@ -1123,37 +984,27 @@ const AdminDashboard = () => {
               </div>
               
               <div className="cab-types-hierarchical">
-                {cabTypes.map((cabType) => {
-                  const cabTypeId = Number(cabType.id);
-                  const carsData = cabTypeCars[cabTypeId] || {};
-                  const subtypeNames = Object.keys(carsData).sort();
-                  const hasCars = subtypeNames.length > 0;
-                  
-                  // Determine if expanded: default to true if has cars, unless explicitly set to false
-                  const isExpanded = expandedCabTypes[cabTypeId] !== undefined 
-                    ? expandedCabTypes[cabTypeId] 
-                    : hasCars;
+                {cabTypes.map((ct) => {
+                  const isExpanded = expandedCabTypes[ct.id];
+                  const carsBySubtype = cabTypeCars[ct.id] || {};
+                  const subtypes = Object.keys(carsBySubtype).sort();
                   
                   return (
-                    <div key={cabType.id} className="cab-type-section">
-                      {/* Header - Clickable to expand/collapse */}
-                      <div 
-                        className="cab-type-header" 
-                        onClick={() => toggleCabTypeExpansion(cabTypeId)}
-                      >
+                    <div key={ct.id} className="cab-type-section">
+                      <div className="cab-type-header" onClick={() => toggleCabTypeExpansion(ct.id)}>
                         <div className="cab-type-header-left">
                           <span className="expand-icon">{isExpanded ? '▼' : '▶'}</span>
-                          <h3>{cabType.name}</h3>
+                          <h3>{ct.name}</h3>
                           <span className="cab-type-info">
-                            ₹{cabType.base_fare} base + ₹{cabType.per_km_rate}/km
-                            {cabType.per_minute_rate > 0 && ` + ₹${cabType.per_minute_rate}/min`}
+                            ₹{ct.base_fare} base + ₹{ct.per_km_rate}/km
+                            {ct.per_minute_rate > 0 && ` + ₹${ct.per_minute_rate}/min`}
                           </span>
                         </div>
                         <div className="cab-type-header-right">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              openEditForm(cabType);
+                              openEditForm(ct);
                             }}
                             className="btn btn-secondary btn-sm"
                           >
@@ -1162,7 +1013,7 @@ const AdminDashboard = () => {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleDelete('cab-types', cabType.id);
+                              handleDelete('cab-types', ct.id);
                             }}
                             className="btn btn-danger btn-sm"
                           >
@@ -1171,7 +1022,7 @@ const AdminDashboard = () => {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              openAddCarModal(cabTypeId);
+                              openAddCarModal(ct.id);
                             }}
                             className="btn btn-primary btn-sm"
                           >
@@ -1180,118 +1031,43 @@ const AdminDashboard = () => {
                         </div>
                       </div>
                       
-                      {/* Content - Shows when expanded */}
                       {isExpanded && (
                         <div className="cab-type-content">
-                          {!hasCars ? (
+                          {subtypes.length === 0 ? (
                             <div className="no-cars-message">
                               <p>No cars assigned to this cab type yet.</p>
                               <button
-                                onClick={() => openAddCarModal(cabTypeId)}
+                                onClick={() => openAddCarModal(ct.id)}
                                 className="btn btn-primary btn-sm"
                               >
                                 + Add Car
                               </button>
                             </div>
                           ) : (
-                            subtypeNames.map((subtypeName) => {
-                              const carsInSubtype = Array.isArray(carsData[subtypeName]) 
-                                ? carsData[subtypeName] 
-                                : [];
-                              
-                              return (
-                                <div key={`${cabTypeId}-${subtypeName}`} className="car-subtype-section">
-                                  <h4 className="subtype-header">{subtypeName}</h4>
-                                  <div className="cars-grid">
-                                    {carsInSubtype.map((car) => {
-                                      // Get image URL - try image_urls array first, then image_url
-                                      // The normalizeCarOptionImages function returns both
-                                      let imageUrl = null;
-                                      if (car.image_urls && Array.isArray(car.image_urls) && car.image_urls.length > 0) {
-                                        imageUrl = car.image_urls[0];
-                                      } else if (car.image_url) {
-                                        imageUrl = car.image_url;
-                                      }
-                                      
-                                      // If image_url is a JSON string, try to parse it
-                                      if (!imageUrl && car.image_url && typeof car.image_url === 'string' && car.image_url.startsWith('[')) {
-                                        try {
-                                          const parsed = JSON.parse(car.image_url);
-                                          if (Array.isArray(parsed) && parsed.length > 0) {
-                                            imageUrl = parsed[0];
-                                          }
-                                        } catch (e) {
-                                          console.error('Error parsing image_url JSON:', e);
-                                        }
-                                      }
-                                      
-                                      // Convert absolute http:// or https:// URLs to relative URLs to avoid mixed content
-                                      if (imageUrl && typeof imageUrl === 'string') {
-                                        // Check if it's an absolute URL with http:// or https://
-                                        if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
-                                          const httpMatch = imageUrl.match(/https?:\/\/[^\/]+(\/uploads\/car-options\/.+)/);
-                                          if (httpMatch) {
-                                            imageUrl = httpMatch[1]; // Use relative path
-                                          }
-                                        } else if (imageUrl.startsWith('//')) {
-                                          // Handle protocol-relative URLs
-                                          const protocolRelativeMatch = imageUrl.match(/\/\/([^\/]+)(\/uploads\/car-options\/.+)/);
-                                          if (protocolRelativeMatch) {
-                                            imageUrl = protocolRelativeMatch[2]; // Use relative path
-                                          }
-                                        }
-                                        
-                                        // Convert relative URL to full backend URL
-                                        if (imageUrl.startsWith('/uploads/')) {
-                                          imageUrl = getImageUrl(imageUrl);
-                                        }
-                                      }
-                                      
-                                      return (
-                                        <div key={car.id} className="car-card">
-                                          {imageUrl ? (
-                                            <img 
-                                              src={imageUrl} 
-                                              alt={car.name} 
-                                              className="car-card-image"
-                                              onError={(e) => {
-                                                console.error(`Failed to load image for ${car.name}:`, imageUrl);
-                                                console.error('Car object:', car);
-                                                e.target.style.display = 'none';
-                                              }}
-                                              onLoad={() => {
-                                                console.log(`Successfully loaded image for ${car.name}:`, imageUrl);
-                                              }}
-                                            />
-                                          ) : (
-                                            <div className="car-card-image" style={{
-                                              display: 'flex',
-                                              alignItems: 'center',
-                                              justifyContent: 'center',
-                                              background: '#e5e7eb',
-                                              color: '#6b7280',
-                                              fontSize: '12px'
-                                            }}>
-                                              No Image
-                                            </div>
-                                          )}
-                                          <div className="car-card-content">
-                                            <h5>{car.name}</h5>
-                                            {car.description && <p>{car.description}</p>}
-                                          </div>
-                                          <button
-                                            onClick={() => handleRemoveCarFromCabType(car.id)}
-                                            className="btn btn-danger btn-sm car-remove-btn"
-                                          >
-                                            Remove
-                                          </button>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
+                            subtypes.map((subtype) => (
+                              <div key={subtype} className="car-subtype-section">
+                                <h4 className="subtype-header">{subtype}</h4>
+                                <div className="cars-grid">
+                                  {carsBySubtype[subtype].map((car) => (
+                                    <div key={car.id} className="car-card">
+                                      {car.image_url && (
+                                        <img src={car.image_url} alt={car.name} className="car-card-image" />
+                                      )}
+                                      <div className="car-card-content">
+                                        <h5>{car.name}</h5>
+                                        {car.description && <p>{car.description}</p>}
+                                      </div>
+                                      <button
+                                        onClick={() => handleRemoveCarFromCabType(car.id)}
+                                        className="btn btn-danger btn-sm car-remove-btn"
+                                      >
+                                        Remove
+                                      </button>
+                                    </div>
+                                  ))}
                                 </div>
-                              );
-                            })
+                              </div>
+                            ))
                           )}
                         </div>
                       )}
@@ -2619,62 +2395,16 @@ const AdminDashboard = () => {
                 <select
                   required
                   value={formData.car_option_id || ''}
-                  onChange={(e) => handleCarSelection(e.target.value)}
+                  onChange={(e) => setFormData({ ...formData, car_option_id: parseInt(e.target.value) })}
                 >
                   <option value="">Choose a car...</option>
-                  {availableCars.length === 0 ? (
-                    <option value="" disabled>No cars available. Please add cars in Car Options section first.</option>
-                  ) : (
-                    availableCars.map((car) => (
-                      <option key={car.id} value={car.id}>
-                        {car.name} {car.description ? `- ${car.description}` : ''}
-                      </option>
-                    ))
-                  )}
+                  {availableCars.map((car) => (
+                    <option key={car.id} value={car.id}>
+                      {car.name} {car.description ? `- ${car.description}` : ''}
+                    </option>
+                  ))}
                 </select>
               </div>
-
-              {/* Display selected car details */}
-              {selectedCarDetails && (
-                <div className="selected-car-preview" style={{
-                  marginBottom: '20px',
-                  padding: '16px',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '8px',
-                  background: '#f9fafb'
-                }}>
-                  <h4 style={{ margin: '0 0 12px 0', color: '#111827' }}>Selected Car Details</h4>
-                  {selectedCarDetails.image_url && (
-                    <div style={{ marginBottom: '12px' }}>
-                      <img 
-                        src={selectedCarDetails.image_url} 
-                        alt={selectedCarDetails.name}
-                        style={{
-                          width: '100%',
-                          maxWidth: '300px',
-                          height: '200px',
-                          objectFit: 'cover',
-                          borderRadius: '8px',
-                          border: '1px solid #e5e7eb'
-                        }}
-                      />
-                    </div>
-                  )}
-                  <div style={{ marginBottom: '8px' }}>
-                    <strong>Name:</strong> {selectedCarDetails.name}
-                  </div>
-                  {selectedCarDetails.description && (
-                    <div style={{ marginBottom: '8px' }}>
-                      <strong>Description:</strong> {selectedCarDetails.description}
-                    </div>
-                  )}
-                  {selectedCarDetails.car_subtype && (
-                    <div style={{ marginBottom: '8px' }}>
-                      <strong>Current Subtype:</strong> {selectedCarDetails.car_subtype}
-                    </div>
-                  )}
-                </div>
-              )}
               
               <div className="form-group">
                 <label>Car Subtype (e.g., Sedan, SUV, Innova) *</label>
