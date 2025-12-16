@@ -67,13 +67,20 @@ const mapCarToSubtype = (name, description) => {
 };
 
 /**
- * Gets the car category/subtype from a car option
- * @param {object} carOption - Car option object with name and description
- * @returns {string} - Subtype, defaults to 'Sedan' if not found
+ * Gets the car category used for rate meter lookup.
+ * We now treat each CAR as its own "category":
+ *  - Prefer the car's name (so rates are per car),
+ *  - Fallback to subtype mapping only if name is missing.
  */
 const getCarCategory = (carOption) => {
   if (!carOption) return 'Sedan';
-  
+
+  // Primary: use the specific car name so each car can have its own rate
+  if (carOption.name) {
+    return carOption.name;
+  }
+
+  // Fallbacks: keep existing subtype logic as backup
   if (carOption.car_subtype) {
     return carOption.car_subtype;
   }

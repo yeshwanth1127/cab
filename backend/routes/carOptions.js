@@ -4,6 +4,7 @@ const db = require('../db/database');
 const router = express.Router();
 
 // Helper to normalize image_url column into array + primary URL
+// Also strips protocol/host to avoid mixed-content issues, keeping /uploads/... paths
 const normalizeCarOptionImages = (row) => {
   let imageUrls = [];
 
@@ -21,10 +22,34 @@ const normalizeCarOptionImages = (row) => {
     }
   }
 
+  const normalizeUrl = (url) => {
+    if (!url) return url;
+
+    // If it's an absolute URL, strip protocol/host and keep the /uploads/... path
+    try {
+      const u = new URL(url);
+      if (u.pathname && u.pathname.startsWith('/uploads/')) {
+        return u.pathname;
+      }
+    } catch {
+      // Not a full URL, fall through
+    }
+
+    // Fallback: look for /uploads/ segment in the string
+    const idx = url.indexOf('/uploads/');
+    if (idx !== -1) {
+      return url.substring(idx);
+    }
+
+    return url;
+  };
+
+  const normalizedUrls = imageUrls.map(normalizeUrl);
+
   return {
     ...row,
-    image_urls: imageUrls,
-    image_url: imageUrls[0] || null,
+    image_urls: normalizedUrls,
+    image_url: normalizedUrls[0] || null,
   };
 };
 

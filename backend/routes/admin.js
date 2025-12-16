@@ -482,12 +482,10 @@ router.get('/bookings', async (req, res) => {
   }
 });
 
-// Download receipt PDF for a booking (admin-only)
+// Download GST-compliant fillable invoice PDF for a booking (admin-only)
 router.get('/bookings/:id/receipt', async (req, res) => {
   try {
     const { id } = req.params;
-    const { withGST } = req.query;
-    const includeGST = withGST === 'true' || withGST === true;
 
     const booking = await db.getAsync(
       `SELECT b.*, u.username, u.email, ct.name as cab_type_name, co.name as car_option_name
@@ -503,107 +501,15 @@ router.get('/bookings/:id/receipt', async (req, res) => {
       return res.status(404).json({ error: 'Booking not found' });
     }
 
-    // Calculate GST (5% for cab services in India)
-    const GST_RATE = 0.05;
-    const baseFare = parseFloat(booking.fare_amount) || 0;
-    const gstAmount = includeGST ? baseFare * GST_RATE : 0;
-    const totalAmount = includeGST ? baseFare + gstAmount : baseFare;
-
-    const doc = new PDFDocument({ margin: 50 });
-
-    const filename = `booking-${booking.id}-receipt.pdf`;
-    const filePath = path.join(receiptsDir, filename);
+    const { generateInvoicePdf } = require('../services/invoiceService');
+    const pdfBytes = await generateInvoicePdf(booking, {});
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
-
-    // Save to disk and stream to client at the same time
-    const fileStream = fs.createWriteStream(filePath);
-    doc.pipe(fileStream);
-    doc.pipe(res);
-
-    // Header
-    doc
-      .fontSize(20)
-      .text('Namma Cabs – Booking Receipt', { align: 'center' })
-      .moveDown(0.5);
-
-    doc
-      .fontSize(12)
-      .text(`Receipt ID: NC-${booking.id}`, { align: 'center' })
-      .text(`Date: ${new Date(booking.booking_date).toLocaleString()}`, {
-        align: 'center',
-      })
-      .moveDown(1.5);
-
-    // Customer
-    doc.fontSize(14).text('Customer Details', { underline: true }).moveDown(0.5);
-    doc
-      .fontSize(12)
-      .text(`Name: ${booking.passenger_name || booking.username || ''}`)
-      .text(`Phone: ${booking.passenger_phone || '-'}`)
-      .text(`Email: ${booking.passenger_email || booking.email || '-'}`)
-      .moveDown(1);
-
-    // Trip
-    doc.fontSize(14).text('Trip Details', { underline: true }).moveDown(0.5);
-    doc
-      .fontSize(12)
-      .text(
-        `Service Type: ${
-          booking.service_type === 'local'
-            ? 'Local'
-            : booking.service_type === 'airport'
-            ? 'Airport'
-            : 'Outstation'
-        }`
-      )
-      .text(`From: ${booking.from_location}`)
-      .text(`To: ${booking.to_location}`)
-      .text(`Cab Type: ${booking.cab_type_name || 'Cab'}`)
-      .text(`Car Option: ${booking.car_option_name || 'Not specified'}`)
-      .text(`Distance: ${booking.distance_km} km`)
-      .text(`Estimated Time: ${booking.estimated_time_minutes} minutes`)
-      .text(
-        `Travel Date: ${
-          booking.travel_date
-            ? new Date(booking.travel_date).toLocaleString()
-            : 'Not specified'
-        }`
-      )
-      .moveDown(1);
-
-    // Fare
-    doc.fontSize(14).text('Fare Summary', { underline: true }).moveDown(0.5);
-    doc.fontSize(12).text(`Base Fare: ₹${baseFare.toFixed(2)}`);
-    
-    if (includeGST) {
-      doc.text(`GST (5%): ₹${gstAmount.toFixed(2)}`);
-      doc.moveDown(0.3);
-      doc.fontSize(13).font('Helvetica-Bold').text(`Total Amount (incl. GST): ₹${totalAmount.toFixed(2)}`);
-      doc.font('Helvetica');
-    } else {
-      doc.moveDown(0.3);
-      doc.fontSize(13).font('Helvetica-Bold').text(`Total Fare: ₹${baseFare.toFixed(2)}`);
-      doc.font('Helvetica');
-    }
-    
-    doc.fontSize(12).moveDown(0.5).text(`Status: ${booking.booking_status}`);
-    if (booking.notes) {
-      doc.moveDown(0.5).text(`Notes: ${booking.notes}`);
-    }
-
-    doc
-      .moveDown(2)
-      .fontSize(10)
-      .text('Thank you for riding with Namma Cabs!', {
-        align: 'center',
-      });
-
-    doc.end();
+    res.setHeader('Content-Disposition', `attachment; filename=invoice-${booking.id}.pdf`);
+    res.send(Buffer.from(pdfBytes));
   } catch (error) {
-    console.error('Error generating receipt PDF (admin):', error);
-    res.status(500).json({ error: 'Error generating receipt' });
+    console.error('Error generating invoice PDF (admin):', error);
+    res.status(500).json({ error: 'Error generating invoice' });
   }
 });
 
@@ -675,9 +581,8 @@ router.post('/rate-meters', [
   body('service_type').isIn(['local', 'airport', 'outstation']).withMessage('Service type must be local, airport, or outstation'),
   body('car_category').notEmpty().withMessage('Car category is required'),
   body('base_fare').isFloat({ min: 0 }).withMessage('Base fare must be a positive number'),
-  body('per_km_rate').isFloat({ min: 0 }).withMessage('Per km rate must be a positive number'),
-  body('per_minute_rate').isFloat({ min: 0 }).withMessage('Per minute rate must be a positive number'),
-  body('per_hour_rate').isFloat({ min: 0 }).withMessage('Per hour rate must be a positive number'),
+  body('per_km_rate').optional().isFloat({ min: 0 }).withMessage('Per km rate must be a positive number'),
+  body('per_hour_rate').optional().isFloat({ min: 0 }).withMessage('Per hour rate must be a positive number'),
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -685,7 +590,12 @@ router.post('/rate-meters', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { service_type, car_category, base_fare, per_km_rate, per_minute_rate, per_hour_rate, is_active } = req.body;
+    const { service_type, car_category, base_fare, per_km_rate, per_hour_rate, is_active } = req.body;
+
+    // Enforce per_hour_rate for local only
+    if (service_type === 'local' && (per_hour_rate === undefined || per_hour_rate === '' || Number(per_hour_rate) < 0)) {
+      return res.status(400).json({ error: 'Per hour rate is required and must be >= 0 for local service type' });
+    }
 
     // Check if rate meter already exists for this service_type and car_category
     const existing = await db.getAsync(
@@ -704,9 +614,9 @@ router.post('/rate-meters', [
         service_type,
         car_category,
         parseFloat(base_fare),
-        parseFloat(per_km_rate),
-        parseFloat(per_minute_rate),
-        parseFloat(per_hour_rate),
+        per_km_rate !== undefined && per_km_rate !== '' ? parseFloat(per_km_rate) : 0,
+        0, // per_minute_rate no longer used
+        per_hour_rate !== undefined && per_hour_rate !== '' ? parseFloat(per_hour_rate) : 0,
         boolToInt(is_active !== undefined ? is_active : true),
       ]
     );
@@ -725,7 +635,6 @@ router.put('/rate-meters/:id', [
   body('car_category').optional().notEmpty().withMessage('Car category cannot be empty'),
   body('base_fare').optional().isFloat({ min: 0 }).withMessage('Base fare must be a positive number'),
   body('per_km_rate').optional().isFloat({ min: 0 }).withMessage('Per km rate must be a positive number'),
-  body('per_minute_rate').optional().isFloat({ min: 0 }).withMessage('Per minute rate must be a positive number'),
   body('per_hour_rate').optional().isFloat({ min: 0 }).withMessage('Per hour rate must be a positive number'),
 ], async (req, res) => {
   try {
@@ -735,7 +644,7 @@ router.put('/rate-meters/:id', [
     }
 
     const { id } = req.params;
-    const { service_type, car_category, base_fare, per_km_rate, per_minute_rate, per_hour_rate, is_active } = req.body;
+    const { service_type, car_category, base_fare, per_km_rate, per_hour_rate, is_active } = req.body;
 
     // Check if rate meter exists
     const existing = await db.getAsync('SELECT * FROM rate_meters WHERE id = ?', [id]);
@@ -778,10 +687,6 @@ router.put('/rate-meters/:id', [
     if (per_km_rate !== undefined) {
       updates.push('per_km_rate = ?');
       values.push(parseFloat(per_km_rate));
-    }
-    if (per_minute_rate !== undefined) {
-      updates.push('per_minute_rate = ?');
-      values.push(parseFloat(per_minute_rate));
     }
     if (per_hour_rate !== undefined) {
       updates.push('per_hour_rate = ?');
@@ -852,7 +757,7 @@ router.get('/dashboard/stats', async (req, res) => {
 
 // ========== CAR OPTIONS MANAGEMENT ==========
 
-// Helper to normalize image_url column into array + primary URL
+// Helper to normalize image URLs to be relative (avoid mixed content) and expose array + primary URL
 const normalizeCarOptionImages = (row) => {
   let imageUrls = [];
 
@@ -870,10 +775,34 @@ const normalizeCarOptionImages = (row) => {
     }
   }
 
+  const normalizeUrl = (url) => {
+    if (!url) return url;
+
+    // If it's an absolute URL, strip protocol/host and keep the /uploads/... path
+    try {
+      const u = new URL(url);
+      if (u.pathname && u.pathname.startsWith('/uploads/')) {
+        return u.pathname;
+      }
+    } catch {
+      // Not a full URL, fall through
+    }
+
+    // Fallback: look for /uploads/ segment in the string
+    const idx = url.indexOf('/uploads/');
+    if (idx !== -1) {
+      return url.substring(idx);
+    }
+
+    return url;
+  };
+
+  const normalizedUrls = imageUrls.map(normalizeUrl);
+
   return {
     ...row,
-    image_urls: imageUrls,
-    image_url: imageUrls[0] || null,
+    image_urls: normalizedUrls,
+    image_url: normalizedUrls[0] || null,
   };
 };
 
@@ -1090,11 +1019,53 @@ router.post('/cab-types/:cabTypeId/assign-car', [
       return res.status(404).json({ error: 'Car option not found' });
     }
 
-    // Update car option
+    // Update car option to reflect assignment
     await db.runAsync(
       'UPDATE car_options SET cab_type_id = ?, car_subtype = ? WHERE id = ?',
       [cabTypeId, car_subtype || null, car_option_id]
     );
+
+    // Record assignment in assigned_cab_for_cab_type table (idempotent)
+    await db.runAsync(
+      `INSERT OR IGNORE INTO assigned_cab_for_cab_type (cab_type_id, car_option_id)
+       VALUES (?, ?)`,
+      [cabTypeId, car_option_id]
+    );
+
+    // Ensure a corresponding rate meter row exists, based on cab type name and car name
+    const fullCabType = await db.getAsync('SELECT * FROM cab_types WHERE id = ?', [cabTypeId]);
+    const fullCarOption = await db.getAsync('SELECT * FROM car_options WHERE id = ?', [car_option_id]);
+
+    if (fullCabType && fullCarOption) {
+      const nameLower = (fullCabType.name || '').toLowerCase();
+      let serviceType = null;
+      if (nameLower.includes('local')) serviceType = 'local';
+      else if (nameLower.includes('airport')) serviceType = 'airport';
+      else if (nameLower.includes('outstation')) serviceType = 'outstation';
+
+      if (serviceType) {
+        const carCategory = fullCarOption.name;
+        const existingRate = await db.getAsync(
+          'SELECT id FROM rate_meters WHERE service_type = ? AND car_category = ?',
+          [serviceType, carCategory]
+        );
+
+        if (!existingRate) {
+          await db.runAsync(
+            `INSERT INTO rate_meters (service_type, car_category, base_fare, per_km_rate, per_minute_rate, per_hour_rate, is_active)
+             VALUES (?, ?, ?, ?, ?, ?, 1)`,
+            [
+              serviceType,
+              carCategory,
+              0, // base_fare
+              0, // per_km_rate
+              0, // per_minute_rate (unused)
+              0, // per_hour_rate
+            ]
+          );
+        }
+      }
+    }
 
     const updated = await db.getAsync(
       `SELECT co.*, ct.name as cab_type_name

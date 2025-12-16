@@ -4,6 +4,7 @@ const db = require('../db/database');
 const { sendBookingConfirmationEmail } = require('../services/emailService');
 const { authenticateToken } = require('../middleware/auth');
 const { getCarCategory } = require('../utils/carMapping');
+const { getDistanceAndTime } = require('../services/googleDistanceService');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
@@ -23,8 +24,21 @@ router.post('/calculate-fare', [
   body('service_type').isIn(['local', 'airport', 'outstation']).withMessage('Service type must be local, airport, or outstation'),
   body('trip_type').optional().isIn(['one_way', 'round_trip', 'multiple_way']).withMessage('Trip type must be one_way, round_trip, or multiple_way'),
   body('number_of_hours').optional().isInt({ min: 1 }).withMessage('Number of hours must be a positive integer'),
+  body('number_of_days').optional().isInt({ min: 1 }).withMessage('Number of days must be a positive integer'),
   body('cab_type_id').optional().isInt().withMessage('Cab type ID must be an integer'),
   body('distance_km').optional().isNumeric().withMessage('Distance must be a number'),
+  body('from').optional().custom((value) => {
+    if (value && (!value.lat || !value.lng)) {
+      throw new Error('from must have lat and lng');
+    }
+    return true;
+  }),
+  body('to').optional().custom((value) => {
+    if (value && (!value.lat || !value.lng)) {
+      throw new Error('to must have lat and lng');
+    }
+    return true;
+  }),
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -32,7 +46,15 @@ router.post('/calculate-fare', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { from_location, to_location, cab_type_id, service_type, trip_type, distance_km, estimated_time_minutes, number_of_hours } = req.body;
+    const { from, to, from_location, to_location, cab_type_id, service_type, trip_type, distance_km, estimated_time_minutes, number_of_hours, number_of_days } = req.body;
+    
+    console.log('[BACKEND DEBUG] ========== CALCULATE FARE REQUEST ==========');
+    console.log('[BACKEND DEBUG] service_type:', service_type);
+    console.log('[BACKEND DEBUG] from:', JSON.stringify(from, null, 2));
+    console.log('[BACKEND DEBUG] to:', JSON.stringify(to, null, 2));
+    console.log('[BACKEND DEBUG] from_location:', from_location);
+    console.log('[BACKEND DEBUG] to_location:', to_location);
+    console.log('[BACKEND DEBUG] cab_type_id:', cab_type_id);
 
     // Validate local bookings require number_of_hours (strict validation)
     if (service_type === 'local') {
@@ -50,6 +72,15 @@ router.post('/calculate-fare', [
       // Validate outstation bookings require trip_type
       if (!trip_type || (typeof trip_type === 'string' && !trip_type.trim())) {
         return res.status(400).json({ error: 'Trip type is required for outstation bookings' });
+      }
+      // For round trip outstation, number_of_days is required
+      if (trip_type === 'round_trip') {
+        if (!number_of_days || Number(number_of_days) <= 0) {
+          return res.status(400).json({ error: 'Number of days is required and must be greater than 0 for outstation round trips' });
+        }
+        if (!Number.isInteger(Number(number_of_days))) {
+          return res.status(400).json({ error: 'Number of days must be a valid integer for outstation round trips' });
+        }
       }
     } else {
       // Validate airport bookings require from_location and to_location
@@ -126,38 +157,117 @@ router.post('/calculate-fare', [
     let distance = distance_km;
     let time = estimated_time_minutes;
 
-    // For local bookings, use hours instead of distance
+    // Local bookings: ONLY hours-based, do NOT use Google Distance Matrix
     if (service_type === 'local') {
-      if (number_of_hours) {
-        time = number_of_hours * 60; // Convert hours to minutes
-        distance = 0; // Local bookings don't use distance
-      } else {
+      console.log('[DISTANCE DEBUG] local booking - using hours only, ignoring distance');
+      if (!number_of_hours) {
         return res.status(400).json({ error: 'Number of hours is required for local bookings' });
       }
-    } else if (service_type === 'outstation') {
-      // For outstation, we don't have from/to locations, so use defaults
-      // The fare will be calculated based on base fare and trip type multiplier
       distance = 0;
-      time = 0;
+      time = number_of_hours * 60; // minutes
+      console.log('[DISTANCE DEBUG] local booking - Final distance:', distance, 'km');
+      console.log('[DISTANCE DEBUG] local booking - Final time:', time, 'minutes');
     } else {
-      // For airport, check if route exists in database
-      if (!distance && to_location && from_location) {
-        const route = await db.getAsync(
-          `SELECT distance_km, estimated_time_minutes FROM routes 
-           WHERE LOWER(from_location) = LOWER(?) AND LOWER(to_location) = LOWER(?) AND is_active = 1`,
-          [from_location, to_location]
-        );
+      // Airport + Outstation: use Google Distance Matrix when coordinates are provided
+      console.log(`[DISTANCE DEBUG] ${service_type} booking - checking for distance calculation`);
+      console.log('[DISTANCE DEBUG] from:', JSON.stringify(from, null, 2));
+      console.log('[DISTANCE DEBUG] to:', JSON.stringify(to, null, 2));
+      console.log('[DISTANCE DEBUG] distance_km provided:', distance_km);
+      
+      if (!distance && from && to && from.lat && from.lng && to.lat && to.lng) {
+        console.log(`[DISTANCE DEBUG] ${service_type} booking - coordinates valid, calculating distance...`);
+        try {
+          // First, check cache (routes table with coordinates)
+          const tolerance = 0.001; // ~100 meters tolerance
+          const cachedRoute = await db.getAsync(
+            `SELECT distance_km, estimated_time_minutes FROM routes 
+             WHERE from_lat IS NOT NULL 
+             AND from_lng IS NOT NULL 
+             AND to_lat IS NOT NULL 
+             AND to_lng IS NOT NULL
+             AND ABS(from_lat - ?) < ? 
+             AND ABS(from_lng - ?) < ?
+             AND ABS(to_lat - ?) < ?
+             AND ABS(to_lng - ?) < ?
+             AND is_active = 1
+             LIMIT 1`,
+            [from.lat, tolerance, from.lng, tolerance, to.lat, tolerance, to.lng, tolerance]
+          );
 
-        if (route) {
-          distance = parseFloat(route.distance_km);
-          time = route.estimated_time_minutes;
-        } else {
-          // Default distance calculation (you can integrate with Google Maps API here)
-          // For now, using a simple estimate: 10km default
-          distance = 10;
-          time = 20;
+          if (cachedRoute) {
+            console.log(`[DISTANCE DEBUG] Using cached route for ${service_type}:`, cachedRoute);
+            distance = parseFloat(cachedRoute.distance_km);
+            time = cachedRoute.estimated_time_minutes;
+          } else {
+            console.log(`[DISTANCE DEBUG] No cache found for ${service_type}, calling Google Distance Matrix API...`);
+            // Call Google Distance Matrix API
+            const result = await getDistanceAndTime(from, to);
+            console.log(`[DISTANCE DEBUG] Google API result for ${service_type}:`, result);
+            distance = result.distance_km;
+            time = result.duration_min;
+
+            // Cache the result in routes table
+            try {
+              await db.runAsync(
+                `INSERT INTO routes (from_location, to_location, from_lat, from_lng, to_lat, to_lng, distance_km, estimated_time_minutes, is_active)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+                [
+                  from_location || '',
+                  to_location || '',
+                  from.lat,
+                  from.lng,
+                  to.lat,
+                  to.lng,
+                  distance,
+                  time
+                ]
+              );
+              console.log(`[DISTANCE DEBUG] ${service_type} route cached successfully`);
+            } catch (cacheError) {
+              // Log but don't fail if caching fails
+              console.warn(`[DISTANCE DEBUG] Failed to cache ${service_type} route:`, cacheError.message);
+            }
+          }
+        } catch (error) {
+          console.error(`[DISTANCE DEBUG] Error calculating distance for ${service_type}:`, error);
+          console.error('[DISTANCE DEBUG] Error stack:', error.stack);
+          
+          // For airport bookings, distance is required - return error
+          if (service_type === 'airport') {
+            return res.status(500).json({ 
+              error: 'Failed to calculate distance. Please try again.',
+              details: error.message 
+            });
+          }
+          
+          // For outstation, if distance calculation fails, proceed with 0 distance
+          console.warn(`[DISTANCE DEBUG] ${service_type} booking will proceed with distance = 0`);
+          distance = 0;
+          time = 0;
+        }
+      } else {
+        console.log(`[DISTANCE DEBUG] ${service_type} booking - no coordinates provided or distance already set`);
+        console.log('[DISTANCE DEBUG] from exists:', !!from);
+        console.log('[DISTANCE DEBUG] to exists:', !!to);
+        if (from) console.log('[DISTANCE DEBUG] from has lat/lng:', !!from.lat, !!from.lng);
+        if (to) console.log('[DISTANCE DEBUG] to has lat/lng:', !!to.lat, !!to.lng);
+        
+        // For airport bookings, coordinates are required
+        if (service_type === 'airport' && (!from || !to)) {
+          return res.status(400).json({ 
+            error: 'From and To coordinates (lat, lng) are required for airport bookings' 
+          });
+        }
+
+        // For outstation without coordinates, distance/time stay 0 (multiplier-based fare)
+        if (service_type === 'outstation') {
+          if (!distance) distance = 0;
+          if (!time) time = 0;
         }
       }
+      
+      console.log(`[DISTANCE DEBUG] ${service_type} booking - Final distance:`, distance, 'km');
+      console.log(`[DISTANCE DEBUG] ${service_type} booking - Final time:`, time, 'minutes');
     }
 
     // Calculate fare using rate meter if available, otherwise use cab type (legacy)
@@ -175,17 +285,27 @@ router.post('/calculate-fare', [
         distanceCharge = 0;
         timeCharge = hourCharge;
       } else if (service_type === 'outstation' && trip_type) {
-        // Outstation bookings: apply trip type multiplier
-        const tripMultipliers = {
-          'one_way': 1.0,
-          'round_trip': 1.8, // 80% extra for round trip
-          'multiple_way': 2.2, // 120% extra for multiple way
-        };
-        const tripMultiplier = tripMultipliers[trip_type] || 1.0;
-        // For outstation, use base fare with trip type multiplier
-        fare = baseFare * tripMultiplier;
-        distanceCharge = 0;
-        timeCharge = 0;
+        // Outstation bookings
+        if (trip_type === 'round_trip') {
+          // Round trip: 300 km per day, distance-based
+          const days = Number(number_of_days) && Number(number_of_days) > 0
+            ? parseInt(number_of_days, 10)
+            : 1;
+          const perKmRate = parseFloat(rateMeter.per_km_rate || 0);
+          const totalKm = 300 * days;
+
+          distance = totalKm; // For reporting
+          distanceCharge = totalKm * perKmRate;
+          timeCharge = 0;
+          fare = baseFare + distanceCharge;
+        } else {
+          // One-way and multiple-way: distance-based using Google-calculated distance
+          const perKmRate = parseFloat(rateMeter.per_km_rate || 0);
+          const effectiveDistance = distance || 0;
+          distanceCharge = effectiveDistance * perKmRate;
+          timeCharge = 0;
+          fare = baseFare + distanceCharge;
+        }
       } else {
         // Airport use per_km and per_minute
         distanceCharge = distance * parseFloat(rateMeter.per_km_rate);
@@ -218,7 +338,7 @@ router.post('/calculate-fare', [
       fare = subtotal * multiplier;
     }
 
-    res.json({
+    const responseData = {
       fare: Math.round(fare * 100) / 100, // Round to 2 decimal places
       distance_km: distance,
       estimated_time_minutes: time,
@@ -231,8 +351,17 @@ router.post('/calculate-fare', [
         service_multiplier: rateMeter ? 1.0 : multiplier,
         service_type: service_type,
         number_of_hours: service_type === 'local' ? number_of_hours : null,
+        number_of_days: service_type === 'outstation' && trip_type === 'round_trip' ? number_of_days || 1 : null,
       },
-    });
+    };
+    
+    console.log('[BACKEND DEBUG] ========== CALCULATE FARE RESPONSE ==========');
+    console.log('[BACKEND DEBUG] Final distance_km:', distance);
+    console.log('[BACKEND DEBUG] Final estimated_time_minutes:', time);
+    console.log('[BACKEND DEBUG] Final fare:', responseData.fare);
+    console.log('[BACKEND DEBUG] Full response:', JSON.stringify(responseData, null, 2));
+    
+    res.json(responseData);
   } catch (error) {
     console.error('Error calculating fare:', error);
     res.status(500).json({ error: 'Server error' });
@@ -403,20 +532,62 @@ router.post('/', [
         // The fare will be calculated based on base fare and trip type multiplier
         distance = 0; // Will be calculated later if needed
         time = 0; // Will be calculated later if needed
-      } else if (!distance && to_location && from_location) {
-        // Airport bookings: try to find route
-        const route = await db.getAsync(
-          `SELECT distance_km, estimated_time_minutes FROM routes 
-           WHERE LOWER(from_location) = LOWER(?) AND LOWER(to_location) = LOWER(?) AND is_active = 1`,
-          [from_location, to_location]
-        );
+      } else if (!distance && req.body.from && req.body.to && req.body.from.lat && req.body.from.lng && req.body.to.lat && req.body.to.lng) {
+        // Airport bookings: use Google Distance Matrix API
+        try {
+          // First, check cache (routes table with coordinates)
+          const tolerance = 0.001; // ~100 meters tolerance
+          const cachedRoute = await db.getAsync(
+            `SELECT distance_km, estimated_time_minutes FROM routes 
+             WHERE from_lat IS NOT NULL 
+             AND from_lng IS NOT NULL 
+             AND to_lat IS NOT NULL 
+             AND to_lng IS NOT NULL
+             AND ABS(from_lat - ?) < ? 
+             AND ABS(from_lng - ?) < ?
+             AND ABS(to_lat - ?) < ?
+             AND ABS(to_lng - ?) < ?
+             AND is_active = 1
+             LIMIT 1`,
+            [req.body.from.lat, tolerance, req.body.from.lng, tolerance, req.body.to.lat, tolerance, req.body.to.lng, tolerance]
+          );
 
-        if (route) {
-          distance = parseFloat(route.distance_km);
-          time = route.estimated_time_minutes;
-        } else {
-          distance = 10; // Default
-          time = 20;
+          if (cachedRoute) {
+            distance = parseFloat(cachedRoute.distance_km);
+            time = cachedRoute.estimated_time_minutes;
+          } else {
+            // Call Google Distance Matrix API
+            const result = await getDistanceAndTime(req.body.from, req.body.to);
+            distance = result.distance_km;
+            time = result.duration_min;
+
+            // Cache the result in routes table
+            try {
+              await db.runAsync(
+                `INSERT INTO routes (from_location, to_location, from_lat, from_lng, to_lat, to_lng, distance_km, estimated_time_minutes, is_active)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+                [
+                  from_location || '',
+                  to_location || '',
+                  req.body.from.lat,
+                  req.body.from.lng,
+                  req.body.to.lat,
+                  req.body.to.lng,
+                  distance,
+                  time
+                ]
+              );
+            } catch (cacheError) {
+              // Log but don't fail if caching fails
+              console.warn('Failed to cache route:', cacheError.message);
+            }
+          }
+        } catch (error) {
+          console.error('Error calculating distance:', error);
+          return res.status(500).json({ 
+            error: 'Failed to calculate distance. Please try again.',
+            details: error.message 
+          });
         }
       }
 
@@ -594,7 +765,7 @@ router.get('/my', authenticateToken, async (req, res) => {
   }
 });
 
-// Download receipt PDF for a booking (only owner or admin)
+// Download GST-compliant fillable invoice PDF for a booking (only owner or admin)
 router.get('/:id/receipt', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
@@ -618,76 +789,15 @@ router.get('/:id/receipt', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'Not authorized to access this receipt' });
     }
 
-    const doc = new PDFDocument({ margin: 50 });
-
-    const filename = `booking-${booking.id}-receipt.pdf`;
-    const filePath = path.join(receiptsDir, filename);
+    const { generateInvoicePdf } = require('../services/invoiceService');
+    const pdfBytes = await generateInvoicePdf(booking, {});
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
-
-    // Save to disk and stream to client at the same time
-    const fileStream = fs.createWriteStream(filePath);
-    doc.pipe(fileStream);
-    doc.pipe(res);
-
-    // Header
-    doc
-      .fontSize(20)
-      .text('Namma Cabs – Booking Receipt', { align: 'center' })
-      .moveDown(0.5);
-
-    doc
-      .fontSize(12)
-      .text(`Receipt ID: NC-${booking.id}`, { align: 'center' })
-      .text(`Date: ${new Date(booking.booking_date).toLocaleString()}`, {
-        align: 'center',
-      })
-      .moveDown(1.5);
-
-    // Customer
-    doc.fontSize(14).text('Customer Details', { underline: true }).moveDown(0.5);
-    doc
-      .fontSize(12)
-      .text(`Name: ${booking.passenger_name || booking.username || ''}`)
-      .text(`Phone: ${booking.passenger_phone || '-'}`)
-      .text(`Email: ${booking.passenger_email || booking.email || '-'}`)
-      .moveDown(1);
-
-    // Trip
-    doc.fontSize(14).text('Trip Details', { underline: true }).moveDown(0.5);
-    doc
-      .fontSize(12)
-      .text(`Service Type: ${booking.service_type === 'local' ? 'Local' : booking.service_type === 'airport' ? 'Airport' : 'Outstation'}`)
-      .text(`From: ${booking.from_location}`)
-      .text(`To: ${booking.to_location}`)
-      .text(`Cab Type: ${booking.cab_type_name || 'Cab'}`)
-      .text(`Car Option: ${booking.car_option_name || 'Not specified'}`)
-      .text(`Distance: ${booking.distance_km} km`)
-      .text(`Estimated Time: ${booking.estimated_time_minutes} minutes`)
-      .text(`Travel Date: ${
-        booking.travel_date
-          ? new Date(booking.travel_date).toLocaleString()
-          : 'Not specified'
-      }`)
-      .moveDown(1);
-
-    // Fare
-    doc.fontSize(14).text('Fare Summary', { underline: true }).moveDown(0.5);
-    doc.fontSize(12).text(`Total Fare: ₹${booking.fare_amount.toFixed(2)}`);
-    doc.text(`Status: ${booking.booking_status}`);
-    if (booking.notes) {
-      doc.moveDown(0.5).text(`Notes: ${booking.notes}`);
-    }
-
-    doc.moveDown(2).fontSize(10).text('Thank you for riding with Namma Cabs!', {
-      align: 'center',
-    });
-
-    doc.end();
+    res.setHeader('Content-Disposition', `attachment; filename=invoice-${booking.id}.pdf`);
+    res.send(Buffer.from(pdfBytes));
   } catch (error) {
-    console.error('Error generating receipt PDF:', error);
-    res.status(500).json({ error: 'Error generating receipt' });
+    console.error('Error generating invoice PDF:', error);
+    res.status(500).json({ error: 'Error generating invoice' });
   }
 });
 

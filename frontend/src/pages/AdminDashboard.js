@@ -31,6 +31,7 @@ const AdminDashboard = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [rateMeters, setRateMeters] = useState([]);
+  const [rateMeterCategories, setRateMeterCategories] = useState([]);
   const [expandedServiceTypes, setExpandedServiceTypes] = useState({});
   const [drivers, setDrivers] = useState([]);
   const [corporateBookings, setCorporateBookings] = useState([]);
@@ -74,11 +75,23 @@ const AdminDashboard = () => {
         );
         setRecentBookings(sortedBookings);
       } else if (activeTab === 'rate-meters') {
-        const response = await api.get('/admin/rate-meters');
-        setRateMeters(response.data);
-      } else if (activeTab === 'rate-meters') {
-        const response = await api.get('/admin/rate-meters');
-        setRateMeters(response.data);
+        // Load rate meters and derive car categories dynamically from assigned cars
+        const [ratesRes, carsRes] = await Promise.all([
+          api.get('/admin/rate-meters'),
+          api.get('/admin/car-options'),
+        ]);
+        setRateMeters(ratesRes.data);
+
+        const allCars = carsRes.data || [];
+        // Only consider cars that are assigned to a cab type
+        const assignedCars = allCars.filter(car => car.cab_type_id);
+        const categoriesSet = new Set();
+        assignedCars.forEach(car => {
+          // Use the car name as the category, so rate meters are per car (not per subtype)
+          const cat = car.name;
+          if (cat) categoriesSet.add(cat);
+        });
+        setRateMeterCategories(Array.from(categoriesSet));
       } else if (activeTab === 'cab-types') {
         const response = await api.get('/admin/cab-types');
         setCabTypes(response.data);
@@ -1134,9 +1147,6 @@ const AdminDashboard = () => {
             <div>
               <div className="section-header">
                 <h2>Rate Meter Management</h2>
-                <button onClick={openCreateForm} className="btn btn-primary">
-                  + Add Rate Meter
-                </button>
               </div>
 
               <div className="rate-meters-container">
@@ -1229,10 +1239,6 @@ const AdminDashboard = () => {
                                         <div className="rate-detail-item">
                                           <span className="rate-label">Per KM:</span>
                                           <span className="rate-value">₹{rate.per_km_rate}</span>
-                                        </div>
-                                        <div className="rate-detail-item">
-                                          <span className="rate-label">Per Minute:</span>
-                                          <span className="rate-value">₹{rate.per_minute_rate}</span>
                                         </div>
                                       </>
                                     )}
@@ -1995,13 +2001,17 @@ const AdminDashboard = () => {
                           }
                         >
                           <option value="">Select car category</option>
-                          <option value="Sedan">Sedan</option>
-                          <option value="SUV">SUV</option>
-                          <option value="Innova">Innova</option>
-                          <option value="Innova Crysta">Innova Crysta</option>
-                          <option value="Tempo">Tempo</option>
-                          <option value="Urbenia">Urbenia</option>
-                          <option value="Minibus">Minibus</option>
+                          {rateMeterCategories.length === 0 ? (
+                            <option value="" disabled>
+                              No assigned car categories found. Assign cars to cab types first.
+                            </option>
+                          ) : (
+                            rateMeterCategories.map((cat) => (
+                              <option key={cat} value={cat}>
+                                {cat}
+                              </option>
+                            ))
+                          )}
                         </select>
                       </div>
                       <div className="form-group">
@@ -2034,28 +2044,14 @@ const AdminDashboard = () => {
                       ) : (
                         <>
                           <div className="form-group">
-                            <label>Per KM Rate (₹) *</label>
+                            <label>Per KM Rate (₹)</label>
                             <input
                               type="number"
                               step="0.01"
                               min="0"
-                              required
                               value={formData.per_km_rate || ''}
                               onChange={(e) =>
-                                setFormData({ ...formData, per_km_rate: parseFloat(e.target.value) || 0 })
-                              }
-                            />
-                          </div>
-                          <div className="form-group">
-                            <label>Per Minute Rate (₹) *</label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              required
-                              value={formData.per_minute_rate || ''}
-                              onChange={(e) =>
-                                setFormData({ ...formData, per_minute_rate: parseFloat(e.target.value) || 0 })
+                                setFormData({ ...formData, per_km_rate: e.target.value === '' ? '' : parseFloat(e.target.value) || 0 })
                               }
                             />
                           </div>

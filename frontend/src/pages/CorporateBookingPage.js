@@ -4,7 +4,6 @@ import api from '../services/api';
 import LocationInput from '../components/LocationInput';
 import AnimatedMapBackground from '../components/AnimatedMapBackground';
 import MainNavbar from '../components/MainNavbar';
-import { getCurrentLocation, getAddressFromCoordinates } from '../services/locationService';
 import './CorporateBookingPage.css';
 
 const CorporateBookingPage = () => {
@@ -17,6 +16,8 @@ const CorporateBookingPage = () => {
     drop_point: '',
     notes: '',
   });
+  const [pickupLocation, setPickupLocation] = useState(null); // {address, lat, lng}
+  const [dropLocation, setDropLocation] = useState(null); // {address, lat, lng}
   const [userLocation, setUserLocation] = useState(null);
   const [loading, setLoading] = useState(false);
   const [bookingSuccess, setBookingSuccess] = useState(false);
@@ -33,10 +34,56 @@ const CorporateBookingPage = () => {
 
   const requestUserLocation = async () => {
     try {
-      const location = await getCurrentLocation();
-      const address = await getAddressFromCoordinates(location.lat, location.lng);
+      if (!navigator.geolocation) {
+        return;
+      }
+      
+      const position = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
+        });
+      });
+
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+      const location = { lat, lng };
+      
       setUserLocation(location);
-      setFormData(prev => ({ ...prev, pickup_point: address }));
+      
+      // Use Google Geocoding if available, otherwise use coordinates
+      if (window.google && window.google.maps) {
+        const geocoder = new window.google.maps.Geocoder();
+        geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+          if (status === 'OK' && results && results[0]) {
+            const locObj = {
+              address: results[0].formatted_address,
+              lat,
+              lng
+            };
+            setPickupLocation(locObj);
+            setFormData(prev => ({ ...prev, pickup_point: results[0].formatted_address }));
+          } else {
+            const locObj = {
+              address: `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+              lat,
+              lng
+            };
+            setPickupLocation(locObj);
+            setFormData(prev => ({ ...prev, pickup_point: locObj.address }));
+          }
+        });
+      } else {
+        const locObj = {
+          address: `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+          lat,
+          lng
+        };
+        setPickupLocation(locObj);
+        setFormData(prev => ({ ...prev, pickup_point: locObj.address }));
+      }
+      
       localStorage.setItem('locationConsent', 'granted');
     } catch (error) {
       console.error('Error getting location:', error);
@@ -44,10 +91,6 @@ const CorporateBookingPage = () => {
         localStorage.setItem('locationConsent', 'denied');
       }
     }
-  };
-
-  const handleLocationUpdate = (location) => {
-    setUserLocation(location);
   };
 
   const handleChange = (e) => {
@@ -77,10 +120,10 @@ const CorporateBookingPage = () => {
     if (!formData.company_name.trim()) {
       newErrors.company_name = 'Company name is required';
     }
-    if (!formData.pickup_point.trim()) {
+    if (!pickupLocation || !pickupLocation.address) {
       newErrors.pickup_point = 'Pickup point is required';
     }
-    if (!formData.drop_point.trim()) {
+    if (!dropLocation || !dropLocation.address) {
       newErrors.drop_point = 'Drop point is required';
     }
 
@@ -97,7 +140,16 @@ const CorporateBookingPage = () => {
 
     setLoading(true);
     try {
-      const response = await api.post('/corporate/bookings', formData);
+      // Include lat/lng in the request
+      const payload = {
+        ...formData,
+        pickup_lat: pickupLocation ? pickupLocation.lat : null,
+        pickup_lng: pickupLocation ? pickupLocation.lng : null,
+        drop_lat: dropLocation ? dropLocation.lat : null,
+        drop_lng: dropLocation ? dropLocation.lng : null,
+      };
+      
+      const response = await api.post('/corporate/bookings', payload);
       
       setBookingSuccess(true);
       setBookingId(response.data.id);
@@ -111,6 +163,8 @@ const CorporateBookingPage = () => {
         drop_point: '',
         notes: '',
       });
+      setPickupLocation(null);
+      setDropLocation(null);
     } catch (error) {
       const errorMessage = error.response?.data?.error || 
                           error.response?.data?.errors?.[0]?.msg || 
@@ -207,16 +261,15 @@ const CorporateBookingPage = () => {
                 <div className="form-group">
                   <label>Pickup Point *</label>
                   <LocationInput
-                    value={formData.pickup_point}
-                    onChange={(value) => {
-                      setFormData(prev => ({ ...prev, pickup_point: value }));
+                    value={pickupLocation}
+                    onSelect={(location) => {
+                      setPickupLocation(location);
+                      setFormData(prev => ({ ...prev, pickup_point: location ? location.address : '' }));
                       if (errors.pickup_point) {
                         setErrors(prev => ({ ...prev, pickup_point: '' }));
                       }
                     }}
                     placeholder="Enter pickup location or click 📍 for current location"
-                    userLocation={userLocation}
-                    onLocationRequest={handleLocationUpdate}
                     showCurrentLocation={true}
                   />
                   {errors.pickup_point && <span className="error-message">{errors.pickup_point}</span>}
@@ -225,15 +278,15 @@ const CorporateBookingPage = () => {
                 <div className="form-group">
                   <label>Drop Point *</label>
                   <LocationInput
-                    value={formData.drop_point}
-                    onChange={(value) => {
-                      setFormData(prev => ({ ...prev, drop_point: value }));
+                    value={dropLocation}
+                    onSelect={(location) => {
+                      setDropLocation(location);
+                      setFormData(prev => ({ ...prev, drop_point: location ? location.address : '' }));
                       if (errors.drop_point) {
                         setErrors(prev => ({ ...prev, drop_point: '' }));
                       }
                     }}
                     placeholder="Enter drop location"
-                    userLocation={userLocation}
                     showCurrentLocation={false}
                   />
                   {errors.drop_point && <span className="error-message">{errors.drop_point}</span>}

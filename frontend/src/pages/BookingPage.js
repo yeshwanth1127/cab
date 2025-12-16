@@ -5,24 +5,24 @@ import LocationInput from '../components/LocationInput';
 import AnimatedMapBackground from '../components/AnimatedMapBackground';
 import LightRays from '../components/LightRays';
 import MainNavbar from '../components/MainNavbar';
-import { getCurrentLocation, getAddressFromCoordinates } from '../services/locationService';
 import './BookingPage.css';
 
 const BookingPage = () => {
   const navigate = useNavigate();
   const [serviceType, setServiceType] = useState(null); // 'local', 'airport', 'outstation'
-  const [fromLocation, setFromLocation] = useState('');
-  const [toLocation, setToLocation] = useState('');
+  const [fromLocation, setFromLocation] = useState(null); // {address, lat, lng}
+  const [toLocation, setToLocation] = useState(null); // {address, lat, lng}
   const [tripType, setTripType] = useState(''); // For outstation: 'one_way', 'round_trip', 'multiple_way'
   // For outstation multiple way trips
-  const [pickupLocation, setPickupLocation] = useState('');
-  const [stopA, setStopA] = useState('');
-  const [stopB, setStopB] = useState('');
-  const [dropLocation, setDropLocation] = useState('');
-  const [additionalStops, setAdditionalStops] = useState([]); // Array of stop locations
+  const [pickupLocation, setPickupLocation] = useState(null); // {address, lat, lng}
+  const [stopA, setStopA] = useState(null); // {address, lat, lng}
+  const [stopB, setStopB] = useState(null); // {address, lat, lng}
+  const [dropLocation, setDropLocation] = useState(null); // {address, lat, lng}
+  const [additionalStops, setAdditionalStops] = useState([]); // Array of location objects
   const [userLocation, setUserLocation] = useState(null);
   const [selectedCarOptionId, setSelectedCarOptionId] = useState(null);
   const [numberOfHours, setNumberOfHours] = useState(''); // For local bookings only
+  const [numberOfDays, setNumberOfDays] = useState(''); // For outstation round trips
   const [fare, setFare] = useState(null);
   const [loading, setLoading] = useState(false);
   const [calculating, setCalculating] = useState(false);
@@ -41,6 +41,16 @@ const BookingPage = () => {
   const [allCarOptions, setAllCarOptions] = useState([]); // All cars for the Available Car Options section
   const [carImageIndices, setCarImageIndices] = useState({}); // Track image index per car
   const [showConfirmation, setShowConfirmation] = useState(false);
+
+  const formatDuration = (minutes) => {
+    if (!minutes || isNaN(minutes)) return null;
+    const totalMinutes = Math.round(Number(minutes));
+    const hours = Math.floor(totalMinutes / 60);
+    const mins = totalMinutes % 60;
+    if (hours <= 0) return `${mins} min`;
+    if (mins === 0) return `${hours} hr${hours > 1 ? 's' : ''}`;
+    return `${hours} hr${hours > 1 ? 's' : ''} ${mins} min`;
+  };
 
   // Initial load: optional geolocation prompt and fetch all car options
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -61,10 +71,10 @@ const BookingPage = () => {
       setCarImageIndices({});
       setNumberOfHours(''); // Reset hours when service type changes
       setTripType(''); // Reset trip type when service type changes
-      setPickupLocation('');
-      setStopA('');
-      setStopB('');
-      setDropLocation('');
+      setPickupLocation(null);
+      setStopA(null);
+      setStopB(null);
+      setDropLocation(null);
       setAdditionalStops([]);
     } else {
       // If no service type selected, show all cars (or empty)
@@ -72,20 +82,60 @@ const BookingPage = () => {
       setSelectedCarOptionId(null);
       setNumberOfHours('');
       setTripType('');
-      setPickupLocation('');
-      setStopA('');
-      setStopB('');
-      setDropLocation('');
+      setPickupLocation(null);
+      setStopA(null);
+      setStopB(null);
+      setDropLocation(null);
       setAdditionalStops([]);
     }
   }, [serviceType]);
 
   const requestUserLocation = async () => {
     try {
-      const location = await getCurrentLocation();
-      const address = await getAddressFromCoordinates(location.lat, location.lng);
+      if (!navigator.geolocation) {
+        return;
+      }
+      
+      const position = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
+        });
+      });
+
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+      const location = { lat, lng };
+      
       setUserLocation(location);
-      setFromLocation(address);
+      
+      // Use Google Geocoding if available, otherwise use coordinates
+      if (window.google && window.google.maps) {
+        const geocoder = new window.google.maps.Geocoder();
+        geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+          if (status === 'OK' && results && results[0]) {
+            setFromLocation({
+              address: results[0].formatted_address,
+              lat,
+              lng
+            });
+          } else {
+            setFromLocation({
+              address: `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+              lat,
+              lng
+            });
+          }
+        });
+      } else {
+        setFromLocation({
+          address: `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+          lat,
+          lng
+        });
+      }
+      
       localStorage.setItem('locationConsent', 'granted');
     } catch (error) {
       console.error('Error getting location:', error);
@@ -144,8 +194,8 @@ const BookingPage = () => {
           return;
         }
       } else if (tripType === 'round_trip') {
-        if (!pickupLocation) {
-          alert('Please fill in pickup location');
+        if (!pickupLocation || !numberOfDays) {
+          alert('Please fill in pickup location and number of days');
           return;
         }
       } else if (tripType === 'multiple_way') {
@@ -170,30 +220,47 @@ const BookingPage = () => {
       };
 
       if (serviceType === 'local') {
-        requestData.from_location = fromLocation;
+        requestData.from = fromLocation ? { lat: fromLocation.lat, lng: fromLocation.lng } : null;
+        requestData.from_location = fromLocation ? fromLocation.address : '';
         requestData.number_of_hours = parseInt(numberOfHours);
       } else if (serviceType === 'outstation') {
         requestData.trip_type = tripType;
         if (tripType === 'one_way') {
-          requestData.from_location = pickupLocation;
-          requestData.to_location = dropLocation;
+          requestData.from = pickupLocation ? { lat: pickupLocation.lat, lng: pickupLocation.lng } : null;
+          requestData.to = dropLocation ? { lat: dropLocation.lat, lng: dropLocation.lng } : null;
+          requestData.from_location = pickupLocation ? pickupLocation.address : '';
+          requestData.to_location = dropLocation ? dropLocation.address : '';
         } else if (tripType === 'round_trip') {
-          requestData.from_location = pickupLocation;
-          requestData.to_location = pickupLocation; // Round trip returns to pickup
+          requestData.from = pickupLocation ? { lat: pickupLocation.lat, lng: pickupLocation.lng } : null;
+          requestData.to = pickupLocation ? { lat: pickupLocation.lat, lng: pickupLocation.lng } : null; // Round trip returns to pickup
+          requestData.from_location = pickupLocation ? pickupLocation.address : '';
+          requestData.to_location = pickupLocation ? pickupLocation.address : '';
+          requestData.number_of_days = parseInt(numberOfDays, 10);
         } else if (tripType === 'multiple_way') {
-          requestData.from_location = pickupLocation;
-          // Combine all stops and drop location
+          requestData.from = pickupLocation ? { lat: pickupLocation.lat, lng: pickupLocation.lng } : null;
+          requestData.from_location = pickupLocation ? pickupLocation.address : '';
+          // For multiple way, we'll use the final drop location for distance calculation
+          requestData.to = dropLocation ? { lat: dropLocation.lat, lng: dropLocation.lng } : null;
+          requestData.to_location = dropLocation ? dropLocation.address : '';
+          // Combine all stops and drop location for display
           const allStops = [stopA, stopB, ...additionalStops, dropLocation].filter(Boolean);
-          requestData.to_location = allStops.join(' → ');
-          requestData.stops = allStops;
+          requestData.stops = allStops.map(s => s.address || s);
         }
       } else {
         // airport
-        requestData.from_location = fromLocation;
-        requestData.to_location = toLocation;
+        requestData.from = fromLocation ? { lat: fromLocation.lat, lng: fromLocation.lng } : null;
+        requestData.to = toLocation ? { lat: toLocation.lat, lng: toLocation.lng } : null;
+        requestData.from_location = fromLocation ? fromLocation.address : '';
+        requestData.to_location = toLocation ? toLocation.address : '';
       }
 
+      console.log('[FRONTEND DEBUG] Sending calculate-fare request:', JSON.stringify(requestData, null, 2));
+      
       const response = await api.post('/bookings/calculate-fare', requestData);
+      
+      console.log('[FRONTEND DEBUG] Received response:', JSON.stringify(response.data, null, 2));
+      console.log('[FRONTEND DEBUG] Distance in response:', response.data.distance_km);
+      console.log('[FRONTEND DEBUG] Time in response:', response.data.estimated_time_minutes);
 
       setFare(response.data);
       setShowBookingForm(true);
@@ -227,30 +294,49 @@ const BookingPage = () => {
       };
 
       if (serviceType === 'local') {
-        bookingPayload.from_location = fromLocation;
+        // Local: hours-based only, ignore distance from Google
+        bookingPayload.from_location = fromLocation ? fromLocation.address : '';
+        bookingPayload.from_lat = fromLocation ? fromLocation.lat : null;
+        bookingPayload.from_lng = fromLocation ? fromLocation.lng : null;
         bookingPayload.number_of_hours = parseInt(numberOfHours);
-        bookingPayload.distance_km = 0; // Local bookings don't use distance
+        bookingPayload.distance_km = 0;
         bookingPayload.estimated_time_minutes = parseInt(numberOfHours) * 60;
       } else if (serviceType === 'outstation') {
         bookingPayload.trip_type = tripType;
         if (tripType === 'one_way') {
-          bookingPayload.from_location = pickupLocation;
-          bookingPayload.to_location = dropLocation;
+          bookingPayload.from_location = pickupLocation ? pickupLocation.address : '';
+          bookingPayload.to_location = dropLocation ? dropLocation.address : '';
+          bookingPayload.from_lat = pickupLocation ? pickupLocation.lat : null;
+          bookingPayload.from_lng = pickupLocation ? pickupLocation.lng : null;
+          bookingPayload.to_lat = dropLocation ? dropLocation.lat : null;
+          bookingPayload.to_lng = dropLocation ? dropLocation.lng : null;
         } else if (tripType === 'round_trip') {
-          bookingPayload.from_location = pickupLocation;
-          bookingPayload.to_location = pickupLocation; // Round trip returns to pickup
+          bookingPayload.from_location = pickupLocation ? pickupLocation.address : '';
+          bookingPayload.to_location = pickupLocation ? pickupLocation.address : ''; // Round trip returns to pickup
+          bookingPayload.from_lat = pickupLocation ? pickupLocation.lat : null;
+          bookingPayload.from_lng = pickupLocation ? pickupLocation.lng : null;
+          bookingPayload.to_lat = pickupLocation ? pickupLocation.lat : null;
+          bookingPayload.to_lng = pickupLocation ? pickupLocation.lng : null;
         } else if (tripType === 'multiple_way') {
-          bookingPayload.from_location = pickupLocation;
+          bookingPayload.from_location = pickupLocation ? pickupLocation.address : '';
+          bookingPayload.from_lat = pickupLocation ? pickupLocation.lat : null;
+          bookingPayload.from_lng = pickupLocation ? pickupLocation.lng : null;
           const allStops = [stopA, stopB, ...additionalStops, dropLocation].filter(Boolean);
-          bookingPayload.to_location = allStops.join(' → ');
-          bookingPayload.stops = JSON.stringify(allStops);
+          bookingPayload.to_location = allStops.map(s => s.address || s).join(' → ');
+          bookingPayload.to_lat = dropLocation ? dropLocation.lat : null;
+          bookingPayload.to_lng = dropLocation ? dropLocation.lng : null;
+          bookingPayload.stops = JSON.stringify(allStops.map(s => s.address || s));
         }
         bookingPayload.distance_km = fare.distance_km || 0;
         bookingPayload.estimated_time_minutes = fare.estimated_time_minutes || 0;
       } else {
         // airport
-        bookingPayload.from_location = fromLocation;
-        bookingPayload.to_location = toLocation;
+        bookingPayload.from_location = fromLocation ? fromLocation.address : '';
+        bookingPayload.to_location = toLocation ? toLocation.address : '';
+        bookingPayload.from_lat = fromLocation ? fromLocation.lat : null;
+        bookingPayload.from_lng = fromLocation ? fromLocation.lng : null;
+        bookingPayload.to_lat = toLocation ? toLocation.lat : null;
+        bookingPayload.to_lng = toLocation ? toLocation.lng : null;
         bookingPayload.distance_km = fare.distance_km;
         bookingPayload.estimated_time_minutes = fare.estimated_time_minutes;
       }
@@ -262,13 +348,13 @@ const BookingPage = () => {
       setShowBookingForm(false);
       
       // Reset form
-      setFromLocation('');
-      setToLocation('');
+      setFromLocation(null);
+      setToLocation(null);
       setTripType('');
-      setPickupLocation('');
-      setStopA('');
-      setStopB('');
-      setDropLocation('');
+      setPickupLocation(null);
+      setStopA(null);
+      setStopB(null);
+      setDropLocation(null);
       setAdditionalStops([]);
       setSelectedCarOptionId(null);
       setNumberOfHours('');
@@ -289,7 +375,9 @@ const BookingPage = () => {
   };
 
   const handleLocationUpdate = (location) => {
-    setUserLocation(location);
+    if (location && location.lat && location.lng) {
+      setUserLocation({ lat: location.lat, lng: location.lng });
+    }
   };
 
   const toggleCarImages = (key) => {
@@ -387,10 +475,8 @@ const BookingPage = () => {
                         <LocationInput
                           label="Pickup Location"
                           value={fromLocation}
-                          onChange={setFromLocation}
+                          onSelect={setFromLocation}
                           placeholder="Enter pickup location or click 📍 for current location"
-                          userLocation={userLocation}
-                          onLocationRequest={handleLocationUpdate}
                           showCurrentLocation={true}
                         />
 
@@ -419,10 +505,10 @@ const BookingPage = () => {
                             onChange={(e) => {
                               setTripType(e.target.value);
                               // Reset locations when trip type changes
-                              setPickupLocation('');
-                              setStopA('');
-                              setStopB('');
-                              setDropLocation('');
+                              setPickupLocation(null);
+                              setStopA(null);
+                              setStopB(null);
+                              setDropLocation(null);
                               setAdditionalStops([]);
                             }}
                             required
@@ -440,33 +526,48 @@ const BookingPage = () => {
                             <LocationInput
                               label="Pickup Location *"
                               value={pickupLocation}
-                              onChange={setPickupLocation}
+                              onSelect={setPickupLocation}
                               placeholder="Enter pickup location or click 📍 for current location"
-                              userLocation={userLocation}
-                              onLocationRequest={handleLocationUpdate}
                               showCurrentLocation={true}
                             />
                             <LocationInput
                               label="Drop Location *"
                               value={dropLocation}
-                              onChange={setDropLocation}
+                              onSelect={setDropLocation}
                               placeholder="Enter drop location"
-                              userLocation={userLocation}
                               showCurrentLocation={false}
                             />
                           </>
                         )}
 
                         {tripType === 'round_trip' && (
-                          <LocationInput
-                            label="Pickup Location *"
-                            value={pickupLocation}
-                            onChange={setPickupLocation}
-                            placeholder="Enter pickup location or click 📍 for current location"
-                            userLocation={userLocation}
-                            onLocationRequest={handleLocationUpdate}
-                            showCurrentLocation={true}
-                          />
+                          <>
+                            <LocationInput
+                              label="Pickup Location *"
+                              value={pickupLocation}
+                              onSelect={setPickupLocation}
+                              placeholder="Enter pickup location or click 📍 for current location"
+                              showCurrentLocation={true}
+                            />
+                            <div className="form-group">
+                              <label>Number of Days *</label>
+                              <select
+                                value={numberOfDays}
+                                onChange={(e) => setNumberOfDays(e.target.value)}
+                                required
+                                className="hours-select"
+                              >
+                                <option value="">Select days</option>
+                                <option value="1">1 day (300 km)</option>
+                                <option value="2">2 days (600 km)</option>
+                                <option value="3">3 days (900 km)</option>
+                                <option value="4">4 days (1200 km)</option>
+                                <option value="5">5 days (1500 km)</option>
+                                <option value="6">6 days (1800 km)</option>
+                                <option value="7">7 days (2100 km)</option>
+                              </select>
+                            </div>
+                          </>
                         )}
 
                         {tripType === 'multiple_way' && (
@@ -474,26 +575,22 @@ const BookingPage = () => {
                             <LocationInput
                               label="Pickup Location *"
                               value={pickupLocation}
-                              onChange={setPickupLocation}
+                              onSelect={setPickupLocation}
                               placeholder="Enter pickup location or click 📍 for current location"
-                              userLocation={userLocation}
-                              onLocationRequest={handleLocationUpdate}
                               showCurrentLocation={true}
                             />
                             <LocationInput
                               label="Stop A *"
                               value={stopA}
-                              onChange={setStopA}
+                              onSelect={setStopA}
                               placeholder="Enter first stop location"
-                              userLocation={userLocation}
                               showCurrentLocation={false}
                             />
                             <LocationInput
                               label="Stop B *"
                               value={stopB}
-                              onChange={setStopB}
+                              onSelect={setStopB}
                               placeholder="Enter second stop location"
-                              userLocation={userLocation}
                               showCurrentLocation={false}
                             />
                             {additionalStops.map((stop, index) => (
@@ -501,19 +598,18 @@ const BookingPage = () => {
                                 key={index}
                                 label={`Stop ${String.fromCharCode(67 + index)} *`}
                                 value={stop}
-                                onChange={(value) => {
+                                onSelect={(value) => {
                                   const newStops = [...additionalStops];
                                   newStops[index] = value;
                                   setAdditionalStops(newStops);
                                 }}
                                 placeholder={`Enter stop ${String.fromCharCode(67 + index)} location`}
-                                userLocation={userLocation}
                                 showCurrentLocation={false}
                               />
                             ))}
                             <button
                               type="button"
-                              onClick={() => setAdditionalStops([...additionalStops, ''])}
+                              onClick={() => setAdditionalStops([...additionalStops, null])}
                               className="btn btn-secondary"
                               style={{ marginBottom: '10px' }}
                             >
@@ -532,9 +628,8 @@ const BookingPage = () => {
                             <LocationInput
                               label="Drop Location *"
                               value={dropLocation}
-                              onChange={setDropLocation}
+                              onSelect={setDropLocation}
                               placeholder="Enter final drop location"
-                              userLocation={userLocation}
                               showCurrentLocation={false}
                             />
 
@@ -557,19 +652,16 @@ const BookingPage = () => {
                         <LocationInput
                           label="From Location"
                           value={fromLocation}
-                          onChange={setFromLocation}
+                          onSelect={setFromLocation}
                           placeholder="Enter pickup location or click 📍 for current location"
-                          userLocation={userLocation}
-                          onLocationRequest={handleLocationUpdate}
                           showCurrentLocation={true}
                         />
 
                         <LocationInput
                           label="To Location"
                           value={toLocation}
-                          onChange={setToLocation}
+                          onSelect={setToLocation}
                           placeholder="Enter destination"
-                          userLocation={userLocation}
                           showCurrentLocation={false}
                         />
                       </>
@@ -723,7 +815,7 @@ const BookingPage = () => {
                         <span>Base Fare:</span>
                         <span>₹{fare.breakdown.base_fare}</span>
                       </div>
-                    {serviceType !== 'local' && (
+                    {fare.distance_km > 0 && (
                       <div className="fare-item">
                         <span>Distance ({fare.distance_km} km):</span>
                         <span>₹{fare.breakdown.distance_charge.toFixed(2)}</span>
@@ -737,7 +829,7 @@ const BookingPage = () => {
                     )}
                     {serviceType !== 'local' && fare.breakdown.time_charge > 0 && (
                       <div className="fare-item">
-                        <span>Time ({fare.estimated_time_minutes} min):</span>
+                        <span>Time ({formatDuration(fare.estimated_time_minutes)}):</span>
                         <span>₹{fare.breakdown.time_charge.toFixed(2)}</span>
                       </div>
                     )}
@@ -752,13 +844,19 @@ const BookingPage = () => {
                         <span>₹{fare.fare}</span>
                       </div>
                     </div>
-                    {serviceType === 'local' && fare.breakdown.number_of_hours ? (
+                    {serviceType === 'local' && fare.breakdown.number_of_hours && (
                       <p className="estimated-time">
                         ⏱️ Duration: {fare.breakdown.number_of_hours} hours
                       </p>
-                    ) : (
+                    )}
+                    {fare.estimated_time_minutes > 0 && (
                       <p className="estimated-time">
-                        ⏱️ Estimated Time: {fare.estimated_time_minutes} minutes
+                        ⏱️ Estimated Time: {formatDuration(fare.estimated_time_minutes)}
+                      </p>
+                    )}
+                    {fare.distance_km > 0 && (
+                      <p className="estimated-time">
+                        📍 Distance: {fare.distance_km} km
                       </p>
                     )}
                   </div>
@@ -858,7 +956,7 @@ const BookingPage = () => {
                       <>
                         <div className="booking-summary-item">
                           <span className="booking-summary-label">Pickup Location:</span>
-                          <span className="booking-summary-value">{fromLocation}</span>
+                          <span className="booking-summary-value">{fromLocation ? fromLocation.address : ''}</span>
                         </div>
                         <div className="booking-summary-item">
                           <span className="booking-summary-label">Number of Hours:</span>
@@ -871,11 +969,11 @@ const BookingPage = () => {
                       <>
                         <div className="booking-summary-item">
                           <span className="booking-summary-label">From:</span>
-                          <span className="booking-summary-value">{fromLocation}</span>
+                          <span className="booking-summary-value">{fromLocation ? fromLocation.address : ''}</span>
                         </div>
                         <div className="booking-summary-item">
                           <span className="booking-summary-label">To:</span>
-                          <span className="booking-summary-value">{toLocation}</span>
+                          <span className="booking-summary-value">{toLocation ? toLocation.address : ''}</span>
                         </div>
                       </>
                     )}
@@ -894,45 +992,45 @@ const BookingPage = () => {
                           <>
                             <div className="booking-summary-item">
                               <span className="booking-summary-label">Pickup:</span>
-                              <span className="booking-summary-value">{pickupLocation}</span>
+                              <span className="booking-summary-value">{pickupLocation ? pickupLocation.address : ''}</span>
                             </div>
                             <div className="booking-summary-item">
                               <span className="booking-summary-label">Drop:</span>
-                              <span className="booking-summary-value">{dropLocation}</span>
+                              <span className="booking-summary-value">{dropLocation ? dropLocation.address : ''}</span>
                             </div>
                           </>
                         )}
                         {tripType === 'round_trip' && (
                           <div className="booking-summary-item">
                             <span className="booking-summary-label">Pickup (Round Trip):</span>
-                            <span className="booking-summary-value">{pickupLocation}</span>
+                            <span className="booking-summary-value">{pickupLocation ? pickupLocation.address : ''}</span>
                           </div>
                         )}
                         {tripType === 'multiple_way' && (
                           <>
                             <div className="booking-summary-item">
                               <span className="booking-summary-label">Pickup:</span>
-                              <span className="booking-summary-value">{pickupLocation}</span>
+                              <span className="booking-summary-value">{pickupLocation ? pickupLocation.address : ''}</span>
                             </div>
                             <div className="booking-summary-item">
                               <span className="booking-summary-label">Stop A:</span>
-                              <span className="booking-summary-value">{stopA}</span>
+                              <span className="booking-summary-value">{stopA ? stopA.address : ''}</span>
                             </div>
                             <div className="booking-summary-item">
                               <span className="booking-summary-label">Stop B:</span>
-                              <span className="booking-summary-value">{stopB}</span>
+                              <span className="booking-summary-value">{stopB ? stopB.address : ''}</span>
                             </div>
                             {additionalStops.map((stop, index) => (
                               <div key={index} className="booking-summary-item">
                                 <span className="booking-summary-label">
                                   Stop {String.fromCharCode(67 + index)}:
                                 </span>
-                                <span className="booking-summary-value">{stop}</span>
+                                <span className="booking-summary-value">{stop ? (stop.address || stop) : ''}</span>
                               </div>
                             ))}
                             <div className="booking-summary-item">
                               <span className="booking-summary-label">Drop:</span>
-                              <span className="booking-summary-value">{dropLocation}</span>
+                              <span className="booking-summary-value">{dropLocation ? dropLocation.address : ''}</span>
                             </div>
                           </>
                         )}
@@ -949,23 +1047,23 @@ const BookingPage = () => {
                       ) : null;
                     })()}
                     
-                    {serviceType === 'local' ? (
+                    {serviceType === 'local' && fare.breakdown.number_of_hours && (
                       <div className="booking-summary-item">
                         <span className="booking-summary-label">Number of Hours:</span>
                         <span className="booking-summary-value">{numberOfHours} hours</span>
                       </div>
-                    ) : (
-                      <>
-                        <div className="booking-summary-item">
-                          <span className="booking-summary-label">Distance:</span>
-                          <span className="booking-summary-value">{fare.distance_km} km</span>
-                        </div>
-                        
-                        <div className="booking-summary-item">
-                          <span className="booking-summary-label">Estimated Time:</span>
-                          <span className="booking-summary-value">{fare.estimated_time_minutes} minutes</span>
-                        </div>
-                      </>
+                    )}
+                    {fare.distance_km > 0 && (
+                      <div className="booking-summary-item">
+                        <span className="booking-summary-label">Distance:</span>
+                        <span className="booking-summary-value">{fare.distance_km} km</span>
+                      </div>
+                    )}
+                    {fare.estimated_time_minutes > 0 && (
+                      <div className="booking-summary-item">
+                        <span className="booking-summary-label">Estimated Time:</span>
+                        <span className="booking-summary-value">{formatDuration(fare.estimated_time_minutes)}</span>
+                      </div>
                     )}
                     
                     <div className="booking-summary-item">

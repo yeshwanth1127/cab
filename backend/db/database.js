@@ -324,6 +324,35 @@ const runMigrations = async () => {
       }
     }
 
+    // Create assigned_cab_for_cab_type table
+    try {
+      const assignedSQL = DB_TYPE === 'mysql'
+        ? `CREATE TABLE IF NOT EXISTS assigned_cab_for_cab_type (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            cab_type_id INT NOT NULL,
+            car_option_id INT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(cab_type_id, car_option_id)
+          )`
+        : `CREATE TABLE IF NOT EXISTS assigned_cab_for_cab_type (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cab_type_id INTEGER NOT NULL,
+            car_option_id INTEGER NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(cab_type_id, car_option_id)
+          )`;
+
+      await db.runAsync(assignedSQL);
+      console.log('Migration: assigned_cab_for_cab_type table created');
+    } catch (migrationErr) {
+      const errMsg = migrationErr.message || '';
+      if (!errMsg.includes('already exists') && !errMsg.includes('Duplicate')) {
+        console.log('Migration note (assigned_cab_for_cab_type):', migrationErr.message);
+      }
+    }
+
     // Migration to add car_option_id column if it doesn't exist
     try {
       await db.runAsync(
@@ -515,6 +544,55 @@ const runMigrations = async () => {
       }
     }
 
+    // Migration to add lat/lng columns to routes table
+    try {
+      await db.runAsync(
+        `ALTER TABLE routes ADD COLUMN from_lat REAL`
+      );
+      console.log('Migration: from_lat column added to routes');
+    } catch (migrationErr) {
+      const errMsg = migrationErr.message || '';
+      if (!errMsg.includes('duplicate column') && !errMsg.includes('Duplicate column')) {
+        console.log('Migration note (from_lat on routes):', migrationErr.message);
+      }
+    }
+
+    try {
+      await db.runAsync(
+        `ALTER TABLE routes ADD COLUMN from_lng REAL`
+      );
+      console.log('Migration: from_lng column added to routes');
+    } catch (migrationErr) {
+      const errMsg = migrationErr.message || '';
+      if (!errMsg.includes('duplicate column') && !errMsg.includes('Duplicate column')) {
+        console.log('Migration note (from_lng on routes):', migrationErr.message);
+      }
+    }
+
+    try {
+      await db.runAsync(
+        `ALTER TABLE routes ADD COLUMN to_lat REAL`
+      );
+      console.log('Migration: to_lat column added to routes');
+    } catch (migrationErr) {
+      const errMsg = migrationErr.message || '';
+      if (!errMsg.includes('duplicate column') && !errMsg.includes('Duplicate column')) {
+        console.log('Migration note (to_lat on routes):', migrationErr.message);
+      }
+    }
+
+    try {
+      await db.runAsync(
+        `ALTER TABLE routes ADD COLUMN to_lng REAL`
+      );
+      console.log('Migration: to_lng column added to routes');
+    } catch (migrationErr) {
+      const errMsg = migrationErr.message || '';
+      if (!errMsg.includes('duplicate column') && !errMsg.includes('Duplicate column')) {
+        console.log('Migration note (to_lng on routes):', migrationErr.message);
+      }
+    }
+
     // Migration to create rate_meters table
     try {
       const rateMetersSQL = DB_TYPE === 'mysql' 
@@ -548,56 +626,57 @@ const runMigrations = async () => {
       await db.runAsync(rateMetersSQL);
       console.log('Migration: rate_meters table created');
       
-      // Define all required rate meters
-      const defaultRates = [
-        ['local', 'Sedan', 50.00, 0, 0, 200.00],
-        ['local', 'SUV', 60.00, 0, 0, 250.00],
-        ['local', 'Innova', 70.00, 0, 0, 300.00],
-        ['local', 'Innova Crysta', 80.00, 0, 0, 350.00],
-        ['local', 'Tempo', 90.00, 0, 0, 400.00],
-        ['local', 'Urbenia', 100.00, 0, 0, 450.00],
-        ['local', 'Minibus', 120.00, 0, 0, 500.00],
-        ['airport', 'Sedan', 80.00, 12.00, 1.20, 0],
-        ['airport', 'SUV', 100.00, 15.00, 1.50, 0],
-        ['airport', 'Innova', 120.00, 18.00, 1.80, 0],
-        ['airport', 'Innova Crysta', 140.00, 20.00, 2.00, 0],
-        ['airport', 'Tempo', 160.00, 22.00, 2.20, 0],
-        ['airport', 'Urbenia', 180.00, 25.00, 2.50, 0],
-        ['airport', 'Minibus', 200.00, 28.00, 2.80, 0],
-        ['outstation', 'Sedan', 100.00, 15.00, 1.50, 0],
-        ['outstation', 'SUV', 120.00, 18.00, 1.80, 0],
-        ['outstation', 'Innova', 150.00, 22.00, 2.20, 0],
-        ['outstation', 'Innova Crysta', 180.00, 25.00, 2.50, 0],
-        ['outstation', 'Tempo', 200.00, 28.00, 2.80, 0],
-        ['outstation', 'Urbenia', 220.00, 30.00, 3.00, 0],
-        ['outstation', 'Minibus', 250.00, 35.00, 3.50, 0],
-      ];
-      
-      // Insert or update rate meters
-      for (const [service_type, car_category, base_fare, per_km_rate, per_minute_rate, per_hour_rate] of defaultRates) {
-        const existing = await db.getAsync(
-          'SELECT id FROM rate_meters WHERE service_type = ? AND car_category = ?',
-          [service_type, car_category]
-        );
+      // Optionally seed default rate meters if explicitly enabled
+      if (process.env.SEED_DEFAULT_RATES === 'true') {
+        const defaultRates = [
+          ['local', 'Sedan', 50.00, 0, 0, 200.00],
+          ['local', 'SUV', 60.00, 0, 0, 250.00],
+          ['local', 'Innova', 70.00, 0, 0, 300.00],
+          ['local', 'Innova Crysta', 80.00, 0, 0, 350.00],
+          ['local', 'Tempo', 90.00, 0, 0, 400.00],
+          ['local', 'Urbenia', 100.00, 0, 0, 450.00],
+          ['local', 'Minibus', 120.00, 0, 0, 500.00],
+          ['airport', 'Sedan', 80.00, 12.00, 1.20, 0],
+          ['airport', 'SUV', 100.00, 15.00, 1.50, 0],
+          ['airport', 'Innova', 120.00, 18.00, 1.80, 0],
+          ['airport', 'Innova Crysta', 140.00, 20.00, 2.00, 0],
+          ['airport', 'Tempo', 160.00, 22.00, 2.20, 0],
+          ['airport', 'Urbenia', 180.00, 25.00, 2.50, 0],
+          ['airport', 'Minibus', 200.00, 28.00, 2.80, 0],
+          ['outstation', 'Sedan', 100.00, 15.00, 1.50, 0],
+          ['outstation', 'SUV', 120.00, 18.00, 1.80, 0],
+          ['outstation', 'Innova', 150.00, 22.00, 2.20, 0],
+          ['outstation', 'Innova Crysta', 180.00, 25.00, 2.50, 0],
+          ['outstation', 'Tempo', 200.00, 28.00, 2.80, 0],
+          ['outstation', 'Urbenia', 220.00, 30.00, 3.00, 0],
+          ['outstation', 'Minibus', 250.00, 35.00, 3.50, 0],
+        ];
         
-        if (existing) {
-          await db.runAsync(
-            `UPDATE rate_meters 
-             SET base_fare = ?, per_km_rate = ?, per_minute_rate = ?, per_hour_rate = ?, updated_at = CURRENT_TIMESTAMP
-             WHERE service_type = ? AND car_category = ?`,
-            [base_fare, per_km_rate, per_minute_rate, per_hour_rate, service_type, car_category]
+        for (const [service_type, car_category, base_fare, per_km_rate, per_minute_rate, per_hour_rate] of defaultRates) {
+          const existing = await db.getAsync(
+            'SELECT id FROM rate_meters WHERE service_type = ? AND car_category = ?',
+            [service_type, car_category]
           );
-        } else {
-          const insertSQL = DB_TYPE === 'mysql'
-            ? `INSERT IGNORE INTO rate_meters (service_type, car_category, base_fare, per_km_rate, per_minute_rate, per_hour_rate)
-               VALUES (?, ?, ?, ?, ?, ?)`
-            : `INSERT OR IGNORE INTO rate_meters (service_type, car_category, base_fare, per_km_rate, per_minute_rate, per_hour_rate)
-               VALUES (?, ?, ?, ?, ?, ?)`;
-          await db.runAsync(insertSQL, [service_type, car_category, base_fare, per_km_rate, per_minute_rate, per_hour_rate]);
+          
+          if (existing) {
+            await db.runAsync(
+              `UPDATE rate_meters 
+               SET base_fare = ?, per_km_rate = ?, per_minute_rate = ?, per_hour_rate = ?, updated_at = CURRENT_TIMESTAMP
+               WHERE service_type = ? AND car_category = ?`,
+              [base_fare, per_km_rate, per_minute_rate, per_hour_rate, service_type, car_category]
+            );
+          } else {
+            const insertSQL = DB_TYPE === 'mysql'
+              ? `INSERT IGNORE INTO rate_meters (service_type, car_category, base_fare, per_km_rate, per_minute_rate, per_hour_rate)
+                 VALUES (?, ?, ?, ?, ?, ?)`
+              : `INSERT OR IGNORE INTO rate_meters (service_type, car_category, base_fare, per_km_rate, per_minute_rate, per_hour_rate)
+                 VALUES (?, ?, ?, ?, ?, ?)`;
+            await db.runAsync(insertSQL, [service_type, car_category, base_fare, per_km_rate, per_minute_rate, per_hour_rate]);
+          }
         }
+        
+        console.log('Migration: Rate meters seeded/updated from defaults');
       }
-      
-      console.log('Migration: Rate meters updated');
     } catch (migrationErr) {
       const errMsg = migrationErr.message || '';
       if (!errMsg.includes('already exists') && !errMsg.includes('Duplicate')) {
@@ -605,52 +684,54 @@ const runMigrations = async () => {
       }
     }
 
-    // Seed car options table with predefined cars (idempotent)
-    try {
-      const seedCars = [
-        ['Etios', 'Sedan – Etios (4 seats)', 1],
-        ['Dzire', 'Sedan – Dzire (4 seats)', 2],
-        ['Honda City', 'Sedan – Premiere (Honda City, 4 seats)', 3],
-        ['Ciaz', 'Sedan – Premiere (Ciaz, 4 seats)', 4],
-        ['Ertiga', 'SUV – Ertiga (6–7 seats)', 5],
-        ['Marazzo', 'SUV – Marazzo (6–7 seats)', 6],
-        ['Rumion', 'SUV – Rumion (6–7 seats)', 7],
-        ['Innova', 'Innova (7 seats)', 8],
-        ['Crysta', 'Innova Crysta (7 seats)', 9],
-        ['Tempo Traveller 9+1', 'Tempo Traveller (9+1 seater)', 10],
-        ['Tempo Traveller 12+1', 'Tempo Traveller (12-1 seater)', 11],
-        ['Urbenia 9 seater', 'Urbenia (9 seater)', 12],
-        ['Urbenia 13 seater', 'Urbenia (13 seater)', 13],
-        ['Urbenia 15 seater', 'Urbenia (15 seater)', 14],
-        ['Urbenia 17 seater', 'Urbenia (17 seater)', 15],
-        ['Minibus 21 seater', 'Minibus (21 seater)', 16],
-        ['Minibus 24 seater', 'Minibus (24 seater)', 17],
-        ['Minibus 30 seater', 'Minibus (30 seater)', 18],
-      ];
+    // Optionally seed car options table with predefined cars (idempotent)
+    if (process.env.SEED_DEFAULT_CARS === 'true') {
+      try {
+        const seedCars = [
+          ['Etios', 'Sedan – Etios (4 seats)', 1],
+          ['Dzire', 'Sedan – Dzire (4 seats)', 2],
+          ['Honda City', 'Sedan – Premiere (Honda City, 4 seats)', 3],
+          ['Ciaz', 'Sedan – Premiere (Ciaz, 4 seats)', 4],
+          ['Ertiga', 'SUV – Ertiga (6–7 seats)', 5],
+          ['Marazzo', 'SUV – Marazzo (6–7 seats)', 6],
+          ['Rumion', 'SUV – Rumion (6–7 seats)', 7],
+          ['Innova', 'Innova (7 seats)', 8],
+          ['Crysta', 'Innova Crysta (7 seats)', 9],
+          ['Tempo Traveller 9+1', 'Tempo Traveller (9+1 seater)', 10],
+          ['Tempo Traveller 12+1', 'Tempo Traveller (12-1 seater)', 11],
+          ['Urbenia 9 seater', 'Urbenia (9 seater)', 12],
+          ['Urbenia 13 seater', 'Urbenia (13 seater)', 13],
+          ['Urbenia 15 seater', 'Urbenia (15 seater)', 14],
+          ['Urbenia 17 seater', 'Urbenia (17 seater)', 15],
+          ['Minibus 21 seater', 'Minibus (21 seater)', 16],
+          ['Minibus 24 seater', 'Minibus (24 seater)', 17],
+          ['Minibus 30 seater', 'Minibus (30 seater)', 18],
+        ];
 
-      for (const [name, description, sortOrder] of seedCars) {
-        const subtype = mapCarToSubtype(name, description);
-        const insertSQL = DB_TYPE === 'mysql'
-          ? `INSERT INTO car_options (name, description, image_url, sort_order, car_subtype)
-             SELECT ?, ?, NULL, ?, ?
-             WHERE NOT EXISTS (SELECT 1 FROM car_options WHERE name = ?)`
-          : `INSERT INTO car_options (name, description, image_url, sort_order, car_subtype)
-             SELECT ?, ?, NULL, ?, ?
-             WHERE NOT EXISTS (SELECT 1 FROM car_options WHERE name = ?)`;
-        
-        await db.runAsync(insertSQL, [name, description, sortOrder, subtype, name]);
-        
-        if (subtype) {
-          await db.runAsync(
-            `UPDATE car_options SET car_subtype = ? WHERE name = ?`,
-            [subtype, name]
-          );
+        for (const [name, description, sortOrder] of seedCars) {
+          const subtype = mapCarToSubtype(name, description);
+          const insertSQL = DB_TYPE === 'mysql'
+            ? `INSERT INTO car_options (name, description, image_url, sort_order, car_subtype)
+               SELECT ?, ?, NULL, ?, ?
+               WHERE NOT EXISTS (SELECT 1 FROM car_options WHERE name = ?)`
+            : `INSERT INTO car_options (name, description, image_url, sort_order, car_subtype)
+               SELECT ?, ?, NULL, ?, ?
+               WHERE NOT EXISTS (SELECT 1 FROM car_options WHERE name = ?)`;
+          
+          await db.runAsync(insertSQL, [name, description, sortOrder, subtype, name]);
+          
+          if (subtype) {
+            await db.runAsync(
+              `UPDATE car_options SET car_subtype = ? WHERE name = ?`,
+              [subtype, name]
+            );
+          }
         }
-      }
 
-      console.log('Seeded car_options table with predefined cars (if missing)');
-    } catch (seedErr) {
-      console.error('Error seeding car_options table:', seedErr.message);
+        console.log('Seeded car_options table with predefined cars (if missing)');
+      } catch (seedErr) {
+        console.error('Error seeding car_options table:', seedErr.message);
+      }
     }
   } catch (error) {
     console.error('Error running migrations:', error);
