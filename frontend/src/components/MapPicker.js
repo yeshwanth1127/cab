@@ -1,42 +1,57 @@
 import React, { useEffect, useRef, useState } from 'react';
 import './MapPicker.css';
 
-const MapPicker = ({ isOpen, onClose, onSelect, userLocation, title = "Select Location" }) => {
+const MapPicker = ({ isOpen, onClose, onSelect, userLocation, initialLocation, title = "Select Location" }) => {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const markerRef = useRef(null);
   const autocompleteRef = useRef(null);
   const searchInputRef = useRef(null);
-  const [selectedLocation, setSelectedLocation] = useState(null);
+  const [selectedLocation, setSelectedLocation] = useState(initialLocation || null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isGeocoding, setIsGeocoding] = useState(false);
 
-  // Google Maps API service commented out for testing Geoapify
   const googleKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
+  const [mapsLoaded, setMapsLoaded] = useState(false);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    // Google Maps functionality commented out for testing
-    /*
-    if (!isOpen || !googleKey) return;
+    if (!isOpen) return;
+
+    if (!googleKey) {
+      setError('Google Maps API key is not configured. Please set REACT_APP_GOOGLE_MAPS_API_KEY in your environment variables.');
+      return;
+    }
 
     // Load Google Maps script if not already loaded
     if (!window.google || !window.google.maps) {
       const existingScript = document.querySelector('script[src*="maps.googleapis.com"]');
       if (existingScript) {
-        existingScript.addEventListener('load', initializeMap);
+        existingScript.addEventListener('load', () => {
+          setMapsLoaded(true);
+          setTimeout(initializeMap, 100);
+        });
         if (window.google && window.google.maps) {
-          initializeMap();
+          setMapsLoaded(true);
+          setTimeout(initializeMap, 100);
         }
       } else {
         const script = document.createElement('script');
         script.src = `https://maps.googleapis.com/maps/api/js?key=${googleKey}&libraries=places&loading=async`;
         script.async = true;
         script.defer = true;
-        script.onload = initializeMap;
+        script.onload = () => {
+          setMapsLoaded(true);
+          setTimeout(initializeMap, 100);
+        };
+        script.onerror = () => {
+          setError('Failed to load Google Maps. Please check your API key and network connection.');
+        };
         document.head.appendChild(script);
       }
     } else {
-      // Small delay to ensure DOM is ready
+      setMapsLoaded(true);
       setTimeout(initializeMap, 100);
     }
 
@@ -46,7 +61,6 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, title = "Select Lo
         markerRef.current.setMap(null);
       }
     };
-    */
   }, [isOpen, googleKey, userLocation]);
 
   const initializeMap = () => {
@@ -54,7 +68,7 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, title = "Select Lo
 
     const defaultCenter = userLocation 
       ? { lat: userLocation.lat, lng: userLocation.lng }
-      : { lat: 28.6139, lng: 77.2090 }; // Default to Delhi, India
+      : { lat: 12.9716, lng: 77.5946 }; // Default to Bangalore, India
 
     // Initialize map
     const map = new window.google.maps.Map(mapRef.current, {
@@ -66,6 +80,13 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, title = "Select Lo
     });
 
     mapInstanceRef.current = map;
+
+    // If initial location is provided, set it up
+    if (initialLocation && initialLocation.lat && initialLocation.lng) {
+      map.setCenter({ lat: initialLocation.lat, lng: initialLocation.lng });
+      map.setZoom(17);
+      handleLocationSelect(initialLocation);
+    }
 
     // Add marker for user location if available
     if (userLocation) {
@@ -123,10 +144,10 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, title = "Select Lo
       const lng = event.latLng.lng();
       
       // Reverse geocode to get address
-      setIsLoading(true);
+      setIsGeocoding(true);
       const geocoder = new window.google.maps.Geocoder();
       geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-        setIsLoading(false);
+        setIsGeocoding(false);
         if (status === 'OK' && results[0]) {
           handleLocationSelect({
             lat,
@@ -172,10 +193,10 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, title = "Select Lo
         const lat = event.latLng.lat();
         const lng = event.latLng.lng();
         
-        setIsLoading(true);
+        setIsGeocoding(true);
         const geocoder = new window.google.maps.Geocoder();
         geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-          setIsLoading(false);
+          setIsGeocoding(false);
           if (status === 'OK' && results[0]) {
             const newLocation = {
               lat,
@@ -193,27 +214,99 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, title = "Select Lo
 
   const handleConfirm = () => {
     if (selectedLocation) {
-      onSelect(selectedLocation);
+      // Ensure we return the location in the expected format: {address, lat, lng}
+      const locationData = {
+        address: selectedLocation.address,
+        lat: selectedLocation.lat,
+        lng: selectedLocation.lng
+      };
+      onSelect(locationData);
       handleClose();
     }
   };
 
   const handleClose = () => {
-    setSelectedLocation(null);
+    setSelectedLocation(initialLocation || null);
     setSearchQuery('');
+    setError(null);
     onClose();
+  };
+
+  const handleUseCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setError('Geolocation is not supported by your browser');
+      return;
+    }
+
+    setIsLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.setCenter({ lat, lng });
+          mapInstanceRef.current.setZoom(17);
+          
+          // Trigger reverse geocoding
+          setIsGeocoding(true);
+          const geocoder = new window.google.maps.Geocoder();
+          geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+            setIsGeocoding(false);
+            setIsLoading(false);
+            if (status === 'OK' && results[0]) {
+              handleLocationSelect({
+                lat,
+                lng,
+                address: results[0].formatted_address,
+                place_id: results[0].place_id,
+                address_components: results[0].address_components,
+              });
+            } else {
+              handleLocationSelect({
+                lat,
+                lng,
+                address: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
+              });
+            }
+          });
+        }
+      },
+      (error) => {
+        setIsLoading(false);
+        setError('Unable to get your location. Please enable location access.');
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      }
+    );
   };
 
   if (!isOpen) return null;
 
-  // Google Maps functionality temporarily disabled for testing Geoapify
-  if (!googleKey || true) {
+  if (error) {
     return (
       <div className="map-picker-overlay" onClick={handleClose}>
         <div className="map-picker-modal" onClick={(e) => e.stopPropagation()}>
           <div className="map-picker-error">
-            <h3>Map Picker Temporarily Disabled</h3>
-            <p>Google Maps API service is commented out for testing Geoapify autocomplete. Map picker will be re-enabled with an alternative map provider.</p>
+            <h3>Error Loading Map</h3>
+            <p>{error}</p>
+            <button onClick={handleClose} className="btn-close">Close</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!googleKey) {
+    return (
+      <div className="map-picker-overlay" onClick={handleClose}>
+        <div className="map-picker-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="map-picker-error">
+            <h3>Google Maps API Key Required</h3>
+            <p>Please set REACT_APP_GOOGLE_MAPS_API_KEY in your environment variables.</p>
             <button onClick={handleClose} className="btn-close">Close</button>
           </div>
         </div>
@@ -238,11 +331,17 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, title = "Select Lo
             onChange={(e) => setSearchQuery(e.target.value)}
             className="map-picker-search-input"
           />
-          {isLoading && <div className="map-picker-loading">Loading...</div>}
+          {(isLoading || isGeocoding) && <div className="map-picker-loading">Loading...</div>}
         </div>
 
         <div className="map-picker-map-container">
-          <div ref={mapRef} className="map-picker-map" />
+          {!mapsLoaded && (
+            <div className="map-picker-loading-overlay">
+              <div className="map-picker-spinner"></div>
+              <p>Loading map...</p>
+            </div>
+          )}
+          <div ref={mapRef} className="map-picker-map" style={{ display: mapsLoaded ? 'block' : 'none' }} />
         </div>
 
         {selectedLocation && (
@@ -251,15 +350,25 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, title = "Select Lo
               <strong>Selected:</strong>
               <p>{selectedLocation.address}</p>
             </div>
-            <button onClick={handleConfirm} className="btn-confirm">
-              Confirm Location
-            </button>
+            <div className="map-picker-actions">
+              <button onClick={handleUseCurrentLocation} className="btn-current-location" disabled={isLoading}>
+                {isLoading ? '⏳' : '📍'} Use Current Location
+              </button>
+              <button onClick={handleConfirm} className="btn-confirm">
+                Confirm Location
+              </button>
+            </div>
           </div>
         )}
 
-        <div className="map-picker-instructions">
-          <p>💡 Search for a location or click on the map to select</p>
-        </div>
+        {!selectedLocation && (
+          <div className="map-picker-instructions">
+            <p>💡 Search for a location, click on the map, or use your current location</p>
+            <button onClick={handleUseCurrentLocation} className="btn-current-location-inline" disabled={isLoading}>
+              {isLoading ? '⏳ Loading...' : '📍 Use Current Location'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
