@@ -271,6 +271,7 @@ const CorporateBookingPage = () => {
                     }}
                     placeholder="Enter pickup location or click 📍 for current location"
                     showCurrentLocation={true}
+                    userLocation={userLocation}
                   />
                   {errors.pickup_point && <span className="error-message">{errors.pickup_point}</span>}
                 </div>
@@ -288,6 +289,7 @@ const CorporateBookingPage = () => {
                     }}
                     placeholder="Enter drop location"
                     showCurrentLocation={false}
+                    userLocation={userLocation}
                   />
                   {errors.drop_point && <span className="error-message">{errors.drop_point}</span>}
                 </div>

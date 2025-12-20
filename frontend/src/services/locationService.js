@@ -89,21 +89,45 @@ export const searchPlacesGoogle = async (query, userLocation = null, apiKey) => 
   }
 
   try {
-    let url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&key=${apiKey}`;
+    // Build URL with parameters to prioritize street-level addresses
+    const params = new URLSearchParams({
+      input: query,
+      key: apiKey,
+      // Prioritize addresses over regions/cities
+      types: 'address',
+      // Restrict to India (can be made configurable)
+      components: 'country:in'
+    });
     
     if (userLocation) {
-      url += `&location=${userLocation.lat},${userLocation.lng}&radius=50000`;
+      // Use tighter radius for better proximity results
+      params.append('location', `${userLocation.lat},${userLocation.lng}`);
+      params.append('radius', '5000'); // Reduced from 50000 for better accuracy
     }
 
+    const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?${params}`;
     const response = await fetch(url);
     const data = await response.json();
     
     if (data.predictions) {
-      return data.predictions.map((prediction) => ({
-        id: prediction.place_id,
-        name: prediction.description,
-        address: prediction.description,
-      }));
+      // Filter and prioritize results with street addresses
+      return data.predictions
+        .filter(prediction => {
+          // Prefer predictions that look like street addresses
+          const desc = prediction.description.toLowerCase();
+          // Exclude if it's clearly a city or region (contains only city/state names)
+          const hasStreetIndicators = /\d/.test(desc) || // Has numbers (house numbers)
+            desc.includes('street') || desc.includes('road') || 
+            desc.includes('avenue') || desc.includes('lane') ||
+            desc.includes('nagar') || desc.includes('colony') ||
+            desc.includes('sector') || desc.includes('block');
+          return hasStreetIndicators || prediction.types.includes('street_address');
+        })
+        .map((prediction) => ({
+          id: prediction.place_id,
+          name: prediction.description,
+          address: prediction.description,
+        }));
     }
     
     return [];

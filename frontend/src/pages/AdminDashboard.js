@@ -5,6 +5,34 @@ import './AdminDashboard.css';
 
 const AdminDashboard = () => {
   const { user, logout } = useAuth();
+  
+  // Helper function to format date and time in Indian timezone (IST)
+  const formatIndianDateTime = (dateString) => {
+    if (!dateString) return '-';
+    const date = new Date(dateString);
+    return date.toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+  };
+  
+  // Helper function to format time only in Indian timezone (IST)
+  const formatIndianTime = (dateString) => {
+    if (!dateString) return '-';
+    const date = new Date(dateString);
+    return date.toLocaleTimeString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+  };
+  
   const [activeTab, setActiveTab] = useState('dashboard');
   const [stats, setStats] = useState(null);
   const [cabTypes, setCabTypes] = useState([]);
@@ -42,6 +70,26 @@ const AdminDashboard = () => {
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [receiptWithGST, setReceiptWithGST] = useState(true);
+  
+  // Create Booking state
+  const [newBooking, setNewBooking] = useState({
+    service_type: '',
+    trip_type: '',
+    from_location: '',
+    to_location: '',
+    passenger_name: '',
+    passenger_phone: '',
+    passenger_email: '',
+    travel_date: '',
+    pickup_time: '',
+    number_of_hours: '',
+    number_of_days: '',
+    cab_type_id: '',
+    car_option_id: '',
+    notes: '',
+  });
+  const [calculatingFare, setCalculatingFare] = useState(false);
+  const [estimatedFare, setEstimatedFare] = useState(null);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -465,6 +513,140 @@ const AdminDashboard = () => {
     }
   };
 
+  const exportBookingsToCSV = async () => {
+    try {
+      const response = await api.get('/admin/bookings/export/csv', {
+        responseType: 'blob',
+      });
+
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      
+      const timestamp = new Date().toISOString().split('T')[0];
+      link.setAttribute('download', `nammacabs-bookings-${timestamp}.csv`);
+      
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error exporting bookings to CSV:', error);
+      alert('Error exporting bookings. Please try again.');
+    }
+  };
+
+  const calculateFareForAdmin = async () => {
+    if (!newBooking.service_type) {
+      alert('Please select a service type');
+      return;
+    }
+
+    if (newBooking.service_type === 'local' && !newBooking.number_of_hours) {
+      alert('Please select number of hours for local booking');
+      return;
+    }
+
+    if (newBooking.service_type === 'outstation' && newBooking.trip_type === 'round_trip' && !newBooking.number_of_days) {
+      alert('Please select number of days for round trip');
+      return;
+    }
+
+    setCalculatingFare(true);
+    try {
+      const payload = {
+        service_type: newBooking.service_type,
+        from_location: newBooking.from_location,
+        to_location: newBooking.to_location,
+      };
+
+      if (newBooking.service_type === 'local') {
+        payload.number_of_hours = newBooking.number_of_hours;
+      }
+
+      if (newBooking.service_type === 'outstation') {
+        payload.trip_type = newBooking.trip_type;
+        if (newBooking.trip_type === 'round_trip') {
+          payload.number_of_days = newBooking.number_of_days;
+        }
+      }
+
+      if (newBooking.car_option_id) {
+        payload.car_option_id = newBooking.car_option_id;
+      }
+
+      const response = await api.post('/bookings/calculate-fare', payload);
+      setEstimatedFare(response.data);
+    } catch (error) {
+      console.error('Error calculating fare:', error);
+      alert(error.response?.data?.error || 'Error calculating fare');
+    } finally {
+      setCalculatingFare(false);
+    }
+  };
+
+  const handleCreateBooking = async (e) => {
+    e.preventDefault();
+    
+    if (!estimatedFare) {
+      alert('Please calculate fare first');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const bookingPayload = {
+        service_type: newBooking.service_type,
+        trip_type: newBooking.trip_type || null,
+        from_location: newBooking.from_location,
+        to_location: newBooking.to_location,
+        passenger_name: newBooking.passenger_name,
+        passenger_phone: newBooking.passenger_phone,
+        passenger_email: newBooking.passenger_email,
+        travel_date: newBooking.travel_date,
+        pickup_time: newBooking.pickup_time || null,
+        number_of_hours: newBooking.number_of_hours || null,
+        number_of_days: newBooking.number_of_days || null,
+        cab_type_id: estimatedFare.cab_type_id,
+        car_option_id: newBooking.car_option_id || null,
+        fare_amount: estimatedFare.fare,
+        distance_km: estimatedFare.distance_km || 0,
+        notes: newBooking.notes || '',
+      };
+
+      const response = await api.post('/bookings', bookingPayload);
+      
+      alert(`Booking created successfully! Booking ID: ${response.data.id}`);
+      
+      // Reset form
+      setNewBooking({
+        service_type: '',
+        trip_type: '',
+        from_location: '',
+        to_location: '',
+        passenger_name: '',
+        passenger_phone: '',
+        passenger_email: '',
+        travel_date: '',
+        pickup_time: '',
+        number_of_hours: '',
+        number_of_days: '',
+        cab_type_id: '',
+        car_option_id: '',
+        notes: '',
+      });
+      setEstimatedFare(null);
+      
+      // Refresh dashboard data
+      fetchDashboardData();
+    } catch (error) {
+      console.error('Error creating booking:', error);
+      alert(error.response?.data?.error || error.response?.data?.errors?.[0]?.msg || 'Error creating booking');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="admin-dashboard">
       {/* Mobile hamburger menu button - fixed at top */}
@@ -542,6 +724,17 @@ const AdminDashboard = () => {
 
           <div className="sidebar-section">
             <h3 className="sidebar-heading">Bookings</h3>
+            <button
+              className={activeTab === 'create-booking' ? 'active' : ''}
+              onClick={() => {
+                setActiveTab('create-booking');
+                if (isMobile) setSidebarOpen(false);
+              }}
+            >
+              <span className="sidebar-icon">➕</span>
+              <span className="sidebar-text">Create Booking</span>
+              <span className="sidebar-subtext">New Booking</span>
+            </button>
             <button
               className={activeTab === 'bookings' ? 'active' : ''}
               onClick={() => {
@@ -719,7 +912,10 @@ const AdminDashboard = () => {
                              ) : booking.service_type}
                           </p>
                           <p className="recent-booking-date">
-                            {new Date(booking.booking_date).toLocaleString()}
+                            {formatIndianDateTime(booking.booking_date)}
+                          </p>
+                          <p className="recent-booking-time" style={{ fontSize: '0.85em', color: '#6b7280', marginTop: '4px' }}>
+                            Booked at: {formatIndianTime(booking.booking_date)}
                           </p>
                           <p className="recent-booking-fare">₹{booking.fare_amount}</p>
                         </div>
@@ -923,9 +1119,14 @@ const AdminDashboard = () => {
                   </div>
 
                   <div className="detail-item">
-                    <div className="detail-heading">Booking Date</div>
+                    <div className="detail-heading">Booking Date & Time</div>
                     <div className="detail-divider"></div>
-                    <div className="detail-text">{new Date(selectedBooking.booking_date).toLocaleString()}</div>
+                    <div className="detail-text">
+                      {formatIndianDateTime(selectedBooking.booking_date)}
+                      <div style={{ fontSize: '0.9em', color: '#6b7280', marginTop: '4px' }}>
+                        Time: {formatIndianTime(selectedBooking.booking_date)}
+                      </div>
+                    </div>
                   </div>
 
                   {selectedBooking.travel_date && (
@@ -983,6 +1184,252 @@ const AdminDashboard = () => {
                     </button>
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'create-booking' && (
+            <div>
+              <div className="section-header">
+                <h2>Create New Booking</h2>
+              </div>
+
+              <div className="booking-filters-box" style={{ maxWidth: '800px' }}>
+                <form onSubmit={handleCreateBooking}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                    <div className="form-group">
+                      <label>Service Type *</label>
+                      <select
+                        value={newBooking.service_type}
+                        onChange={(e) => {
+                          setNewBooking({ ...newBooking, service_type: e.target.value, trip_type: '', number_of_hours: '', number_of_days: '' });
+                          setEstimatedFare(null);
+                        }}
+                        required
+                      >
+                        <option value="">Select Service Type</option>
+                        <option value="local">Local</option>
+                        <option value="airport">Airport</option>
+                        <option value="outstation">Outstation</option>
+                      </select>
+                    </div>
+
+                    {newBooking.service_type === 'outstation' && (
+                      <div className="form-group">
+                        <label>Trip Type *</label>
+                        <select
+                          value={newBooking.trip_type}
+                          onChange={(e) => {
+                            setNewBooking({ ...newBooking, trip_type: e.target.value, number_of_days: '' });
+                            setEstimatedFare(null);
+                          }}
+                          required
+                        >
+                          <option value="">Select Trip Type</option>
+                          <option value="one_way">One Way</option>
+                          <option value="round_trip">Round Trip</option>
+                        </select>
+                      </div>
+                    )}
+
+                    {newBooking.service_type === 'local' && (
+                      <div className="form-group">
+                        <label>Number of Hours *</label>
+                        <select
+                          value={newBooking.number_of_hours}
+                          onChange={(e) => {
+                            setNewBooking({ ...newBooking, number_of_hours: e.target.value });
+                            setEstimatedFare(null);
+                          }}
+                          required
+                        >
+                          <option value="">Select Hours</option>
+                          <option value="2">2 hours</option>
+                          <option value="4">4 hours</option>
+                          <option value="8">8 hours</option>
+                          <option value="12">12 hours</option>
+                        </select>
+                      </div>
+                    )}
+
+                    {newBooking.service_type === 'outstation' && newBooking.trip_type === 'round_trip' && (
+                      <div className="form-group">
+                        <label>Number of Days *</label>
+                        <select
+                          value={newBooking.number_of_days}
+                          onChange={(e) => {
+                            setNewBooking({ ...newBooking, number_of_days: e.target.value });
+                            setEstimatedFare(null);
+                          }}
+                          required
+                        >
+                          <option value="">Select Days</option>
+                          <option value="1">1 day (300 km)</option>
+                          <option value="2">2 days (600 km)</option>
+                          <option value="3">3 days (900 km)</option>
+                          <option value="4">4 days (1200 km)</option>
+                          <option value="5">5 days (1500 km)</option>
+                          <option value="6">6 days (1800 km)</option>
+                          <option value="7">7 days (2100 km)</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '20px' }}>
+                    <div className="form-group">
+                      <label>From Location *</label>
+                      <input
+                        type="text"
+                        value={newBooking.from_location}
+                        onChange={(e) => {
+                          setNewBooking({ ...newBooking, from_location: e.target.value });
+                          setEstimatedFare(null);
+                        }}
+                        placeholder="Enter pickup location"
+                        required
+                      />
+                    </div>
+
+                    {newBooking.service_type !== 'local' && (
+                      <div className="form-group">
+                        <label>To Location *</label>
+                        <input
+                          type="text"
+                          value={newBooking.to_location}
+                          onChange={(e) => {
+                            setNewBooking({ ...newBooking, to_location: e.target.value });
+                            setEstimatedFare(null);
+                          }}
+                          placeholder="Enter drop location"
+                          required={newBooking.service_type !== 'local'}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '20px' }}>
+                    <div className="form-group">
+                      <label>Passenger Name *</label>
+                      <input
+                        type="text"
+                        value={newBooking.passenger_name}
+                        onChange={(e) => setNewBooking({ ...newBooking, passenger_name: e.target.value })}
+                        placeholder="Enter passenger name"
+                        required
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label>Passenger Phone *</label>
+                      <input
+                        type="tel"
+                        value={newBooking.passenger_phone}
+                        onChange={(e) => setNewBooking({ ...newBooking, passenger_phone: e.target.value })}
+                        placeholder="Enter phone number"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '20px' }}>
+                    <div className="form-group">
+                      <label>Passenger Email *</label>
+                      <input
+                        type="email"
+                        value={newBooking.passenger_email}
+                        onChange={(e) => setNewBooking({ ...newBooking, passenger_email: e.target.value })}
+                        placeholder="Enter email address"
+                        required
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label>Travel Date *</label>
+                      <input
+                        type="date"
+                        value={newBooking.travel_date}
+                        onChange={(e) => setNewBooking({ ...newBooking, travel_date: e.target.value })}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '20px' }}>
+                    <div className="form-group">
+                      <label>Pickup Time (Optional)</label>
+                      <input
+                        type="time"
+                        value={newBooking.pickup_time}
+                        onChange={(e) => setNewBooking({ ...newBooking, pickup_time: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label>Car Option (Optional)</label>
+                      <select
+                        value={newBooking.car_option_id}
+                        onChange={(e) => {
+                          setNewBooking({ ...newBooking, car_option_id: e.target.value });
+                          setEstimatedFare(null);
+                        }}
+                      >
+                        <option value="">Select Car (Optional)</option>
+                        {carOptions.map((car) => (
+                          <option key={car.id} value={car.id}>
+                            {car.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="form-group" style={{ marginTop: '20px' }}>
+                    <label>Notes (Optional)</label>
+                    <textarea
+                      value={newBooking.notes}
+                      onChange={(e) => setNewBooking({ ...newBooking, notes: e.target.value })}
+                      placeholder="Any special requirements or notes"
+                      rows="3"
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '15px', marginTop: '30px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={calculateFareForAdmin}
+                      className="btn btn-secondary"
+                      disabled={calculatingFare}
+                    >
+                      {calculatingFare ? 'Calculating...' : '💰 Calculate Fare'}
+                    </button>
+
+                    {estimatedFare && (
+                      <div style={{ 
+                        padding: '15px 25px', 
+                        background: 'linear-gradient(135deg, #facc15 0%, #eab308 100%)',
+                        borderRadius: '12px',
+                        fontWeight: '700',
+                        fontSize: '18px',
+                        color: '#000',
+                        boxShadow: '0 4px 12px rgba(250, 204, 21, 0.3)'
+                      }}>
+                        Estimated Fare: ₹{estimatedFare.fare}
+                      </div>
+                    )}
+
+                    {estimatedFare && (
+                      <button
+                        type="submit"
+                        className="btn btn-primary"
+                        disabled={loading}
+                        style={{ marginLeft: 'auto' }}
+                      >
+                        {loading ? 'Creating...' : '✓ Create Booking'}
+                      </button>
+                    )}
+                  </div>
+                </form>
               </div>
             </div>
           )}
@@ -1263,27 +1710,77 @@ const AdminDashboard = () => {
 
           {activeTab === 'bookings' && (
             <div>
-              <div className="section-header bookings-header">
+              <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                 <h2>Bookings</h2>
+                <button 
+                  onClick={exportBookingsToCSV}
+                  className="btn btn-primary"
+                  style={{ 
+                    color: '#000',
+                    fontWeight: '600',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  📊 Export to CSV
+                </button>
+              </div>
+              
+              <div className="booking-filters-box">
                 <div className="booking-filters">
-                  <div className="filter-group">
+                  <div className="filter-group filter-group-status-toggle">
                     <label>Status</label>
-                    <select
-                      value={bookingFilters.status}
-                      onChange={(e) =>
-                        setBookingFilters((prev) => ({
-                          ...prev,
-                          status: e.target.value,
-                        }))
-                      }
-                    >
-                      <option value="all">All</option>
-                      <option value="pending">Pending</option>
-                      <option value="confirmed">Confirmed</option>
-                      <option value="in_progress">In Progress</option>
-                      <option value="completed">Completed</option>
-                      <option value="cancelled">Cancelled</option>
-                    </select>
+                    <div className="status-toggle-group">
+                      <button
+                        type="button"
+                        className={`status-toggle-btn ${bookingFilters.status === 'confirmed' ? 'active' : ''}`}
+                        onClick={() =>
+                          setBookingFilters((prev) => ({
+                            ...prev,
+                            status: prev.status === 'confirmed' ? 'all' : 'confirmed',
+                          }))
+                        }
+                      >
+                        Confirmed
+                      </button>
+                      <button
+                        type="button"
+                        className={`status-toggle-btn ${bookingFilters.status === 'cancelled' ? 'active' : ''}`}
+                        onClick={() =>
+                          setBookingFilters((prev) => ({
+                            ...prev,
+                            status: prev.status === 'cancelled' ? 'all' : 'cancelled',
+                          }))
+                        }
+                      >
+                        Cancelled
+                      </button>
+                      <button
+                        type="button"
+                        className={`status-toggle-btn ${bookingFilters.status === 'completed' ? 'active' : ''}`}
+                        onClick={() =>
+                          setBookingFilters((prev) => ({
+                            ...prev,
+                            status: prev.status === 'completed' ? 'all' : 'completed',
+                          }))
+                        }
+                      >
+                        Completed
+                      </button>
+                      <button
+                        type="button"
+                        className={`status-toggle-btn ${bookingFilters.status === 'pending' ? 'active' : ''}`}
+                        onClick={() =>
+                          setBookingFilters((prev) => ({
+                            ...prev,
+                            status: prev.status === 'pending' ? 'all' : 'pending',
+                          }))
+                        }
+                      >
+                        Pending
+                      </button>
+                    </div>
                   </div>
                   <div className="filter-group">
                     <label>Service Type</label>
@@ -1344,6 +1841,7 @@ const AdminDashboard = () => {
                   </div>
                 </div>
               </div>
+              
               <div className="data-table-wrapper">
                 <table className="data-table">
                   <thead>
@@ -1502,9 +2000,10 @@ const AdminDashboard = () => {
                               </select>
                             </td>
                             <td data-label="Date">
-                              {new Date(
-                                booking.booking_date
-                              ).toLocaleString()}
+                              <div>{formatIndianDateTime(booking.booking_date)}</div>
+                              <div style={{ fontSize: '0.85em', color: '#6b7280', marginTop: '4px' }}>
+                                {formatIndianTime(booking.booking_date)}
+                              </div>
                             </td>
                             <td data-label="Actions">
                               <button

@@ -1089,6 +1089,246 @@
   }
 }
 
+/* Outstation Routes Section */
+.outstation-routes-section {
+  position: relative;
+  min-height: 100vh;
+  padding: 80px 0;
+  overflow: hidden;
+  background: #000000;
+}
+
+.outstation-routes-wrapper {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.outstation-routes-inner {
+  position: relative;
+  z-index: 1;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.outstation-routes-header {
+  text-align: center;
+  margin-bottom: 60px;
+  animation: fadeInUp 0.8s ease-out;
+}
+
+.outstation-routes-title {
+  font-size: 32px;
+  font-weight: 800;
+  color: #facc15;
+  margin-bottom: 20px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.routes-title-underline {
+  width: 120px;
+  height: 4px;
+  background: linear-gradient(90deg, transparent, #facc15, transparent);
+  margin: 0 auto 20px;
+  animation: expandWidth 1s ease-out 0.5s both;
+}
+
+.outstation-routes-subtitle {
+  color: #94a3b8;
+  font-size: 18px;
+  font-weight: 300;
+  letter-spacing: 0.5px;
+}
+
+.outstation-routes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+  margin-top: 40px;
+}
+
+.route-button {
+  position: relative;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.9) 100%);
+  border: 2px solid rgba(250, 204, 21, 0.2);
+  border-radius: 16px;
+  padding: 20px 24px;
+  color: #e5e7eb;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  opacity: 0;
+  transform: translateY(20px);
+  animation: fadeInUpStagger 0.6s ease-out forwards;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+.route-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(250, 204, 21, 0.1), transparent);
+  transition: left 0.5s ease;
+}
+
+.route-button:hover::before {
+  left: 100%;
+}
+
+.route-button::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+  padding: 2px;
+  background: linear-gradient(135deg, #facc15, #eab308, #facc15);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.route-button:hover::after {
+  opacity: 1;
+}
+
+.route-button:hover {
+  transform: translateY(-6px) scale(1.02);
+  border-color: #facc15;
+  box-shadow: 0 12px 40px rgba(250, 204, 21, 0.4),
+              0 0 20px rgba(250, 204, 21, 0.2);
+  background: linear-gradient(135deg, rgba(15, 23, 42, 1) 0%, rgba(30, 41, 59, 1) 100%);
+}
+
+.route-button:active {
+  transform: translateY(-3px) scale(1.01);
+}
+
+.route-button-text {
+  flex: 1;
+  position: relative;
+  z-index: 1;
+  transition: color 0.3s ease;
+}
+
+.route-button:hover .route-button-text {
+  color: #facc15;
+}
+
+.route-button-arrow {
+  font-size: 20px;
+  color: #facc15;
+  opacity: 0.6;
+  transition: all 0.3s ease;
+  position: relative;
+  z-index: 1;
+}
+
+.route-button:hover .route-button-arrow {
+  opacity: 1;
+  transform: translateX(5px);
+}
+
+/* Animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInUpStagger {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes expandWidth {
+  from {
+    width: 0;
+  }
+  to {
+    width: 120px;
+  }
+}
+
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .outstation-routes-grid {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 16px;
+  }
+  
+  .outstation-routes-title {
+    font-size: 28px;
+  }
+}
+
+@media (max-width: 768px) {
+  .outstation-routes-section {
+    padding: 60px 0;
+  }
+  
+  .outstation-routes-inner {
+    padding: 0 16px;
+  }
+  
+  .outstation-routes-header {
+    margin-bottom: 40px;
+  }
+  
+  .outstation-routes-title {
+    font-size: 22px;
+  }
+  
+  .outstation-routes-subtitle {
+    font-size: 16px;
+  }
+  
+  .outstation-routes-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  
+  .route-button {
+    padding: 18px 20px;
+    font-size: 15px;
+  }
+}
+
+@media (max-width: 480px) {
+  .outstation-routes-title {
+    font-size: 18px;
+  }
+  
+  .route-button {
+    padding: 16px 18px;
+    font-size: 14px;
+  }
+}
+
 .cars-section,
 .reviews-section {
   position: relative;

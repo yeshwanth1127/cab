@@ -478,6 +478,7 @@ const BookingPage = () => {
                           onSelect={setFromLocation}
                           placeholder="Enter pickup location or click 📍 for current location"
                           showCurrentLocation={true}
+                          userLocation={userLocation}
                         />
 
                         <div className="form-group">
@@ -529,6 +530,7 @@ const BookingPage = () => {
                               onSelect={setPickupLocation}
                               placeholder="Enter pickup location or click 📍 for current location"
                               showCurrentLocation={true}
+                              userLocation={userLocation}
                             />
                             <LocationInput
                               label="Drop Location *"
@@ -536,6 +538,7 @@ const BookingPage = () => {
                               onSelect={setDropLocation}
                               placeholder="Enter drop location"
                               showCurrentLocation={false}
+                              userLocation={userLocation}
                             />
                           </>
                         )}
@@ -548,6 +551,7 @@ const BookingPage = () => {
                               onSelect={setPickupLocation}
                               placeholder="Enter pickup location or click 📍 for current location"
                               showCurrentLocation={true}
+                              userLocation={userLocation}
                             />
                             <div className="form-group">
                               <label>Number of Days *</label>
@@ -578,6 +582,7 @@ const BookingPage = () => {
                               onSelect={setPickupLocation}
                               placeholder="Enter pickup location or click 📍 for current location"
                               showCurrentLocation={true}
+                              userLocation={userLocation}
                             />
                             <LocationInput
                               label="Stop A *"
@@ -585,6 +590,7 @@ const BookingPage = () => {
                               onSelect={setStopA}
                               placeholder="Enter first stop location"
                               showCurrentLocation={false}
+                              userLocation={userLocation}
                             />
                             <LocationInput
                               label="Stop B *"
@@ -592,6 +598,7 @@ const BookingPage = () => {
                               onSelect={setStopB}
                               placeholder="Enter second stop location"
                               showCurrentLocation={false}
+                              userLocation={userLocation}
                             />
                             {additionalStops.map((stop, index) => (
                               <LocationInput
@@ -605,6 +612,7 @@ const BookingPage = () => {
                                 }}
                                 placeholder={`Enter stop ${String.fromCharCode(67 + index)} location`}
                                 showCurrentLocation={false}
+                                userLocation={userLocation}
                               />
                             ))}
                             <button
@@ -631,6 +639,7 @@ const BookingPage = () => {
                               onSelect={setDropLocation}
                               placeholder="Enter final drop location"
                               showCurrentLocation={false}
+                              userLocation={userLocation}
                             />
 
                             <div className="form-group" style={{ 
@@ -655,6 +664,7 @@ const BookingPage = () => {
                           onSelect={setFromLocation}
                           placeholder="Enter pickup location or click 📍 for current location"
                           showCurrentLocation={true}
+                          userLocation={userLocation}
                         />
 
                         <LocationInput
@@ -663,6 +673,7 @@ const BookingPage = () => {
                           onSelect={setToLocation}
                           placeholder="Enter destination"
                           showCurrentLocation={false}
+                          userLocation={userLocation}
                         />
                       </>
                     )}
@@ -1270,6 +1281,50 @@ const BookingPage = () => {
                 Get Started with Corporate Booking →
               </a>
             </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Outstation Routes Section */}
+      <section className="outstation-routes-section">
+        <div className="outstation-routes-wrapper">
+          <AnimatedMapBackground />
+        </div>
+        <div className="outstation-routes-inner">
+          <div className="outstation-routes-header">
+            <h2 className="outstation-routes-title">
+              Our Common Routes
+            </h2>
+            <div className="routes-title-underline"></div>
+            <p className="outstation-routes-subtitle">
+              Choose your destination and book your journey in seconds
+            </p>
+          </div>
+          
+          <div className="outstation-routes-grid">
+            {[
+              'Mysore', 'Salem', 'Coorg', 'Chikmagalur', 'Mangalore', 
+              'Dharwad', 'Shivamogga', 'Chennai', 'Madurai', 'Coimbatore',
+              'Krishnagiri', 'Tirupati', 'Hyderabad', 'Hubli', 'Munnar', 'Vellore',
+              'Pondicherry', 'Hassan', 'Ooty'
+            ].map((destination, index) => (
+              <button
+                key={destination}
+                className="route-button"
+                onClick={() => {
+                  setServiceType('outstation');
+                  setFromLocation({ address: 'Bangalore' });
+                  setToLocation({ address: destination });
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                style={{ animationDelay: `${index * 0.05}s` }}
+              >
+                <span className="route-button-text">
+                  Bangalore To {destination}
+                </span>
+                <span className="route-button-arrow">→</span>
+              </button>
+            ))}
           </div>
         </div>
       </section>

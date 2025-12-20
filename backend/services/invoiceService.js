@@ -33,35 +33,36 @@ function mapServiceType(serviceType) {
  */
 function buildDefaultInvoiceData(booking, options = {}) {
   const {
-    companyGSTIN = process.env.COMPANY_GSTIN || '',
-    hsnSAC = process.env.COMPANY_HSN_SAC || '',
-    gstRate = Number(process.env.COMPANY_GST_RATE || '0.05'),
+    withGST = false,
+    companyGSTIN = '29AHYPC7622F1ZZ',
+    hsnSAC = process.env.COMPANY_HSN_SAC || '996411',
+    gstRate = 0.18, // 18% GST
   } = options;
 
   const baseFare = Number(booking.fare_amount || 0);
-  const gstAmount = baseFare * gstRate;
+  const gstAmount = withGST ? (baseFare * gstRate) : 0;
   const grandTotal = baseFare + gstAmount;
 
   const pickup = booking.from_location || '';
-  const drop = booking.to_location || '';
+  const drop = booking.to_location || 'N/A';
   const serviceTypeLabel = mapServiceType(booking.service_type);
   const travelDate = formatDate(booking.travel_date || booking.booking_date);
 
-  const lines = [
-    `Service: ${serviceTypeLabel}`,
-    travelDate ? `Date: ${travelDate}` : '',
-    booking.pickup_time ? `Time: ${booking.pickup_time}` : '',
-    pickup ? `Pickup: ${pickup}` : '',
-    drop ? `Drop: ${drop}` : '',
-    booking.cab_type_name ? `Cab Type: ${booking.cab_type_name}` : '',
-    booking.car_option_name ? `Car: ${booking.car_option_name}` : '',
-  ].filter(Boolean);
+  // Create a more organized description
+  const lines = [];
+  lines.push(`Service: ${serviceTypeLabel}`);
+  if (travelDate) lines.push(`Date: ${travelDate}`);
+  if (booking.pickup_time) lines.push(`Time: ${booking.pickup_time}`);
+  if (pickup) lines.push(`Pickup: ${pickup}`);
+  if (drop && drop !== 'N/A') lines.push(`Drop: ${drop}`);
+  if (booking.cab_type_name) lines.push(`Cab Type: ${booking.cab_type_name}`);
+  if (booking.car_option_name) lines.push(`Car: ${booking.car_option_name}`);
 
   return {
     invoice_no: `NC-${booking.id}`,
     invoice_date: formatDate(booking.booking_date),
-    company_gstin: companyGSTIN,
-    hsn_sac: hsnSAC,
+    company_gstin: withGST ? companyGSTIN : '',
+    hsn_sac: withGST ? hsnSAC : '',
 
     customer_name: booking.passenger_name || booking.username || '',
     customer_address: pickup || '',
@@ -71,9 +72,10 @@ function buildDefaultInvoiceData(booking, options = {}) {
     customer_gst: '',
 
     service_description: lines.join('\n'),
-    total_kms: booking.distance_km != null ? String(booking.distance_km) : '',
-    no_of_days: booking.number_of_days ? String(booking.number_of_days) : '',
-    rate_details: '',
+    sl_no: '1',
+    total_kms: booking.distance_km != null ? String(booking.distance_km) : '0',
+    no_of_days: booking.number_of_days ? String(booking.number_of_days) : '-',
+    rate_details: booking.cab_type_name ? `${booking.cab_type_name}` : '-',
     service_amount: baseFare.toFixed(2),
 
     toll_tax: '0.00',
@@ -85,421 +87,338 @@ function buildDefaultInvoiceData(booking, options = {}) {
 
     sub_total: baseFare.toFixed(2),
     gst_amount: gstAmount.toFixed(2),
+    cgst_amount: withGST ? (gstAmount / 2).toFixed(2) : '0.00',
+    sgst_amount: withGST ? (gstAmount / 2).toFixed(2) : '0.00',
     grand_total: grandTotal.toFixed(2),
     amount_in_words: '',
+    withGST: withGST,
   };
 }
 
 /**
- * Draw static layout and place AcroForm fields
+ * Generate invoice PDF with text rendered directly (not fillable form)
  */
 async function generateInvoicePdf(booking, overrides = {}) {
   const pdfDoc = await PDFDocument.create();
   const page = pdfDoc.addPage([A4_WIDTH, A4_HEIGHT]);
 
-  const form = pdfDoc.getForm();
-  const fontHeading = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-  const fontBody = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-  const margin = 56.7; // ~20mm
+  const margin = 50;
   const contentWidth = A4_WIDTH - margin * 2;
 
   // Colors
-  const brand = rgb(0.11, 0.36, 0.80); // blue
-  const textColor = rgb(0, 0, 0);
-  const gray = rgb(0.6, 0.6, 0.6);
+  const brandBlue = rgb(0.11, 0.36, 0.80);
+  const black = rgb(0, 0, 0);
+  const gray = rgb(0.4, 0.4, 0.4);
+  const lightGray = rgb(0.9, 0.9, 0.9);
 
-  // Try load logo
-  let logoDims = null;
+  // Prepare data
+  const defaults = buildDefaultInvoiceData(booking, overrides);
+  const data = { ...defaults, ...overrides };
+
+  // Helper functions
+  const drawText = (text, x, y, options = {}) => {
+    const { font = fontRegular, size = 10, color = black, align = 'left', maxWidth = null } = options;
+    page.setFont(font);
+    page.setFontSize(size);
+    page.setFontColor(color);
+    
+    let finalX = x;
+    if (align === 'right' && maxWidth) {
+      const textWidth = font.widthOfTextAtSize(text, size);
+      finalX = x + maxWidth - textWidth;
+    } else if (align === 'center' && maxWidth) {
+      const textWidth = font.widthOfTextAtSize(text, size);
+      finalX = x + (maxWidth - textWidth) / 2;
+    }
+    
+    page.drawText(text, { x: finalX, y, font, size, color });
+  };
+
+  const wrapText = (text, maxWidth, font, size) => {
+    const words = text.split(' ');
+    const lines = [];
+    let currentLine = '';
+
+    words.forEach(word => {
+      const testLine = currentLine ? `${currentLine} ${word}` : word;
+      const testWidth = font.widthOfTextAtSize(testLine, size);
+      
+      if (testWidth > maxWidth && currentLine) {
+        lines.push(currentLine);
+        currentLine = word;
+      } else {
+        currentLine = testLine;
+      }
+    });
+    
+    if (currentLine) {
+      lines.push(currentLine);
+    }
+    
+    return lines;
+  };
+
+  const drawMultilineText = (text, x, y, maxWidth, options = {}) => {
+    const { font = fontRegular, size = 9, color = black, lineHeight = 12 } = options;
+    let currentY = y;
+    
+    // Split by newlines first, then wrap each line
+    const paragraphs = text.split('\n');
+    
+    paragraphs.forEach(paragraph => {
+      if (paragraph) {
+        const wrappedLines = wrapText(paragraph, maxWidth, font, size);
+        wrappedLines.forEach(line => {
+          drawText(line, x, currentY, { font, size, color });
+          currentY -= lineHeight;
+        });
+      } else {
+        currentY -= lineHeight; // Empty line
+      }
+    });
+    
+    return currentY;
+  };
+
+  // Try to load logo and position company name beside it
+  let currentY = A4_HEIGHT - margin;
+  let logoHeight = 0;
+  let logoWidth = 60;
+  
   try {
     const logoBytes = fs.readFileSync(LOGO_PATH);
     const logoImg = LOGO_PATH.toLowerCase().endsWith('.png')
       ? await pdfDoc.embedPng(logoBytes)
       : await pdfDoc.embedJpg(logoBytes);
-    const logoWidth = 80;
-    const logoHeight = (logoImg.height / logoImg.width) * logoWidth;
+    logoWidth = 60;
+    logoHeight = (logoImg.height / logoImg.width) * logoWidth;
     page.drawImage(logoImg, {
       x: margin,
-      y: A4_HEIGHT - margin - logoHeight,
+      y: currentY - logoHeight,
       width: logoWidth,
       height: logoHeight,
     });
-    logoDims = { width: logoWidth, height: logoHeight };
   } catch {
-    // no logo, ignore
+    // no logo
+    logoHeight = 40; // Default height if no logo
   }
 
-  // Header text (brand)
-  // Place brand name slightly below top margin to give breathing room around logo
-  const headerY = A4_HEIGHT - margin - 26;
-  page.setFont(fontHeading);
-  page.setFontSize(18);
-  page.setFontColor(textColor);
-  const brandText = 'Namma Cabs';
-  page.drawText(brandText, {
-    x: margin + (logoDims ? logoDims.width + 10 : 0),
-    y: headerY,
-  });
-
-  // Company info right-aligned
+  // Company name positioned beside logo (vertically centered with logo)
+  const companyNameY = currentY - (logoHeight / 2) - 7; // Center vertically with logo
+  drawText('Namma Cabs', margin + logoWidth + 12, companyNameY, { font: fontBold, size: 20 });
+  
+  // Company details (right aligned, starting from top of logo area)
   const rightX = margin + contentWidth;
-  page.setFont(fontBody);
-  page.setFontSize(9);
-  const companyLines = [
-    process.env.COMPANY_ADDRESS_LINE1 || 'Bengaluru, Karnataka, India',
-    process.env.COMPANY_ADDRESS_LINE2 || '',
-    `Phone: ${process.env.COMPANY_PHONE || '+91 00000 00000'}`,
-    `Email: ${process.env.COMPANY_EMAIL || 'support@namma-cabs.com'}`,
-  ].filter(Boolean);
-  let infoY = A4_HEIGHT - margin - 10;
-  companyLines.forEach((line) => {
-    const w = fontBody.widthOfTextAtSize(line, 9);
-    page.drawText(line, { x: rightX - w, y: infoY });
-    infoY -= 11;
-  });
+  let rightY = currentY;
+  drawText('Bengaluru, Karnataka, India', rightX, rightY, { font: fontRegular, size: 9, align: 'right', maxWidth: 200 });
+  rightY -= 12;
+  drawText(`Phone: ${process.env.COMPANY_PHONE || '+91 00000 00000'}`, rightX, rightY, { font: fontRegular, size: 9, align: 'right', maxWidth: 200 });
+  rightY -= 12;
+  drawText(`Email: ${process.env.COMPANY_EMAIL || 'support@namma-cabs.com'}`, rightX, rightY, { font: fontRegular, size: 9, align: 'right', maxWidth: 200 });
 
-  // INVOICE bar
-  // Invoice bar with comfortable spacing below header
-  const barY = headerY - 40;
+  // Move currentY down past the logo/header area
+  currentY -= Math.max(logoHeight, 40) + 15;
+
+  // INVOICE banner
   page.drawRectangle({
     x: margin,
-    y: barY,
+    y: currentY - 25,
     width: contentWidth,
-    height: 20,
-    color: brand,
+    height: 25,
+    color: brandBlue,
   });
-  page.setFont(fontHeading);
-  page.setFontSize(12);
-  page.setFontColor(rgb(1, 1, 1));
-  const invoiceLabel = 'INVOICE';
-  const invoiceLabelW = fontHeading.widthOfTextAtSize(invoiceLabel, 12);
-  page.drawText(invoiceLabel, {
-    x: margin + (contentWidth - invoiceLabelW) / 2,
-    y: barY + 5,
+  drawText('INVOICE', margin, currentY - 18, { font: fontBold, size: 14, color: rgb(1, 1, 1), align: 'center', maxWidth: contentWidth });
+
+  currentY -= 45;
+
+  // Two column layout for customer and invoice details
+  const colWidth = (contentWidth - 30) / 2;
+
+  // Customer Details (Left)
+  drawText('Customer Details', margin, currentY, { font: fontBold, size: 11 });
+  currentY -= 18;
+
+  drawText('Customer Name', margin, currentY, { font: fontRegular, size: 8, color: gray });
+  currentY -= 12;
+  drawText(data.customer_name || '', margin, currentY, { font: fontRegular, size: 10 });
+  currentY -= 18;
+
+  drawText('Address', margin, currentY, { font: fontRegular, size: 8, color: gray });
+  currentY -= 12;
+  // Ensure address wraps properly within the left column width
+  const addressMaxWidth = colWidth - 20; // Leave more margin for safety
+  const afterAddress = drawMultilineText(data.customer_address || '', margin, currentY, addressMaxWidth, { 
+    font: fontRegular,
+    size: 9, 
+    lineHeight: 12 
+  });
+  currentY = afterAddress - 10;
+
+  drawText('Phone', margin, currentY, { font: fontRegular, size: 8, color: gray });
+  currentY -= 12;
+  drawText(data.customer_phone || '', margin, currentY, { font: fontRegular, size: 10 });
+
+  // Invoice Details (Right) - start from top
+  let invoiceY = A4_HEIGHT - margin - 55 - 45;
+  const invoiceX = margin + colWidth + 30;
+
+  drawText('Invoice Details', invoiceX, invoiceY, { font: fontBold, size: 11 });
+  invoiceY -= 18;
+
+  drawText('Invoice No', invoiceX, invoiceY, { font: fontRegular, size: 8, color: gray });
+  invoiceY -= 12;
+  drawText(data.invoice_no || '', invoiceX, invoiceY, { font: fontRegular, size: 10 });
+  invoiceY -= 18;
+
+  drawText('Invoice Date', invoiceX, invoiceY, { font: fontRegular, size: 8, color: gray });
+  invoiceY -= 12;
+  drawText(data.invoice_date || '', invoiceX, invoiceY, { font: fontRegular, size: 10 });
+  invoiceY -= 18;
+
+  // Show GSTIN only if withGST is true
+  if (data.withGST && data.company_gstin) {
+    drawText('Our GSTIN', invoiceX, invoiceY, { font: fontRegular, size: 8, color: gray });
+    invoiceY -= 12;
+    drawText(data.company_gstin, invoiceX, invoiceY, { font: fontBold, size: 10, color: brandBlue });
+    invoiceY -= 18;
+
+    drawText('HSN / SAC', invoiceX, invoiceY, { font: fontRegular, size: 8, color: gray });
+    invoiceY -= 12;
+    drawText(data.hsn_sac || '', invoiceX, invoiceY, { font: fontRegular, size: 10 });
+  }
+
+  // Continue from where customer details left off
+  currentY -= 30;
+
+  // Service Details Table
+  const tableTop = currentY;
+  const tableHeaderHeight = 22;
+
+  // Table header background
+  page.drawRectangle({
+    x: margin,
+    y: tableTop - tableHeaderHeight,
+    width: contentWidth,
+    height: tableHeaderHeight,
+    color: lightGray,
   });
 
-  // Prepare field values
-  const defaults = buildDefaultInvoiceData(booking);
-  const data = { ...defaults, ...overrides };
-
-  // Helper to create a text field + label
-  const createLabeledField = (opts) => {
-    const {
-      name,
-      label,
-      x,
-      y,
-      width,
-      height = 14,
-      fontSize = 8,
-      value = '',
-      multiline = false,
-    } = opts;
-    // label
-    page.setFont(fontBody);
-    page.setFontSize(8);
-    page.setFontColor(gray);
-    page.drawText(label, { x, y: y + height + 2 });
-
-    const field = form.createTextField(name);
-    field.setText(value || '');
-    if (multiline && typeof field.enableMultiline === 'function') {
-      field.enableMultiline();
-    }
-    // pdf-lib uses updateAppearances(font) to set visual font; setFont is not available on fields
-    field.updateAppearances(fontBody);
-    field.addToPage(page, { x, y, width, height });
+  // Table header text
+  const colPositions = {
+    sl: margin + 5,
+    desc: margin + 40,
+    kms: margin + 260,
+    days: margin + 330,
+    rate: margin + 400,
+    amount: margin + contentWidth - 80,
   };
 
-  // CUSTOMER & INVOICE META (two columns)
-  // Push down customer/invoice blocks for better separation from the INVOICE bar
-  let sectionTop = barY - 40;
-  const colGap = 20;
-  const colWidth = (contentWidth - colGap) / 2;
+  drawText('Sl No', colPositions.sl, tableTop - 15, { font: fontBold, size: 9 });
+  drawText('Description', colPositions.desc, tableTop - 15, { font: fontBold, size: 9 });
+  drawText('Total Kms', colPositions.kms, tableTop - 15, { font: fontBold, size: 9 });
+  drawText('Days', colPositions.days, tableTop - 15, { font: fontBold, size: 9 });
+  drawText('Rate Details', colPositions.rate, tableTop - 15, { font: fontBold, size: 9 });
+  drawText('Amount (Rs)', colPositions.amount, tableTop - 15, { font: fontBold, size: 9 });
 
-  // Left: Customer
-  page.setFont(fontHeading);
-  page.setFontSize(10);
-  page.setFontColor(textColor);
-  page.drawText('Customer Details', { x: margin, y: sectionTop });
+  // Table body
+  let rowY = tableTop - tableHeaderHeight - 10;
+  
+  drawText(data.sl_no || '1', colPositions.sl, rowY, { font: fontRegular, size: 9 });
+  // Wrap service description properly within the description column width
+  const descMaxWidth = 210; // Max width for description column
+  const descEndY = drawMultilineText(data.service_description || '', colPositions.desc, rowY, descMaxWidth, { 
+    font: fontRegular,
+    size: 8, 
+    lineHeight: 11 
+  });
+  drawText(data.total_kms || '0', colPositions.kms, rowY, { font: fontRegular, size: 9 });
+  drawText(data.no_of_days || '-', colPositions.days, rowY, { font: fontRegular, size: 9 });
+  drawText(data.rate_details || '-', colPositions.rate, rowY, { font: fontRegular, size: 8 });
+  drawText(data.service_amount || '0.00', colPositions.amount, rowY, { font: fontBold, size: 10 });
 
-  let cy = sectionTop - 18;
-  const fieldHeight = 14;
-  createLabeledField({
-    name: 'customer_name',
-    label: 'Customer Name',
-    x: margin,
-    y: cy,
-    width: colWidth,
-    height: fieldHeight,
-    value: data.customer_name,
-  });
-  cy -= 22;
-  createLabeledField({
-    name: 'customer_address',
-    label: 'Address',
-    x: margin,
-    y: cy - 20,
-    width: colWidth,
-    height: 36,
-    value: data.customer_address,
-    multiline: true,
-  });
-  cy -= 50;
-  createLabeledField({
-    name: 'customer_phone',
-    label: 'Phone',
-    x: margin,
-    y: cy,
-    width: colWidth / 2 - 5,
-    value: data.customer_phone,
-  });
-  createLabeledField({
-    name: 'customer_email',
-    label: 'Email',
-    x: margin + colWidth / 2 + 5,
-    y: cy,
-    width: colWidth / 2 - 5,
-    value: data.customer_email,
-  });
-  cy -= 22;
-  createLabeledField({
-    name: 'customer_state',
-    label: 'State',
-    x: margin,
-    y: cy,
-    width: colWidth / 2 - 5,
-    value: data.customer_state,
-  });
-  createLabeledField({
-    name: 'customer_gst',
-    label: 'Customer GST (Optional)',
-    x: margin + colWidth / 2 + 5,
-    y: cy,
-    width: colWidth / 2 - 5,
-    value: data.customer_gst,
-  });
-
-  // Right: Invoice meta
-  const rightColX = margin + colWidth + colGap;
-  page.setFont(fontHeading);
-  page.setFontSize(10);
-  page.drawText('Invoice Details', { x: rightColX, y: sectionTop });
-
-  let ry = sectionTop - 18;
-  createLabeledField({
-    name: 'invoice_no',
-    label: 'Invoice No',
-    x: rightColX,
-    y: ry,
-    width: colWidth,
-    value: data.invoice_no,
-  });
-  ry -= 22;
-  createLabeledField({
-    name: 'invoice_date',
-    label: 'Invoice Date',
-    x: rightColX,
-    y: ry,
-    width: colWidth,
-    value: data.invoice_date,
-  });
-  ry -= 22;
-  createLabeledField({
-    name: 'company_gstin',
-    label: 'Our GSTIN',
-    x: rightColX,
-    y: ry,
-    width: colWidth,
-    value: data.company_gstin,
-  });
-  ry -= 22;
-  createLabeledField({
-    name: 'hsn_sac',
-    label: 'HSN / SAC',
-    x: rightColX,
-    y: ry,
-    width: colWidth,
-    value: data.hsn_sac,
-  });
-
-  // SERVICE DETAILS TABLE
-  // Add extra gap below customer block before the table starts
-  let tableTop = cy - 40;
-  const tableLeft = margin;
-  const tableRight = margin + contentWidth;
-  const headerHeight = 16;
-
-  const colSl = 30;
-  const colDesc = 200;
-  const colKms = 60;
-  const colDays = 60;
-  const colRate = 100;
-  const colAmt = contentWidth - (colSl + colDesc + colKms + colDays + colRate);
-
-  // Header background
+  // Table border
+  const rowHeight = Math.abs(descEndY - rowY) + 20;
   page.drawRectangle({
-    x: tableLeft,
-    y: tableTop - headerHeight,
+    x: margin,
+    y: descEndY - 10,
     width: contentWidth,
-    height: headerHeight,
-    color: rgb(0.9, 0.93, 1),
-  });
-
-  page.setFont(fontHeading);
-  page.setFontSize(8);
-  page.setFontColor(textColor);
-  const headerYText = tableTop - headerHeight + 4;
-  page.drawText('Sl No', { x: tableLeft + 4, y: headerYText });
-  page.drawText('Description', { x: tableLeft + colSl + 4, y: headerYText });
-  page.drawText('Total Kms', { x: tableLeft + colSl + colDesc + 4, y: headerYText });
-  page.drawText('No of Days', { x: tableLeft + colSl + colDesc + colKms + 4, y: headerYText });
-  page.drawText('Rate Details', { x: tableLeft + colSl + colDesc + colKms + colDays + 4, y: headerYText });
-  page.drawText('Amount (Rs)', { x: tableLeft + colSl + colDesc + colKms + colDays + colRate + 4, y: headerYText });
-
-  // Table body (single row, but fillable fields)
-  // Position the first service row with more vertical padding under header row
-  const rowY = tableTop - headerHeight - 12 - 40;
-  // Borders
-  page.setFont(fontBody);
-  page.setFontSize(8);
-  page.setFontColor(textColor);
-  page.drawRectangle({
-    x: tableLeft,
-    y: rowY - 6,
-    width: contentWidth,
-    height: 40,
+    height: rowHeight,
     borderColor: gray,
     borderWidth: 0.5,
   });
 
-  // Fields
-  createLabeledField({
-    name: 'service_description',
-    label: '',
-    x: tableLeft + colSl + 2,
-    y: rowY,
-    width: colDesc - 4,
-    height: 32,
-    value: data.service_description,
-    multiline: true,
-  });
-  createLabeledField({
-    name: 'total_kms',
-    label: '',
-    x: tableLeft + colSl + colDesc + 2,
-    y: rowY + 8,
-    width: colKms - 4,
-    value: data.total_kms,
-  });
-  createLabeledField({
-    name: 'no_of_days',
-    label: '',
-    x: tableLeft + colSl + colDesc + colKms + 2,
-    y: rowY + 8,
-    width: colDays - 4,
-    value: data.no_of_days,
-  });
-  createLabeledField({
-    name: 'rate_details',
-    label: '',
-    x: tableLeft + colSl + colDesc + colKms + colDays + 2,
-    y: rowY,
-    width: colRate - 4,
-    height: 32,
-    value: data.rate_details,
-    multiline: true,
-  });
-  createLabeledField({
-    name: 'service_amount',
-    label: '',
-    x: tableLeft + colSl + colDesc + colKms + colDays + colRate + 2,
-    y: rowY + 8,
-    width: colAmt - 4,
-    value: data.service_amount,
-  });
+  currentY = descEndY - 30;
 
-  // CHARGES BREAKDOWN (right aligned)
-  // Add generous gap below the table for clarity
-  let chargesTop = rowY - 70;
-  const chargesX = margin + contentWidth / 2 + 40;
-  const chargesWidth = contentWidth / 2 - 40;
+  // Charges Breakdown (right aligned)
+  const breakdownX = margin + contentWidth - 250;
+  const labelX = breakdownX;
+  const valueX = breakdownX + 150;
 
-  page.setFont(fontHeading);
-  page.setFontSize(10);
-  page.drawText('Charges Breakdown', { x: chargesX, y: chargesTop });
-  chargesTop -= 16;
+  drawText('Charges Breakdown', labelX, currentY, { font: fontBold, size: 11 });
+  currentY -= 20;
 
-  const addChargeRow = (label, fieldName) => {
-    page.setFont(fontBody);
-    page.setFontSize(8);
-    page.setFontColor(textColor);
-    page.drawText(label, { x: chargesX, y: chargesTop });
-    const fieldWidth = 100;
-    createLabeledField({
-      name: fieldName,
-      label: '',
-      x: chargesX + chargesWidth - fieldWidth,
-      y: chargesTop - 2,
-      width: fieldWidth,
-      value: data[fieldName],
-    });
-    chargesTop -= 18;
+  const addCharge = (label, value) => {
+    drawText(label, labelX, currentY, { font: fontRegular, size: 9 });
+    drawText(value, valueX, currentY, { font: fontRegular, size: 9 });
+    currentY -= 14;
   };
 
-  addChargeRow('Toll Tax', 'toll_tax');
-  addChargeRow('State Tax', 'state_tax');
-  addChargeRow('Driver Batta', 'driver_batta');
-  addChargeRow('Parking Charges', 'parking_charges');
-  addChargeRow('Placard Charges', 'placard_charges');
-  addChargeRow('Extras', 'extras');
-  addChargeRow('Sub Total', 'sub_total');
-  addChargeRow('GST Amount', 'gst_amount');
-  addChargeRow('Grand Total', 'grand_total');
+  if (parseFloat(data.toll_tax) > 0) addCharge('Toll Tax', data.toll_tax);
+  if (parseFloat(data.state_tax) > 0) addCharge('State Tax', data.state_tax);
+  if (parseFloat(data.parking_charges) > 0) addCharge('Parking Charges', data.parking_charges);
+  
+  addCharge('Sub Total', data.sub_total);
+  
+  if (data.withGST) {
+    addCharge('CGST @ 9%', data.cgst_amount);
+    addCharge('SGST @ 9%', data.sgst_amount);
+    currentY -= 3;
+    drawText('Total GST (18%)', labelX, currentY, { font: fontBold, size: 9 });
+    drawText(data.gst_amount, valueX, currentY, { font: fontBold, size: 9 });
+    currentY -= 17;
+  } else {
+    currentY -= 3;
+  }
 
-  // Amount in words
-  const wordsY = chargesTop - 24;
-  page.setFont(fontHeading);
-  page.setFontSize(9);
-  page.drawText('Amount in Words (Rs)', { x: margin, y: wordsY });
-  createLabeledField({
-    name: 'amount_in_words',
-    label: '',
-    x: margin,
-    y: wordsY - 18,
-    width: contentWidth,
-    height: 18,
-    value: data.amount_in_words,
+  // Grand total with background
+  page.drawRectangle({
+    x: breakdownX - 5,
+    y: currentY - 3,
+    width: 255,
+    height: 16,
+    color: lightGray,
   });
+  drawText('Grand Total', labelX, currentY, { font: fontBold, size: 10 });
+  drawText(`Rs ${data.grand_total}`, valueX, currentY, { font: fontBold, size: 11, color: brandBlue });
+
+  currentY -= 35;
 
   // Terms & Conditions
-  const termsY = wordsY - 50;
-  page.setFont(fontHeading);
-  page.setFontSize(9);
-  page.drawText('Terms & Conditions', { x: margin, y: termsY });
-  page.setFont(fontBody);
-  page.setFontSize(7);
+  drawText('Terms & Conditions', margin, currentY, { font: fontBold, size: 10 });
+  currentY -= 14;
+  
   const terms = [
     '1. All disputes are subject to Bengaluru jurisdiction only.',
     '2. Waiting and detentions will be charged as per company policy.',
     '3. Tolls, parking, and state taxes are extra unless specified.',
     '4. Please verify all details; no claims will be entertained after 7 days.',
   ];
-  let ty = termsY - 12;
-  terms.forEach((t) => {
-    page.drawText(t, { x: margin, y: ty });
-    ty -= 9;
+  
+  terms.forEach(term => {
+    drawText(term, margin, currentY, { font: fontRegular, size: 8, color: gray });
+    currentY -= 11;
   });
 
   // Footer
-  page.setFont(fontBody);
-  page.setFontSize(8);
-  const footerText = 'This is a computer generated invoice. No signature required.';
-  const ftWidth = fontBody.widthOfTextAtSize(footerText, 8);
-  page.drawText(footerText, {
-    x: margin + (contentWidth - ftWidth) / 2,
-    y: 30,
-  });
+  drawText(
+    'This is a computer generated invoice.',
+    margin,
+    40,
+    { font: fontRegular, size: 8, color: gray, align: 'center', maxWidth: contentWidth }
+  );
 
   const pdfBytes = await pdfDoc.save();
   return pdfBytes;

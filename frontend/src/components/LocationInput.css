@@ -22,7 +22,7 @@
 
 .location-input {
   width: 100%;
-  padding: 14px 50px 14px 16px;
+  padding: 14px 100px 14px 16px; /* Increased right padding for multiple buttons */
   border: 2px solid #e0e0e0;
   border-radius: 12px;
   font-size: 16px;
@@ -42,20 +42,37 @@
   border-color: #b0b0b0;
 }
 
-.location-button {
+.location-buttons {
   position: absolute;
   right: 8px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.location-button {
   background: linear-gradient(135deg, #facc15 0%, #eab308 100%);
   border: none;
-  font-size: 22px;
+  font-size: 20px;
   cursor: pointer;
-  padding: 8px 12px;
+  padding: 8px 10px;
   border-radius: 8px;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   align-items: center;
   justify-content: center;
   box-shadow: 0 2px 8px rgba(250, 204, 21, 0.3);
+  min-width: 40px;
+}
+
+.map-button {
+  background: linear-gradient(135deg, #4285F4 0%, #357ae8 100%);
+  box-shadow: 0 2px 8px rgba(66, 133, 244, 0.3);
+}
+
+.map-button:hover {
+  background: linear-gradient(135deg, #357ae8 0%, #2c5aa0 100%);
+  box-shadow: 0 4px 12px rgba(66, 133, 244, 0.4);
 }
 
 .location-button:hover {
@@ -74,7 +91,8 @@
   transform: none;
 }
 
-.suggestions-dropdown {
+.suggestions-dropdown,
+.location-dropdown {
   position: absolute;
   top: 100%;
   left: 0;
@@ -89,6 +107,9 @@
   box-shadow: 0 8px 25px rgba(250, 204, 21, 0.3);
   margin-top: -2px;
   animation: slideInLeft 0.3s ease-out;
+  list-style: none;
+  padding: 0;
+  margin: 0;
 }
 
 .suggestion-item {
@@ -145,6 +166,20 @@
   color: #333;
   margin-bottom: 6px;
   font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.confidence-warning {
+  font-size: 14px;
+  color: #f59e0b;
+  cursor: help;
+}
+
+.suggestion-item.low-confidence {
+  border-left: 3px solid #fbbf24;
+  background: rgba(251, 191, 36, 0.05);
 }
 
 .suggestion-type {

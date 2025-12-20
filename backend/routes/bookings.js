@@ -116,6 +116,7 @@ router.post('/calculate-fare', [
       'SELECT * FROM rate_meters WHERE service_type = ? AND car_category = ? AND is_active = 1',
       [service_type, carCategory]
     );
+    console.log('[RATE METER DEBUG] Looked up rate meter for service_type:', service_type, 'car_category:', carCategory, 'found:', !!rateMeter);
 
     // Fallback to any rate meter for this service type if specific category not found
     if (!rateMeter) {
@@ -123,6 +124,7 @@ router.post('/calculate-fare', [
         'SELECT * FROM rate_meters WHERE service_type = ? AND is_active = 1 LIMIT 1',
         [service_type]
       );
+      console.log('[RATE METER DEBUG] Fallback lookup for service_type:', service_type, 'found:', !!rateMeter);
     }
 
     // Final fallback: use cab_types (legacy support)
@@ -276,14 +278,23 @@ router.post('/calculate-fare', [
 
     if (rateMeter) {
       // Use rate meter for fare calculation
-      baseFare = parseFloat(rateMeter.base_fare);
+      baseFare = parseFloat(rateMeter.base_fare || 0);
+      console.log('[FARE DEBUG] Using rate meter. base_fare:', baseFare, 'per_hour_rate:', rateMeter.per_hour_rate, 'number_of_hours:', number_of_hours);
       
       if (service_type === 'local' && number_of_hours) {
-        // Local bookings use per_hour_rate
-        const hourCharge = number_of_hours * parseFloat(rateMeter.per_hour_rate);
+        // Local bookings use per_hour_rate - THIS IS HOUR-BASED, NOT DISTANCE-BASED
+        const perHourRate = parseFloat(rateMeter.per_hour_rate || 0);
+        if (perHourRate === 0) {
+          console.error('[FARE DEBUG] ERROR: per_hour_rate is 0 or missing in rate meter! Rate meter ID:', rateMeter.id);
+          return res.status(400).json({ 
+            error: 'Rate meter configuration error: per_hour_rate is not set for local bookings. Please configure the rate meter in admin panel.' 
+          });
+        }
+        const hourCharge = number_of_hours * perHourRate;
         fare = baseFare + hourCharge;
-        distanceCharge = 0;
+        distanceCharge = 0; // Local bookings don't use distance
         timeCharge = hourCharge;
+        console.log('[FARE DEBUG] Local booking calculation: baseFare:', baseFare, 'perHourRate:', perHourRate, 'hourCharge:', hourCharge, 'total fare:', fare);
       } else if (service_type === 'outstation' && trip_type) {
         // Outstation bookings
         if (trip_type === 'round_trip') {
@@ -314,6 +325,11 @@ router.post('/calculate-fare', [
       }
     } else {
       // Legacy: use cab type with service multiplier
+      console.log('[FARE DEBUG] Using legacy cab_type. cabType:', cabType ? 'found' : 'not found');
+      if (cabType) {
+        console.log('[FARE DEBUG] cabType values - base_fare:', cabType.base_fare, 'per_km_rate:', cabType.per_km_rate, 'per_minute_rate:', cabType.per_minute_rate);
+      }
+      
       const serviceMultipliers = {
         'local': 1.0,
         'airport': 1.2, // 20% extra for airport
@@ -331,11 +347,45 @@ router.post('/calculate-fare', [
         multiplier = multiplier * (tripMultipliers[trip_type] || 1.0);
       }
       
-      baseFare = parseFloat(cabType.base_fare);
-      distanceCharge = distance * parseFloat(cabType.per_km_rate);
-      timeCharge = time * parseFloat(cabType.per_minute_rate || 0);
-      const subtotal = baseFare + distanceCharge + timeCharge;
-      fare = subtotal * multiplier;
+      if (cabType) {
+        if (service_type === 'local' && number_of_hours) {
+          // For local bookings: hour-based calculation only, NO distance
+          baseFare = parseFloat(cabType.base_fare || 0);
+          distanceCharge = 0; // Local bookings don't use distance
+          
+          // Try to use per_hour_rate from cab_type if it exists
+          const perHourRate = parseFloat(cabType.per_hour_rate || 0);
+          if (perHourRate > 0) {
+            timeCharge = number_of_hours * perHourRate;
+          } else {
+            // Fallback: calculate from per_minute_rate (convert to hourly)
+            const perMinuteRate = parseFloat(cabType.per_minute_rate || 0);
+            if (perMinuteRate > 0) {
+              timeCharge = (number_of_hours * 60) * perMinuteRate;
+            } else {
+              console.error('[FARE DEBUG] ERROR: No per_hour_rate or per_minute_rate found in cab_type for local booking!');
+              return res.status(400).json({ 
+                error: 'Cab type configuration error: per_hour_rate or per_minute_rate is not set. Please configure the cab type in admin panel.' 
+              });
+            }
+          }
+          fare = (baseFare + timeCharge) * multiplier; // Local: base + hourly charge
+          console.log('[FARE DEBUG] Legacy local calculation - baseFare:', baseFare, 'timeCharge (hourly):', timeCharge, 'multiplier:', multiplier, 'final fare:', fare);
+        } else {
+          // For airport/outstation: use distance and time
+          baseFare = parseFloat(cabType.base_fare || 0);
+          distanceCharge = distance * parseFloat(cabType.per_km_rate || 0);
+          timeCharge = time * parseFloat(cabType.per_minute_rate || 0);
+          const subtotal = baseFare + distanceCharge + timeCharge;
+          fare = subtotal * multiplier;
+          console.log('[FARE DEBUG] Legacy calculation - baseFare:', baseFare, 'distanceCharge:', distanceCharge, 'timeCharge:', timeCharge, 'subtotal:', subtotal, 'multiplier:', multiplier, 'final fare:', fare);
+        }
+      } else {
+        console.error('[FARE DEBUG] No cabType found! Cannot calculate fare.');
+        return res.status(404).json({ 
+          error: 'No rate meter or cab type configured. Please configure rate meters in admin panel.' 
+        });
+      }
     }
 
     const responseData = {
@@ -769,6 +819,8 @@ router.get('/my', authenticateToken, async (req, res) => {
 router.get('/:id/receipt', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
+    // Default to true for user receipts (most businesses want GST receipts)
+    const withGST = req.query.withGST !== 'false';
 
     const booking = await db.getAsync(
       `SELECT b.*, u.username, u.email, ct.name as cab_type_name, co.name as car_option_name
@@ -790,10 +842,10 @@ router.get('/:id/receipt', authenticateToken, async (req, res) => {
     }
 
     const { generateInvoicePdf } = require('../services/invoiceService');
-    const pdfBytes = await generateInvoicePdf(booking, {});
+    const pdfBytes = await generateInvoicePdf(booking, { withGST });
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename=invoice-${booking.id}.pdf`);
+    res.setHeader('Content-Disposition', `attachment; filename=invoice-${booking.id}${withGST ? '-with-gst' : ''}.pdf`);
     res.send(Buffer.from(pdfBytes));
   } catch (error) {
     console.error('Error generating invoice PDF:', error);

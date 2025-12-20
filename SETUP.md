@@ -39,10 +39,16 @@ cd frontend
 npm install
 ```
 
-(Optional) Create `.env` file:
+Create `.env` file:
 ```
 REACT_APP_API_URL=http://localhost:5000/api
+REACT_APP_GOOGLE_MAPS_API_KEY=your_google_maps_api_key_here
+REACT_APP_GEOAPIFY_KEY=your_geoapify_key_here
 ```
+
+**Note**: 
+- `REACT_APP_GOOGLE_MAPS_API_KEY` is **required** for the map picker feature
+- `REACT_APP_GEOAPIFY_KEY` is optional (used as primary geocoding, falls back to Google Maps if not set)
 
 Start frontend:
 ```bash

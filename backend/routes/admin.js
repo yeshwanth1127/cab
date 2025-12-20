@@ -482,10 +482,136 @@ router.get('/bookings', async (req, res) => {
   }
 });
 
+// Export all bookings to CSV
+router.get('/bookings/export/csv', async (req, res) => {
+  try {
+    const bookings = await db.allAsync(
+      `SELECT b.*, 
+              ct.name as cab_type_name, 
+              co.name as car_option_name,
+              c.vehicle_number, 
+              c.driver_name, 
+              c.driver_phone,
+              u.username,
+              u.email as user_email
+       FROM bookings b
+       LEFT JOIN cab_types ct ON b.cab_type_id = ct.id
+       LEFT JOIN car_options co ON b.car_option_id = co.id
+       LEFT JOIN cabs c ON b.cab_id = c.id
+       LEFT JOIN users u ON b.user_id = u.id
+       ORDER BY b.id DESC`
+    );
+
+    // CSV headers
+    const headers = [
+      'Booking ID',
+      'Status',
+      'Service Type',
+      'Trip Type',
+      'Passenger Name',
+      'Passenger Phone',
+      'Passenger Email',
+      'From Location',
+      'To Location',
+      'Cab Type',
+      'Car Option',
+      'Vehicle Number',
+      'Driver Name',
+      'Driver Phone',
+      'Distance (km)',
+      'Number of Hours',
+      'Number of Days',
+      'Fare Amount',
+      'Booking Date',
+      'Travel Date',
+      'Pickup Time',
+      'Notes',
+      'User ID',
+      'Username',
+      'User Email'
+    ];
+
+    // Helper function to escape CSV values
+    const escapeCSV = (value) => {
+      if (value === null || value === undefined) return '';
+      const stringValue = String(value);
+      // If value contains comma, quotes, or newlines, wrap in quotes and escape quotes
+      if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+        return `"${stringValue.replace(/"/g, '""')}"`;
+      }
+      return stringValue;
+    };
+
+    // Format date helper
+    const formatDate = (dateStr) => {
+      if (!dateStr) return '';
+      try {
+        const date = new Date(dateStr);
+        return date.toLocaleString('en-IN', { 
+          year: 'numeric', 
+          month: '2-digit', 
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      } catch {
+        return dateStr;
+      }
+    };
+
+    // Build CSV rows
+    const rows = bookings.map(booking => [
+      booking.id,
+      booking.booking_status,
+      booking.service_type,
+      booking.trip_type || '',
+      booking.passenger_name,
+      booking.passenger_phone,
+      booking.passenger_email,
+      booking.from_location || '',
+      booking.to_location || '',
+      booking.cab_type_name || '',
+      booking.car_option_name || '',
+      booking.vehicle_number || '',
+      booking.driver_name || '',
+      booking.driver_phone || '',
+      booking.distance_km || '',
+      booking.number_of_hours || '',
+      booking.number_of_days || '',
+      booking.fare_amount,
+      formatDate(booking.booking_date),
+      formatDate(booking.travel_date),
+      booking.pickup_time || '',
+      booking.notes || '',
+      booking.user_id || '',
+      booking.username || '',
+      booking.user_email || ''
+    ].map(escapeCSV));
+
+    // Combine headers and rows
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+
+    // Set headers for CSV download
+    const timestamp = new Date().toISOString().split('T')[0];
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename=nammacabs-bookings-${timestamp}.csv`);
+    
+    // Add UTF-8 BOM for proper Excel compatibility
+    res.send('\uFEFF' + csvContent);
+  } catch (error) {
+    console.error('Error exporting bookings to CSV:', error);
+    res.status(500).json({ error: 'Error generating CSV export' });
+  }
+});
+
 // Download GST-compliant fillable invoice PDF for a booking (admin-only)
 router.get('/bookings/:id/receipt', async (req, res) => {
   try {
     const { id } = req.params;
+    const withGST = req.query.withGST === 'true' || req.query.withGST === true;
 
     const booking = await db.getAsync(
       `SELECT b.*, u.username, u.email, ct.name as cab_type_name, co.name as car_option_name
@@ -502,10 +628,10 @@ router.get('/bookings/:id/receipt', async (req, res) => {
     }
 
     const { generateInvoicePdf } = require('../services/invoiceService');
-    const pdfBytes = await generateInvoicePdf(booking, {});
+    const pdfBytes = await generateInvoicePdf(booking, { withGST });
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename=invoice-${booking.id}.pdf`);
+    res.setHeader('Content-Disposition', `attachment; filename=invoice-${booking.id}${withGST ? '-with-gst' : ''}.pdf`);
     res.send(Buffer.from(pdfBytes));
   } catch (error) {
     console.error('Error generating invoice PDF (admin):', error);

@@ -1210,15 +1210,20 @@
   gap: 24px;
 }
 
+.booking-filters-box {
+  background: white;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
 .booking-filters {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  padding: 10px 14px;
-  background: rgba(248, 250, 252, 0.9);
-  border-radius: 999px;
-  border: 1px solid #e5e7eb;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+  gap: 16px;
+  align-items: flex-end;
 }
 
 .filter-group {
@@ -1260,6 +1265,53 @@
 
 .filter-search input {
   min-width: 220px;
+}
+
+/* Status Toggle Group */
+.filter-group-status-toggle {
+  min-width: 100%;
+  flex: 1 1 100%;
+}
+
+.status-toggle-group {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.status-toggle-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 2px solid #d1d5db;
+  background: white;
+  color: #6b7280;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-transform: capitalize;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 100px;
+}
+
+.status-toggle-btn:hover {
+  border-color: #facc15;
+  background: rgba(250, 204, 21, 0.1);
+  color: #92400e;
+}
+
+.status-toggle-btn.active {
+  background: linear-gradient(135deg, #facc15 0%, #eab308 100%);
+  border-color: #facc15;
+  color: #000;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(250, 204, 21, 0.3);
+}
+
+.status-toggle-btn.active:hover {
+  background: linear-gradient(135deg, #eab308 0%, #ca8a04 100%);
+  box-shadow: 0 4px 12px rgba(250, 204, 21, 0.4);
 }
 
 .booking-group-row td {
@@ -1948,14 +2000,15 @@
     gap: 15px;
   }
 
+  .booking-filters-box {
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+
   .booking-filters {
     flex-direction: row;
     flex-wrap: wrap;
-    gap: 8px;
-    padding: 12px;
-    border-radius: 12px;
-    background: rgba(248, 250, 252, 0.95);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    gap: 12px;
   }
 
   .filter-group {
@@ -1966,6 +2019,23 @@
   .filter-group.filter-search {
     flex: 1 1 100%;
     min-width: 100%;
+  }
+
+  .filter-group.filter-group-status-toggle {
+    flex: 1 1 100%;
+    min-width: 100%;
+  }
+
+  .status-toggle-group {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .status-toggle-btn {
+    flex: 1 1 calc(50% - 3px);
+    min-width: calc(50% - 3px);
+    padding: 10px 12px;
+    font-size: 12px;
   }
 
   .filter-group label {
@@ -2219,6 +2289,22 @@
 
   .filter-group.filter-search {
     flex: 1 1 100%;
+  }
+
+  .filter-group.filter-group-status-toggle {
+    flex: 1 1 100%;
+    min-width: 100%;
+  }
+
+  .status-toggle-group {
+    gap: 4px;
+  }
+
+  .status-toggle-btn {
+    flex: 1 1 calc(50% - 2px);
+    min-width: calc(50% - 2px);
+    padding: 8px 10px;
+    font-size: 11px;
   }
 
   .modal-overlay {
