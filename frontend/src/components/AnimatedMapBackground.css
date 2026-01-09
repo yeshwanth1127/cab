@@ -16,5 +16,41 @@
   filter: brightness(1.1) contrast(0.9);
   opacity: 0.9;
   transition: transform 0.2s ease-out;
+  /* Optimize for mobile performance */
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+  .animated-map-background .map-canvas {
+    /* Reduce size on mobile for better performance */
+    width: 140%;
+    height: 140%;
+    top: -20%;
+    left: -20%;
+    opacity: 0.85;
+    /* Reduce filter complexity on mobile */
+    filter: brightness(1.05) contrast(0.95);
+  }
+}
+
+@media (max-width: 480px) {
+  .animated-map-background .map-canvas {
+    width: 130%;
+    height: 130%;
+    top: -15%;
+    left: -15%;
+    opacity: 0.8;
+  }
+}
+
+/* Reduce animations on low-end devices */
+@media (prefers-reduced-motion: reduce) {
+  .animated-map-background .map-canvas {
+    transition: none;
+  }
 }
 

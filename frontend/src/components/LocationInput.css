@@ -8,7 +8,7 @@
   display: block;
   margin-bottom: 10px;
   font-weight: 600;
-  color: #facc15;
+  color: #16a34a;
   font-size: 14px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -22,7 +22,7 @@
 
 .location-input {
   width: 100%;
-  padding: 14px 100px 14px 16px; /* Increased right padding for multiple buttons */
+  padding: 14px 60px 14px 16px; /* Right padding for location button */
   border: 2px solid #e0e0e0;
   border-radius: 12px;
   font-size: 16px;
@@ -33,8 +33,8 @@
 
 .location-input:focus {
   outline: none;
-  border-color: #facc15;
-  box-shadow: 0 0 0 4px rgba(250, 204, 21, 0.1);
+  border-color: #16a34a;
+  box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.1);
   transform: translateY(-2px);
 }
 
@@ -51,7 +51,7 @@
 }
 
 .location-button {
-  background: linear-gradient(135deg, #facc15 0%, #eab308 100%);
+  background: linear-gradient(135deg, #16a34a 0%, #16a34a 100%);
   border: none;
   font-size: 20px;
   cursor: pointer;
@@ -61,7 +61,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 8px rgba(250, 204, 21, 0.3);
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.3);
   min-width: 40px;
 }
 
@@ -76,9 +76,9 @@
 }
 
 .location-button:hover {
-  background: linear-gradient(135deg, #eab308 0%, #d97706 100%);
+  background: linear-gradient(135deg, #16a34a 0%, #d97706 100%);
   transform: scale(1.1) rotate(5deg);
-  box-shadow: 0 4px 12px rgba(250, 204, 21, 0.4);
+  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.4);
 }
 
 .location-button:active {
@@ -98,13 +98,13 @@
   left: 0;
   right: 0;
   background: white;
-  border: 2px solid #facc15;
+  border: 2px solid #16a34a;
   border-top: none;
   border-radius: 0 0 12px 12px;
   max-height: 300px;
   overflow-y: auto;
   z-index: 1000;
-  box-shadow: 0 8px 25px rgba(250, 204, 21, 0.3);
+  box-shadow: 0 8px 25px rgba(22, 163, 74, 0.3);
   margin-top: -2px;
   animation: slideInLeft 0.3s ease-out;
   list-style: none;
@@ -128,7 +128,7 @@
   top: 0;
   bottom: 0;
   width: 4px;
-  background: linear-gradient(135deg, #facc15 0%, #eab308 100%);
+  background: linear-gradient(135deg, #16a34a 0%, #16a34a 100%);
   transform: scaleY(0);
   transition: transform 0.3s ease;
 }
@@ -142,7 +142,7 @@
 }
 
 .suggestion-item:hover {
-  background: linear-gradient(90deg, rgba(250, 204, 21, 0.1) 0%, transparent 100%);
+  background: linear-gradient(90deg, rgba(22, 163, 74, 0.1) 0%, transparent 100%);
   padding-left: 22px;
   transform: translateX(4px);
 }
@@ -199,10 +199,123 @@
 }
 
 .suggestions-dropdown::-webkit-scrollbar-thumb {
-  background: linear-gradient(135deg, #facc15 0%, #eab308 100%);
+  background: linear-gradient(135deg, #16a34a 0%, #16a34a 100%);
   border-radius: 3px;
 }
 
 .suggestions-dropdown::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(135deg, #eab308 0%, #d97706 100%);
+  background: linear-gradient(135deg, #16a34a 0%, #d97706 100%);
+}
+
+/* Mobile Responsive Styles */
+@media (max-width: 768px) {
+  .location-input-container {
+    margin-bottom: 20px;
+  }
+
+  .location-input-container label {
+    font-size: 12px;
+    margin-bottom: 8px;
+  }
+
+  .location-input {
+    padding: 12px 55px 12px 14px;
+    font-size: 16px; /* Prevent zoom on iOS */
+    border-radius: 10px;
+  }
+
+  .location-buttons {
+    right: 6px;
+    gap: 4px;
+  }
+
+  .location-button {
+    min-width: 38px;
+    padding: 7px 8px;
+    font-size: 18px;
+    border-radius: 6px;
+    /* Touch-friendly */
+    -webkit-tap-highlight-color: rgba(22, 163, 74, 0.3);
+    touch-action: manipulation;
+  }
+
+  .location-button:active {
+    transform: scale(0.9);
+  }
+
+  .suggestions-dropdown,
+  .location-dropdown {
+    max-height: 250px;
+    border-radius: 0 0 10px 10px;
+    /* Better touch scrolling */
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .suggestion-item {
+    padding: 16px 16px;
+    /* Larger touch target */
+    min-height: 48px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .suggestion-item:active {
+    background: linear-gradient(90deg, rgba(22, 163, 74, 0.15) 0%, transparent 100%);
+    transform: none;
+    padding-left: 20px;
+  }
+
+  .suggestion-name {
+    font-size: 14px;
+    margin-bottom: 4px;
+  }
+
+  .suggestion-type {
+    font-size: 11px;
+  }
+
+  .confidence-warning {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .location-input {
+    padding: 10px 50px 10px 12px;
+    font-size: 16px;
+  }
+
+  .location-button {
+    min-width: 36px;
+    padding: 6px 7px;
+    font-size: 16px;
+  }
+
+  .suggestions-dropdown,
+  .location-dropdown {
+    max-height: 200px;
+  }
+
+  .suggestion-item {
+    padding: 14px 14px;
+    min-height: 44px;
+  }
+}
+
+/* Touch optimizations */
+@media (hover: none) and (pointer: coarse) {
+  .location-button:hover {
+    transform: none;
+  }
+
+  .suggestion-item:hover {
+    transform: none;
+    padding-left: 18px;
+  }
+
+  .suggestion-item:active {
+    background: linear-gradient(90deg, rgba(22, 163, 74, 0.2) 0%, transparent 100%);
+    padding-left: 22px;
+  }
 }

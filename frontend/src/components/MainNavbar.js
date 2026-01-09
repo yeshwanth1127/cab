@@ -7,11 +7,12 @@ const MainNavbar = ({ logoOnly = false }) => {
   const [hidden, setHidden] = useState(false);
   const [lastScrollY, setLastScrollY] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [eventsDropdownOpen, setEventsDropdownOpen] = useState(false);
   
   const circleRefs = useRef([]);
   const tlRefs = useRef([]);
   const activeTweenRefs = useRef([]);
-  const logoImgRef = useRef(null);
+  const logoTextRef = useRef(null);
   const logoTweenRef = useRef(null);
   const ease = 'power3.easeOut';
 
@@ -80,14 +81,26 @@ const MainNavbar = ({ logoOnly = false }) => {
     };
 
     layout();
-    const onResize = () => layout();
-    window.addEventListener('resize', onResize);
+    
+    // Throttle resize handler for performance
+    let resizeTimeout;
+    const onResize = () => {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(() => {
+        layout();
+      }, 150);
+    };
+    
+    window.addEventListener('resize', onResize, { passive: true });
     
     if (document.fonts?.ready) {
       document.fonts.ready.then(layout).catch(() => {});
     }
 
-    return () => window.removeEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      clearTimeout(resizeTimeout);
+    };
   }, []);
 
   const handleEnter = (i) => {
@@ -113,12 +126,12 @@ const MainNavbar = ({ logoOnly = false }) => {
   };
 
   const handleLogoEnter = () => {
-    const img = logoImgRef.current;
-    if (!img) return;
+    const logo = logoTextRef.current;
+    if (!logo) return;
     logoTweenRef.current?.kill();
-    gsap.set(img, { rotate: 0 });
-    logoTweenRef.current = gsap.to(img, {
-      rotate: 360,
+    gsap.set(logo, { scale: 1 });
+    logoTweenRef.current = gsap.to(logo, {
+      scale: 1.1,
       duration: 0.2,
       ease,
       overwrite: 'auto'
@@ -137,7 +150,7 @@ const MainNavbar = ({ logoOnly = false }) => {
         { label: 'Home', href: '/' },
         { label: 'About Us', href: '/about' },
         { label: 'Contact', href: '/contact' },
-        { label: 'Car Options', href: '/car-options' },
+        { label: 'Events', href: '/events', hasDropdown: true },
         { label: 'Check Booking', href: '/check-booking' },
       ];
 
@@ -166,12 +179,12 @@ const MainNavbar = ({ logoOnly = false }) => {
           href="/" 
           className="navbar-logo" 
           aria-label="Namma Cabs home"
+          onMouseEnter={handleLogoEnter}
         >
-          <img
-            ref={logoImgRef}
-            src="/logo-namma-cabs.png"
-            alt="Namma Cabs – Adventure Awaits, Since 2015"
-          />
+          <span className="logo-text" ref={logoTextRef}>
+            <span className="logo-namma">namma</span>
+            <span className="logo-cabs">cabs</span>
+          </span>
         </a>
         {!logoOnly && (
           <>
@@ -194,8 +207,99 @@ const MainNavbar = ({ logoOnly = false }) => {
                         <span className="nav-separator" />
                       </li>
                     )}
-                    <li>
-                      {item.isButton ? (
+                    <li style={{ position: 'relative' }}>
+                      {item.hasDropdown ? (
+                        <div
+                          style={{ position: 'relative' }}
+                          onMouseEnter={() => setEventsDropdownOpen(true)}
+                          onMouseLeave={() => setEventsDropdownOpen(false)}
+                        >
+                          <a
+                            href={item.href}
+                            className="pill"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              setEventsDropdownOpen(!eventsDropdownOpen);
+                            }}
+                            onMouseEnter={() => handleEnter(i)}
+                            onMouseLeave={() => handleLeave(i)}
+                          >
+                            <span
+                              className="hover-circle"
+                              aria-hidden="true"
+                              ref={el => { circleRefs.current[i] = el; }}
+                            />
+                            <span className="label-stack">
+                              <span className="pill-label">{item.label} ▼</span>
+                              <span className="pill-label-hover" aria-hidden="true">
+                                {item.label} ▼
+                              </span>
+                            </span>
+                          </a>
+                          {eventsDropdownOpen && (
+                            <div
+                              style={{
+                                position: 'absolute',
+                                top: '100%',
+                                left: 0,
+                                marginTop: '8px',
+                                backgroundColor: 'white',
+                                borderRadius: '8px',
+                                boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                                minWidth: '180px',
+                                zIndex: 1000,
+                                padding: '8px 0'
+                              }}
+                            >
+                              <a
+                                href="/events?type=weddings"
+                                onClick={closeMenu}
+                                style={{
+                                  display: 'block',
+                                  padding: '12px 20px',
+                                  color: '#333',
+                                  textDecoration: 'none',
+                                  transition: 'background-color 0.2s'
+                                }}
+                                onMouseEnter={(e) => e.target.style.backgroundColor = '#f3f4f6'}
+                                onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                              >
+                                💒 Weddings
+                              </a>
+                              <a
+                                href="/events?type=birthdays"
+                                onClick={closeMenu}
+                                style={{
+                                  display: 'block',
+                                  padding: '12px 20px',
+                                  color: '#333',
+                                  textDecoration: 'none',
+                                  transition: 'background-color 0.2s'
+                                }}
+                                onMouseEnter={(e) => e.target.style.backgroundColor = '#f3f4f6'}
+                                onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                              >
+                                🎂 Birthdays
+                              </a>
+                              <a
+                                href="/events?type=others"
+                                onClick={closeMenu}
+                                style={{
+                                  display: 'block',
+                                  padding: '12px 20px',
+                                  color: '#333',
+                                  textDecoration: 'none',
+                                  transition: 'background-color 0.2s'
+                                }}
+                                onMouseEnter={(e) => e.target.style.backgroundColor = '#f3f4f6'}
+                                onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                              >
+                                🎉 Others
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      ) : item.isButton ? (
                         <button
                           type="button"
                           className="pill nav-pill-button"

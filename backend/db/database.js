@@ -508,6 +508,45 @@ const runMigrations = async () => {
       }
     }
 
+    // Migration: Add manager role support and permissions table
+    try {
+      // Create manager_permissions table
+      const managerPermissionsSQL = DB_TYPE === 'mysql'
+        ? `CREATE TABLE IF NOT EXISTS manager_permissions (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            user_id INT NOT NULL,
+            section_key VARCHAR(100) NOT NULL,
+            can_view INT DEFAULT 0,
+            can_edit INT DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY unique_user_section (user_id, section_key),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          )`
+        : `CREATE TABLE IF NOT EXISTS manager_permissions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            section_key TEXT NOT NULL,
+            can_view INTEGER DEFAULT 0,
+            can_edit INTEGER DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, section_key),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          )`;
+
+      await db.runAsync(managerPermissionsSQL);
+      console.log('Migration: manager_permissions table created');
+    } catch (migrationErr) {
+      const errMsg = migrationErr.message || '';
+      if (!errMsg.includes('already exists') && !errMsg.includes('Duplicate')) {
+        console.log('Migration note (manager_permissions):', migrationErr.message);
+      }
+    }
+
+    // Note: Role constraint update for 'manager' is handled in schema.sql for new installations
+    // For existing databases, the constraint will be updated when the migration script is run manually
+
     try {
       await db.runAsync(
         `ALTER TABLE corporate_bookings ADD COLUMN driver_name TEXT`
@@ -541,6 +580,143 @@ const runMigrations = async () => {
       const errMsg = migrationErr.message || '';
       if (!errMsg.includes('duplicate column') && !errMsg.includes('Duplicate column')) {
         console.log('Migration note (assigned_at):', migrationErr.message);
+      }
+    }
+
+    // Migration to add driver assignment fields to bookings
+    try {
+      await db.runAsync(
+        `ALTER TABLE bookings ADD COLUMN driver_id INTEGER`
+      );
+      console.log('Migration: driver_id column added to bookings');
+    } catch (migrationErr) {
+      const errMsg = migrationErr.message || '';
+      if (!errMsg.includes('duplicate column') && !errMsg.includes('Duplicate column')) {
+        console.log('Migration note (driver_id on bookings):', migrationErr.message);
+      }
+    }
+
+    try {
+      await db.runAsync(
+        `ALTER TABLE bookings ADD COLUMN driver_name TEXT`
+      );
+      console.log('Migration: driver_name column added to bookings');
+    } catch (migrationErr) {
+      const errMsg = migrationErr.message || '';
+      if (!errMsg.includes('duplicate column') && !errMsg.includes('Duplicate column')) {
+        console.log('Migration note (driver_name on bookings):', migrationErr.message);
+      }
+    }
+
+    try {
+      await db.runAsync(
+        `ALTER TABLE bookings ADD COLUMN driver_phone TEXT`
+      );
+      console.log('Migration: driver_phone column added to bookings');
+    } catch (migrationErr) {
+      const errMsg = migrationErr.message || '';
+      if (!errMsg.includes('duplicate column') && !errMsg.includes('Duplicate column')) {
+        console.log('Migration note (driver_phone on bookings):', migrationErr.message);
+      }
+    }
+
+    // Migration to create event_bookings table
+    try {
+      await db.runAsync(
+        `CREATE TABLE IF NOT EXISTS event_bookings (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          phone_number TEXT NOT NULL,
+          event_type TEXT NOT NULL CHECK (event_type IN ('weddings', 'birthdays', 'others')),
+          pickup_point TEXT NOT NULL,
+          drop_point TEXT NOT NULL,
+          pickup_date TEXT,
+          pickup_time TEXT,
+          pickup_lat REAL,
+          pickup_lng REAL,
+          drop_lat REAL,
+          drop_lng REAL,
+          status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'in_progress', 'completed', 'cancelled')),
+          notes TEXT,
+          cab_id INTEGER,
+          driver_id INTEGER,
+          driver_name TEXT,
+          driver_phone TEXT,
+          assigned_at DATETIME,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (cab_id) REFERENCES cabs(id) ON DELETE SET NULL,
+          FOREIGN KEY (driver_id) REFERENCES drivers(id) ON DELETE SET NULL
+        )`
+      );
+      console.log('Migration: event_bookings table created');
+    } catch (migrationErr) {
+      const errMsg = migrationErr.message || '';
+      if (!errMsg.includes('already exists') && !errMsg.includes('Duplicate')) {
+        console.log('Migration note (event_bookings):', migrationErr.message);
+      }
+    }
+
+    // Migration to add pickup_date and pickup_time to event_bookings if table exists
+    try {
+      await db.runAsync(
+        `ALTER TABLE event_bookings ADD COLUMN pickup_date TEXT`
+      );
+      console.log('Migration: pickup_date column added to event_bookings');
+    } catch (migrationErr) {
+      const errMsg = migrationErr.message || '';
+      if (!errMsg.includes('duplicate column') && !errMsg.includes('Duplicate column')) {
+        console.log('Migration note (pickup_date on event_bookings):', migrationErr.message);
+      }
+    }
+
+    try {
+      await db.runAsync(
+        `ALTER TABLE event_bookings ADD COLUMN pickup_time TEXT`
+      );
+      console.log('Migration: pickup_time column added to event_bookings');
+    } catch (migrationErr) {
+      const errMsg = migrationErr.message || '';
+      if (!errMsg.includes('duplicate column') && !errMsg.includes('Duplicate column')) {
+        console.log('Migration note (pickup_time on event_bookings):', migrationErr.message);
+      }
+    }
+
+    // Migration to add number_of_cars to event_bookings if table exists
+    try {
+      await db.runAsync(
+        `ALTER TABLE event_bookings ADD COLUMN number_of_cars INTEGER DEFAULT 1`
+      );
+      console.log('Migration: number_of_cars column added to event_bookings');
+    } catch (migrationErr) {
+      const errMsg = migrationErr.message || '';
+      if (!errMsg.includes('duplicate column') && !errMsg.includes('Duplicate column')) {
+        console.log('Migration note (number_of_cars on event_bookings):', migrationErr.message);
+      }
+    }
+
+    // Migration to create event_booking_assignments table
+    try {
+      await db.runAsync(
+        `CREATE TABLE IF NOT EXISTS event_booking_assignments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          event_booking_id INTEGER NOT NULL,
+          cab_id INTEGER,
+          driver_id INTEGER,
+          driver_name TEXT,
+          driver_phone TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (event_booking_id) REFERENCES event_bookings(id) ON DELETE CASCADE,
+          FOREIGN KEY (cab_id) REFERENCES cabs(id) ON DELETE SET NULL,
+          FOREIGN KEY (driver_id) REFERENCES drivers(id) ON DELETE SET NULL
+        )`
+      );
+      console.log('Migration: event_booking_assignments table created');
+    } catch (migrationErr) {
+      const errMsg = migrationErr.message || '';
+      if (!errMsg.includes('already exists') && !errMsg.includes('Duplicate')) {
+        console.log('Migration note (event_booking_assignments):', migrationErr.message);
       }
     }
 

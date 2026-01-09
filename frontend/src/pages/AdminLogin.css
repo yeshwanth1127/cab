@@ -49,7 +49,7 @@
   left: 0;
   right: 0;
   height: 5px;
-  background: linear-gradient(90deg, #facc15 0%, #eab308 100%);
+  background: linear-gradient(90deg, #16a34a 0%, #16a34a 100%);
 }
 
 .login-card h1 {
@@ -58,7 +58,7 @@
   color: #333;
   font-size: 32px;
   font-weight: 700;
-  background: linear-gradient(135deg, #facc15 0%, #eab308 100%);
+  background: linear-gradient(135deg, #16a34a 0%, #16a34a 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -80,7 +80,7 @@
 }
 
 .login-footer a {
-  color: #facc15;
+  color: #16a34a;
   text-decoration: none;
   font-size: 14px;
   font-weight: 600;
@@ -96,21 +96,94 @@
 }
 
 .login-footer a:hover {
-  color: #eab308;
+  color: #16a34a;
   transform: translateX(-4px);
 }
 
 @media (max-width: 768px) {
+  .admin-login-page {
+    padding: 16px;
+    min-height: 100vh;
+    align-items: flex-start;
+    padding-top: 40px;
+  }
+
+  .login-container {
+    max-width: 100%;
+  }
+
   .login-card {
-    padding: 30px 20px;
+    padding: 30px 24px;
+    border-radius: 16px;
   }
 
   .login-card h1 {
     font-size: 24px;
+    margin-bottom: 10px;
   }
 
+  .login-card p {
+    font-size: 14px;
+    margin-bottom: 30px;
+  }
+
+  .login-footer {
+    margin-top: 24px;
+  }
+
+  .login-footer a {
+    font-size: 13px;
+    /* Touch-friendly */
+    -webkit-tap-highlight-color: rgba(22, 163, 74, 0.3);
+    touch-action: manipulation;
+    padding: 8px;
+    margin: -8px;
+  }
+
+  .form-group input {
+    font-size: 16px; /* Prevent zoom on iOS */
+    padding: 12px 14px;
+  }
+
+  .btn {
+    /* Touch-friendly */
+    min-height: 44px;
+    -webkit-tap-highlight-color: rgba(22, 163, 74, 0.3);
+    touch-action: manipulation;
+  }
+}
+
+@media (max-width: 480px) {
   .admin-login-page {
-    padding: 16px;
+    padding: 12px;
+    padding-top: 30px;
+  }
+
+  .login-card {
+    padding: 24px 20px;
+    border-radius: 12px;
+  }
+
+  .login-card h1 {
+    font-size: 22px;
+  }
+
+  .login-card p {
+    font-size: 13px;
+    margin-bottom: 24px;
+  }
+}
+
+/* Touch optimizations */
+@media (hover: none) and (pointer: coarse) {
+  .login-footer a:hover {
+    transform: none;
+    color: #16a34a;
+  }
+
+  .login-footer a:active {
+    transform: translateX(-2px);
+    color: #16a34a;
   }
 }
 

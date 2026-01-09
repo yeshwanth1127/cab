@@ -41,7 +41,7 @@
   color: #666;
   font-weight: 600;
   padding: 8px 16px;
-  background: rgba(250, 204, 21, 0.1);
+  background: rgba(22, 163, 74, 0.1);
   border-radius: 8px;
 }
 
@@ -83,12 +83,12 @@
 }
 
 .sidebar::-webkit-scrollbar-thumb {
-  background: rgba(250, 204, 21, 0.3);
+  background: rgba(22, 163, 74, 0.3);
   border-radius: 3px;
 }
 
 .sidebar::-webkit-scrollbar-thumb:hover {
-  background: rgba(250, 204, 21, 0.5);
+  background: rgba(22, 163, 74, 0.5);
 }
 
 .sidebar-header {
@@ -98,7 +98,7 @@
 }
 
 .sidebar-header h2 {
-  color: #facc15;
+  color: #16a34a;
   font-size: 24px;
   font-weight: 700;
   margin: 0 0 8px 0;
@@ -159,7 +159,7 @@
   top: 0;
   bottom: 0;
   width: 3px;
-  background: linear-gradient(180deg, #facc15 0%, #eab308 100%);
+  background: linear-gradient(180deg, #16a34a 0%, #16a34a 100%);
   transform: scaleY(0);
   transition: transform 0.3s ease;
 }
@@ -186,13 +186,13 @@
 }
 
 .sidebar button:hover {
-  background: rgba(250, 204, 21, 0.1);
-  color: #facc15;
-  border-left-color: rgba(250, 204, 21, 0.5);
+  background: rgba(22, 163, 74, 0.1);
+  color: #16a34a;
+  border-left-color: rgba(22, 163, 74, 0.5);
 }
 
 .sidebar button:hover .sidebar-subtext {
-  color: rgba(250, 204, 21, 0.7);
+  color: rgba(22, 163, 74, 0.7);
 }
 
 .sidebar button:hover::before {
@@ -200,9 +200,9 @@
 }
 
 .sidebar button.active {
-  background: linear-gradient(90deg, rgba(250, 204, 21, 0.2) 0%, rgba(250, 204, 21, 0.05) 100%);
-  color: #facc15;
-  border-left-color: #facc15;
+  background: linear-gradient(90deg, rgba(22, 163, 74, 0.2) 0%, rgba(22, 163, 74, 0.05) 100%);
+  color: #16a34a;
+  border-left-color: #16a34a;
   font-weight: 700;
 }
 
@@ -211,7 +211,7 @@
 }
 
 .sidebar button.active .sidebar-subtext {
-  color: rgba(250, 204, 21, 0.8);
+  color: rgba(22, 163, 74, 0.8);
 }
 
 .main-content {
@@ -237,6 +237,121 @@
   margin-bottom: 0;
 }
 
+/* Pie Chart Container */
+.pie-chart-container {
+  background: white;
+  border-radius: 16px;
+  padding: 32px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  margin-bottom: 30px;
+}
+
+.chart-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 24px;
+  text-align: center;
+  padding-bottom: 16px;
+  border-bottom: 2px solid #16a34a;
+}
+
+.pie-chart-wrapper {
+  max-width: 500px;
+  margin: 0 auto 32px;
+  height: 400px;
+  position: relative;
+}
+
+.chart-stats-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.stat-summary-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  transition: all 0.3s ease;
+}
+
+.stat-summary-item:hover {
+  background: #f1f5f9;
+  border-color: #16a34a;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.15);
+}
+
+.stat-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.stat-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: #16a34a;
+}
+
+/* Responsive styles for pie chart */
+@media (max-width: 768px) {
+  .dashboard-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .pie-chart-container {
+    padding: 24px 16px;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .chart-title {
+    font-size: 20px;
+    margin-bottom: 20px;
+  }
+
+  .pie-chart-wrapper {
+    max-width: 100%;
+    height: 300px;
+    margin-bottom: 24px;
+  }
+
+  .chart-stats-summary {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .stat-summary-item {
+    padding: 10px 14px;
+  }
+
+  .stat-label {
+    font-size: 13px;
+  }
+
+  .stat-value {
+    font-size: 16px;
+  }
+
+  .recent-bookings-panel {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+}
+
 /* Recent Bookings Panel */
 .recent-bookings-panel {
   background: white;
@@ -255,7 +370,7 @@
   color: #333;
   margin-bottom: 20px;
   padding-bottom: 12px;
-  border-bottom: 2px solid #facc15;
+  border-bottom: 2px solid #16a34a;
 }
 
 .recent-bookings-list {
@@ -278,9 +393,9 @@
 
 .recent-booking-item:hover {
   background: #f1f5f9;
-  border-color: #facc15;
+  border-color: #16a34a;
   transform: translateX(4px);
-  box-shadow: 0 4px 12px rgba(250, 204, 21, 0.2);
+  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.2);
 }
 
 .recent-booking-header {
@@ -292,7 +407,7 @@
 
 .recent-booking-id {
   font-weight: 700;
-  color: #facc15;
+  color: #16a34a;
   font-size: 16px;
 }
 
@@ -356,7 +471,7 @@
 }
 
 .recent-booking-fare {
-  color: #facc15;
+  color: #16a34a;
   font-weight: 700;
   font-size: 18px;
   margin-top: 4px;
@@ -396,7 +511,7 @@
   max-width: 800px;
   width: 100%;
   animation: scaleIn 0.3s ease;
-  border: 1px solid rgba(250, 204, 21, 0.3);
+  border: 1px solid rgba(22, 163, 74, 0.3);
   display: flex;
   flex-direction: column;
   overflow: visible;
@@ -447,13 +562,19 @@
 /* Simple Detail Item Layout - Plain Text with Horizontal Lines */
 .glass-modal .modal-content {
   padding: 0 !important;
+  display: block;
+  max-width: 100%;
+  margin: 0 auto;
 }
 
 .glass-modal .detail-item {
   width: 100%;
+  max-width: 700px;
   padding: 24px 30px;
   border-bottom: 1px solid #e5e7eb;
   box-sizing: border-box;
+  margin: 0 auto;
+  display: block;
 }
 
 .glass-modal .detail-item:last-child {
@@ -487,6 +608,8 @@
   width: 100%;
   display: block;
   max-width: 100%;
+  visibility: visible;
+  opacity: 1;
 }
 
 .glass-modal .detail-select {
@@ -506,8 +629,8 @@
 
 .glass-modal .detail-select:focus {
   outline: none;
-  border-color: #facc15;
-  box-shadow: 0 0 0 3px rgba(250, 204, 21, 0.1);
+  border-color: #16a34a;
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.1);
 }
 
 /* Mobile Layout Fixes - All 6 Root Problems Fixed */
@@ -548,16 +671,19 @@
     padding: 0 !important;
     overflow-y: auto;
     max-height: calc(100vh - 180px);
+    display: block;
   }
 
-  /* Fix 2: Consistent 2-column grid layout for mobile booking details */
+  /* Fix 2: Stack layout for mobile booking details */
   .glass-modal .detail-item {
-    display: grid;
-    grid-template-columns: 140px 1fr;
-    gap: 16px;
-    align-items: start;
-    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+    padding: 16px 20px;
     margin: 0;
+    width: 100%;
+    max-width: 100%;
   }
 
   /* Fix 3: ONE separator style - remove divider, use border-bottom */
@@ -571,24 +697,25 @@
 
   /* Fix 5: Lock typography system for mobile */
   .glass-modal .detail-heading {
-    grid-column: 1;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
     color: #6b7280;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    margin: 0;
+    margin: 0 0 4px 0;
     padding: 0;
+    width: 100%;
   }
 
   .glass-modal .detail-text,
   .glass-modal .detail-select {
-    grid-column: 2;
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 500;
     color: #111827;
     margin: 0;
     padding: 0;
+    width: 100%;
+    word-break: break-word;
   }
 
   .glass-modal .detail-select {
@@ -602,8 +729,8 @@
 
   .glass-modal .detail-select:focus {
     outline: none;
-    border-color: #facc15;
-    box-shadow: 0 0 0 3px rgba(250, 204, 21, 0.1);
+    border-color: #16a34a;
+    box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.1);
   }
 
   /* Fix 4: Actions Zone - Footer positioned properly */
@@ -705,7 +832,7 @@
 
 .gst-option-label input[type="radio"] {
   cursor: pointer;
-  accent-color: #facc15;
+  accent-color: #16a34a;
   width: 18px;
   height: 18px;
 }
@@ -736,14 +863,14 @@
 }
 
 .footer-actions .btn-primary {
-  background: #facc15;
+  background: #16a34a;
   color: #000;
   font-weight: 700;
 }
 
 .footer-actions .btn-primary:hover {
-  background: #eab308;
-  box-shadow: 0 4px 12px rgba(250, 204, 21, 0.3);
+  background: #16a34a;
+  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.3);
 }
 
 @media (max-width: 768px) {
@@ -767,12 +894,12 @@
 }
 
 .stat-card {
-  background: linear-gradient(135deg, #facc15 0%, #eab308 100%);
+  background: linear-gradient(135deg, #16a34a 0%, #16a34a 100%);
   color: white;
   padding: 30px;
   border-radius: 16px;
   text-align: center;
-  box-shadow: 0 8px 25px rgba(250, 204, 21, 0.3);
+  box-shadow: 0 8px 25px rgba(22, 163, 74, 0.3);
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
@@ -793,7 +920,7 @@
 
 .stat-card:hover {
   transform: translateY(-8px) scale(1.05);
-  box-shadow: 0 12px 35px rgba(250, 204, 21, 0.4);
+  box-shadow: 0 12px 35px rgba(22, 163, 74, 0.4);
 }
 
 .stat-card h3 {
@@ -823,7 +950,7 @@
   color: #333;
   font-size: 28px;
   font-weight: 700;
-  background: linear-gradient(135deg, #facc15 0%, #eab308 100%);
+  background: linear-gradient(135deg, #16a34a 0%, #16a34a 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -920,10 +1047,36 @@
 
 .data-table td:nth-child(13) .btn-sm {
   display: inline-block;
-  white-space: nowrap;
+  white-space: normal;
+  word-wrap: break-word;
+  min-width: 140px;
+  text-align: center;
+  line-height: 1.3;
   margin-right: 8px;
-  margin-bottom: 0;
+  margin-bottom: 4px;
   vertical-align: middle;
+  padding: 8px 12px;
+}
+
+/* Invoice Actions column (7th column) - Trip End section buttons */
+.data-table td:nth-child(7) .btn-sm {
+  white-space: normal !important;
+  word-wrap: break-word;
+  width: 100%;
+  min-width: 180px;
+  text-align: center;
+  line-height: 1.4;
+  padding: 10px 8px;
+  font-size: 12px;
+  display: block;
+  margin-bottom: 6px;
+}
+
+.data-table td:nth-child(7) > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
 }
 
 /* Actions column for other tables */
@@ -934,7 +1087,7 @@
 }
 
 .data-table th {
-  background: linear-gradient(135deg, rgba(250, 204, 21, 0.1) 0%, rgba(234, 179, 8, 0.1) 100%);
+  background: linear-gradient(135deg, rgba(22, 163, 74, 0.1) 0%, rgba(22, 163, 74, 0.1) 100%);
   font-weight: 700;
   color: #333;
   text-transform: uppercase;
@@ -984,7 +1137,8 @@
 
 .data-table th:nth-child(7),
 .data-table td:nth-child(7) {
-  width: 130px;
+  width: 200px;
+  min-width: 200px;
   min-width: 130px;
 }
 
@@ -1029,7 +1183,7 @@
 }
 
 .data-table tr:hover {
-  background: rgba(250, 204, 21, 0.05);
+  background: rgba(22, 163, 74, 0.05);
   transform: scale(1.01);
 }
 
@@ -1039,7 +1193,7 @@
 }
 
 .booking-table-row:hover {
-  background: rgba(250, 204, 21, 0.1) !important;
+  background: rgba(22, 163, 74, 0.1) !important;
   transform: scale(1.005);
 }
 
@@ -1059,8 +1213,12 @@
 .data-table .btn-secondary.btn-sm {
   background: #111827;
   border-color: #111827;
-  color: #f9fafb;
-  white-space: nowrap;
+  color: #ffffff !important;
+  white-space: normal;
+  word-wrap: break-word;
+  min-width: 140px;
+  text-align: center;
+  line-height: 1.3;
   margin-right: 8px;
   margin-bottom: 4px;
 }
@@ -1068,23 +1226,29 @@
 .data-table .btn-secondary.btn-sm:hover {
   background: #000000;
   border-color: #000000;
+  color: #ffffff !important;
   box-shadow: 0 6px 16px rgba(15, 23, 42, 0.5);
 }
 
 .data-table .btn-primary.btn-sm {
-  background: #facc15;
-  border-color: #eab308;
-  color: #111827;
-  white-space: nowrap;
+  background: #16a34a;
+  border-color: #16a34a;
+  color: #000000 !important;
+  white-space: normal;
+  word-wrap: break-word;
+  min-width: 140px;
+  text-align: center;
+  line-height: 1.3;
   margin-right: 0;
   margin-bottom: 4px;
+  font-weight: 700;
 }
 
 .data-table .btn-primary.btn-sm:hover {
-  background: #eab308;
+  background: #16a34a;
   border-color: #ca8a04;
-  color: #000000;
-  box-shadow: 0 6px 16px rgba(250, 204, 21, 0.4);
+  color: #000000 !important;
+  box-shadow: 0 6px 16px rgba(22, 163, 74, 0.4);
 }
 
 .data-table .btn-danger.btn-sm {
@@ -1111,8 +1275,8 @@
 
 .status-select:focus {
   outline: none;
-  border-color: #facc15;
-  box-shadow: 0 0 0 3px rgba(250, 204, 21, 0.1);
+  border-color: #16a34a;
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.1);
 }
 
 .service-badge {
@@ -1138,6 +1302,46 @@
 .service-badge.outstation {
   background: rgba(168, 85, 247, 0.15);
   color: #a855f7;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.status-badge.pending,
+.status-badge.received {
+  background: rgba(245, 158, 11, 0.15);
+  color: #d97706;
+}
+
+.status-badge.confirmed {
+  background: rgba(22, 163, 74, 0.15);
+  color: #16a34a;
+}
+
+.status-badge.in_progress {
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+}
+
+.status-badge.completed {
+  background: rgba(107, 114, 128, 0.15);
+  color: #6b7280;
+}
+
+.status-badge.cancelled {
+  background: rgba(220, 38, 38, 0.15);
+  color: #dc2626;
+}
+
+.status-badge.available {
+  background: rgba(22, 163, 74, 0.15);
+  color: #16a34a;
 }
 
 .text-muted {
@@ -1180,7 +1384,7 @@
   left: 0;
   right: 0;
   height: 5px;
-  background: linear-gradient(90deg, #facc15 0%, #eab308 100%);
+  background: linear-gradient(90deg, #16a34a 0%, #16a34a 100%);
   border-radius: 20px 20px 0 0;
 }
 
@@ -1190,7 +1394,7 @@
   font-size: 24px;
   font-weight: 700;
   text-align: center;
-  background: linear-gradient(135deg, #facc15 0%, #eab308 100%);
+  background: linear-gradient(135deg, #16a34a 0%, #16a34a 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -1255,8 +1459,8 @@
 .filter-group select:focus,
 .filter-group input[type="date"]:focus,
 .filter-group input[type="text"]:focus {
-  border-color: #facc15;
-  box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.2);
+  border-color: #16a34a;
+  box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.2);
 }
 
 .filter-search {
@@ -1296,22 +1500,22 @@
 }
 
 .status-toggle-btn:hover {
-  border-color: #facc15;
-  background: rgba(250, 204, 21, 0.1);
+  border-color: #16a34a;
+  background: rgba(22, 163, 74, 0.1);
   color: #92400e;
 }
 
 .status-toggle-btn.active {
-  background: linear-gradient(135deg, #facc15 0%, #eab308 100%);
-  border-color: #facc15;
+  background: linear-gradient(135deg, #16a34a 0%, #16a34a 100%);
+  border-color: #16a34a;
   color: #000;
   font-weight: 700;
-  box-shadow: 0 2px 8px rgba(250, 204, 21, 0.3);
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.3);
 }
 
 .status-toggle-btn.active:hover {
-  background: linear-gradient(135deg, #eab308 0%, #ca8a04 100%);
-  box-shadow: 0 4px 12px rgba(250, 204, 21, 0.4);
+  background: linear-gradient(135deg, #16a34a 0%, #ca8a04 100%);
+  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.4);
 }
 
 .booking-group-row td {
@@ -1354,14 +1558,14 @@
   justify-content: space-between;
   align-items: center;
   padding: 20px 24px;
-  background: linear-gradient(135deg, rgba(250, 204, 21, 0.1) 0%, rgba(234, 179, 8, 0.05) 100%);
+  background: linear-gradient(135deg, rgba(22, 163, 74, 0.1) 0%, rgba(22, 163, 74, 0.05) 100%);
   cursor: pointer;
   transition: all 0.3s ease;
-  border-bottom: 2px solid rgba(250, 204, 21, 0.2);
+  border-bottom: 2px solid rgba(22, 163, 74, 0.2);
 }
 
 .cab-type-header:hover {
-  background: linear-gradient(135deg, rgba(250, 204, 21, 0.15) 0%, rgba(234, 179, 8, 0.1) 100%);
+  background: linear-gradient(135deg, rgba(22, 163, 74, 0.15) 0%, rgba(22, 163, 74, 0.1) 100%);
 }
 
 .cab-type-header-left {
@@ -1373,7 +1577,7 @@
 
 .expand-icon {
   font-size: 14px;
-  color: #facc15;
+  color: #16a34a;
   font-weight: bold;
   width: 20px;
   text-align: center;
@@ -1417,7 +1621,7 @@
   font-size: 16px;
   font-weight: 600;
   padding-bottom: 8px;
-  border-bottom: 2px solid rgba(250, 204, 21, 0.3);
+  border-bottom: 2px solid rgba(22, 163, 74, 0.3);
 }
 
 .cars-grid {
@@ -1482,6 +1686,19 @@
   margin-bottom: 16px;
 }
 
+/* Make all button text black in cab types section */
+.cab-types-hierarchical .btn,
+.cab-types-hierarchical .btn-primary,
+.cab-types-hierarchical .btn-secondary,
+.cab-types-hierarchical .btn-danger,
+.cab-types-hierarchical .btn-sm,
+.cab-type-header-right .btn,
+.cab-type-content .btn,
+.car-card .btn,
+.no-cars-message .btn {
+  color: #000 !important;
+}
+
 /* Modal Styles */
 .modal-overlay {
   position: fixed;
@@ -1515,7 +1732,7 @@
   align-items: center;
   padding: 20px 24px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-  background: linear-gradient(135deg, rgba(250, 204, 21, 0.1) 0%, rgba(234, 179, 8, 0.05) 100%);
+  background: linear-gradient(135deg, rgba(22, 163, 74, 0.1) 0%, rgba(22, 163, 74, 0.05) 100%);
 }
 
 .modal-header h3 {
@@ -1604,9 +1821,9 @@
   top: 15px;
   left: 15px;
   z-index: 1001;
-  background: rgba(250, 204, 21, 0.2);
-  border: 2px solid rgba(250, 204, 21, 0.5);
-  color: #facc15;
+  background: rgba(22, 163, 74, 0.2);
+  border: 2px solid rgba(22, 163, 74, 0.5);
+  color: #16a34a;
   font-size: 24px;
   width: 48px;
   height: 48px;
@@ -1620,8 +1837,8 @@
 }
 
 .mobile-hamburger-btn:hover {
-  background: rgba(250, 204, 21, 0.3);
-  border-color: #facc15;
+  background: rgba(22, 163, 74, 0.3);
+  border-color: #16a34a;
   transform: scale(1.05);
 }
 
@@ -1637,9 +1854,9 @@
 }
 
 .mobile-menu-close-btn {
-  background: rgba(250, 204, 21, 0.1);
-  border: 1px solid rgba(250, 204, 21, 0.3);
-  color: #facc15;
+  background: rgba(22, 163, 74, 0.1);
+  border: 1px solid rgba(22, 163, 74, 0.3);
+  color: #16a34a;
   font-size: 20px;
   cursor: pointer;
   padding: 8px 12px;
@@ -1653,8 +1870,8 @@
 }
 
 .mobile-menu-close-btn:hover {
-  background: rgba(250, 204, 21, 0.2);
-  border-color: #facc15;
+  background: rgba(22, 163, 74, 0.2);
+  border-color: #16a34a;
 }
 
 /* Tablet Styles */
@@ -1782,9 +1999,11 @@
 
   .data-table tbody {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    grid-template-columns: 1fr;
     gap: 16px;
     padding: 0;
+    width: 100%;
+    max-width: 100%;
   }
 
   .data-table tr {
@@ -1806,7 +2025,7 @@
   }
 
   .data-table tr:hover {
-    box-shadow: 0 4px 12px rgba(250, 204, 21, 0.2);
+    box-shadow: 0 4px 12px rgba(22, 163, 74, 0.2);
     transform: translateY(-2px);
   }
 
@@ -1814,8 +2033,8 @@
     grid-column: 1 / -1;
     margin-bottom: 0;
     padding: 12px 16px;
-    background: linear-gradient(135deg, rgba(250, 204, 21, 0.1) 0%, rgba(234, 179, 8, 0.05) 100%);
-    border: 1px solid rgba(250, 204, 21, 0.3);
+    background: linear-gradient(135deg, rgba(22, 163, 74, 0.1) 0%, rgba(22, 163, 74, 0.05) 100%);
+    border: 1px solid rgba(22, 163, 74, 0.3);
   }
 
   .data-table tr.booking-group-row td {
@@ -1962,8 +2181,8 @@
 
   .data-table tr.booking-table-row td[data-label="Status"] select:focus {
     outline: none;
-    border-color: #facc15;
-    box-shadow: 0 0 0 3px rgba(250, 204, 21, 0.1);
+    border-color: #16a34a;
+    box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.1);
   }
 
   /* Actions */
@@ -2256,7 +2475,63 @@
   }
 
   .data-table tbody {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr !important;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  /* Fix all inline grid styles to stack on mobile - override inline styles */
+  div[style*="grid-template-columns: 1fr 1fr"],
+  div[style*="gridTemplateColumns: '1fr 1fr'"] {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 15px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Ensure modal details are stacked on mobile */
+  .glass-modal .detail-item {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+
+  .glass-modal .detail-heading {
+    width: 100% !important;
+    margin-bottom: 4px !important;
+  }
+
+  .glass-modal .detail-text,
+  .glass-modal .detail-select {
+    width: 100% !important;
+  }
+
+  /* Ensure no horizontal scrolling */
+  .main-content,
+  .data-table-wrapper,
+  .data-table,
+  .data-table tbody,
+  .data-table tr {
+    max-width: 100%;
+    overflow-x: hidden;
+    box-sizing: border-box;
+  }
+
+  /* Fix booking cards to not be elongated */
+  .data-table tr.booking-table-row {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .data-table tr.booking-table-row td {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
   }
 
   .data-table td {
@@ -2275,6 +2550,30 @@
     max-width: calc(50% - 3px);
     font-size: 11px;
     padding: 6px 8px;
+  }
+
+  /* Invoice Actions buttons in trip end section - mobile */
+  .data-table td[data-label="Invoice Actions"] .btn-sm,
+  .data-table td:nth-child(7) .btn-sm {
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    white-space: normal !important;
+    word-wrap: break-word;
+    font-size: 11px;
+    padding: 10px 8px;
+    line-height: 1.4;
+    text-align: center;
+    display: block;
+    margin-bottom: 8px;
+  }
+
+  .data-table td[data-label="Invoice Actions"] > div,
+  .data-table td:nth-child(7) > div {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
   }
 
   .booking-filters {
@@ -2375,14 +2674,14 @@
 
 .rate-meter-service-header {
   padding: 20px 24px;
-  background: linear-gradient(135deg, rgba(250, 204, 21, 0.1) 0%, rgba(234, 179, 8, 0.05) 100%);
+  background: linear-gradient(135deg, rgba(22, 163, 74, 0.1) 0%, rgba(22, 163, 74, 0.05) 100%);
   cursor: pointer;
   transition: all 0.3s ease;
   border-bottom: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .rate-meter-service-header:hover {
-  background: linear-gradient(135deg, rgba(250, 204, 21, 0.15) 0%, rgba(234, 179, 8, 0.1) 100%);
+  background: linear-gradient(135deg, rgba(22, 163, 74, 0.15) 0%, rgba(22, 163, 74, 0.1) 100%);
 }
 
 .rate-meter-service-header-left {
@@ -2401,7 +2700,7 @@
 
 .rate-count {
   padding: 4px 12px;
-  background: rgba(250, 204, 21, 0.2);
+  background: rgba(22, 163, 74, 0.2);
   border-radius: 12px;
   font-size: 12px;
   font-weight: 600;
@@ -2423,17 +2722,17 @@
 }
 
 .no-rates-message .btn-primary.btn-sm {
-  background: #facc15;
-  border-color: #eab308;
+  background: #16a34a;
+  border-color: #16a34a;
   color: #111827;
   font-weight: 700;
 }
 
 .no-rates-message .btn-primary.btn-sm:hover {
-  background: #eab308;
+  background: #16a34a;
   border-color: #ca8a04;
   color: #000000;
-  box-shadow: 0 4px 12px rgba(250, 204, 21, 0.4);
+  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.4);
 }
 
 .rate-meters-grid {
@@ -2506,17 +2805,17 @@
 }
 
 .rate-meter-actions .btn-primary.btn-sm {
-  background: #facc15;
-  border-color: #eab308;
+  background: #16a34a;
+  border-color: #16a34a;
   color: #111827;
   font-weight: 700;
 }
 
 .rate-meter-actions .btn-primary.btn-sm:hover {
-  background: #eab308;
+  background: #16a34a;
   border-color: #ca8a04;
   color: #000000;
-  box-shadow: 0 4px 12px rgba(250, 204, 21, 0.4);
+  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.4);
 }
 
 .rate-meter-details {

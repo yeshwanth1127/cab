@@ -90,7 +90,7 @@ const AboutPage = () => {
             <h2 style={{
               fontSize: '42px',
               fontWeight: '700',
-              color: '#facc15',
+              color: '#16a34a',
               marginBottom: '20px',
               textTransform: 'uppercase',
               letterSpacing: '2px'
@@ -126,8 +126,8 @@ const AboutPage = () => {
             marginBottom: '50px'
           }}>
             <div style={{
-              background: 'linear-gradient(135deg, rgba(250, 204, 21, 0.1) 0%, rgba(234, 179, 8, 0.05) 100%)',
-              border: '2px solid rgba(250, 204, 21, 0.3)',
+              background: 'linear-gradient(135deg, rgba(22, 163, 74, 0.1) 0%, rgba(22, 163, 74, 0.05) 100%)',
+              border: '2px solid rgba(22, 163, 74, 0.3)',
               borderRadius: '20px',
               padding: '35px',
               transition: 'transform 0.3s ease, box-shadow 0.3s ease'
@@ -135,7 +135,7 @@ const AboutPage = () => {
               <h3 style={{
                 fontSize: '24px',
                 fontWeight: '700',
-                color: '#facc15',
+                color: '#16a34a',
                 marginBottom: '20px',
                 display: 'flex',
                 alignItems: 'center',
@@ -168,8 +168,8 @@ const AboutPage = () => {
             </div>
 
             <div style={{
-              background: 'linear-gradient(135deg, rgba(250, 204, 21, 0.1) 0%, rgba(234, 179, 8, 0.05) 100%)',
-              border: '2px solid rgba(250, 204, 21, 0.3)',
+              background: 'linear-gradient(135deg, rgba(22, 163, 74, 0.1) 0%, rgba(22, 163, 74, 0.05) 100%)',
+              border: '2px solid rgba(22, 163, 74, 0.3)',
               borderRadius: '20px',
               padding: '35px',
               transition: 'transform 0.3s ease, box-shadow 0.3s ease'
@@ -177,7 +177,7 @@ const AboutPage = () => {
               <h3 style={{
                 fontSize: '24px',
                 fontWeight: '700',
-                color: '#facc15',
+                color: '#16a34a',
                 marginBottom: '20px',
                 display: 'flex',
                 alignItems: 'center',
@@ -210,8 +210,8 @@ const AboutPage = () => {
             </div>
 
             <div style={{
-              background: 'linear-gradient(135deg, rgba(250, 204, 21, 0.1) 0%, rgba(234, 179, 8, 0.05) 100%)',
-              border: '2px solid rgba(250, 204, 21, 0.3)',
+              background: 'linear-gradient(135deg, rgba(22, 163, 74, 0.1) 0%, rgba(22, 163, 74, 0.05) 100%)',
+              border: '2px solid rgba(22, 163, 74, 0.3)',
               borderRadius: '20px',
               padding: '35px',
               transition: 'transform 0.3s ease, box-shadow 0.3s ease'
@@ -219,7 +219,7 @@ const AboutPage = () => {
               <h3 style={{
                 fontSize: '24px',
                 fontWeight: '700',
-                color: '#facc15',
+                color: '#16a34a',
                 marginBottom: '20px',
                 display: 'flex',
                 alignItems: 'center',
@@ -253,8 +253,8 @@ const AboutPage = () => {
           </div>
 
           <div style={{
-            background: 'linear-gradient(135deg, rgba(250, 204, 21, 0.2) 0%, rgba(234, 179, 8, 0.15) 100%)',
-            border: '3px solid rgba(250, 204, 21, 0.4)',
+            background: 'linear-gradient(135deg, rgba(22, 163, 74, 0.2) 0%, rgba(22, 163, 74, 0.15) 100%)',
+            border: '3px solid rgba(22, 163, 74, 0.4)',
             borderRadius: '24px',
             padding: '50px',
             textAlign: 'center',
@@ -263,7 +263,7 @@ const AboutPage = () => {
             <h3 style={{
               fontSize: '32px',
               fontWeight: '700',
-              color: '#facc15',
+              color: '#16a34a',
               marginBottom: '25px'
             }}>
               Perfect For Every Business Need
@@ -276,7 +276,7 @@ const AboutPage = () => {
               textAlign: 'left'
             }}>
               <div>
-                <h4 style={{ color: '#facc15', fontSize: '18px', marginBottom: '10px' }}>
+                <h4 style={{ color: '#16a34a', fontSize: '18px', marginBottom: '10px' }}>
                   📍 Daily Employee Commutes
                 </h4>
                 <p style={{ color: '#e5e7eb', fontSize: '15px', lineHeight: '1.6' }}>
@@ -285,7 +285,7 @@ const AboutPage = () => {
                 </p>
               </div>
               <div>
-                <h4 style={{ color: '#facc15', fontSize: '18px', marginBottom: '10px' }}>
+                <h4 style={{ color: '#16a34a', fontSize: '18px', marginBottom: '10px' }}>
                   ✈️ Client & Airport Transfers
                 </h4>
                 <p style={{ color: '#e5e7eb', fontSize: '15px', lineHeight: '1.6' }}>
@@ -294,7 +294,7 @@ const AboutPage = () => {
                 </p>
               </div>
               <div>
-                <h4 style={{ color: '#facc15', fontSize: '18px', marginBottom: '10px' }}>
+                <h4 style={{ color: '#16a34a', fontSize: '18px', marginBottom: '10px' }}>
                   🎯 On-Demand Business Travel
                 </h4>
                 <p style={{ color: '#e5e7eb', fontSize: '15px', lineHeight: '1.6' }}>
@@ -303,7 +303,7 @@ const AboutPage = () => {
                 </p>
               </div>
               <div>
-                <h4 style={{ color: '#facc15', fontSize: '18px', marginBottom: '10px' }}>
+                <h4 style={{ color: '#16a34a', fontSize: '18px', marginBottom: '10px' }}>
                   🎉 Team Events & Outings
                 </h4>
                 <p style={{ color: '#e5e7eb', fontSize: '15px', lineHeight: '1.6' }}>
@@ -311,45 +311,6 @@ const AboutPage = () => {
                   activities, and corporate outings with spacious vehicles.
                 </p>
               </div>
-            </div>
-            <div style={{
-              marginTop: '40px',
-              paddingTop: '30px',
-              borderTop: '2px solid rgba(250, 204, 21, 0.3)'
-            }}>
-              <p style={{
-                fontSize: '22px',
-                fontWeight: '600',
-                color: '#facc15',
-                marginBottom: '25px'
-              }}>
-                Ready to Elevate Your Company&apos;s Transportation?
-              </p>
-              <a 
-                href="/corporate" 
-                style={{
-                  display: 'inline-block',
-                  background: 'linear-gradient(135deg, #facc15 0%, #eab308 100%)',
-                  color: '#000',
-                  padding: '18px 40px',
-                  borderRadius: '12px',
-                  fontSize: '18px',
-                  fontWeight: '700',
-                  textDecoration: 'none',
-                  transition: 'transform 0.3s ease, box-shadow 0.3s ease',
-                  boxShadow: '0 8px 25px rgba(250, 204, 21, 0.3)'
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.transform = 'translateY(-3px)';
-                  e.target.style.boxShadow = '0 12px 35px rgba(250, 204, 21, 0.4)';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.transform = 'translateY(0)';
-                  e.target.style.boxShadow = '0 8px 25px rgba(250, 204, 21, 0.3)';
-                }}
-              >
-                Get Started with Corporate Booking →
-              </a>
             </div>
           </div>
         </div>

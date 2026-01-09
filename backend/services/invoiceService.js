@@ -5,14 +5,26 @@ const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
 const A4_WIDTH = 595.28;
 const A4_HEIGHT = 841.89;
 
-const LOGO_PATH = path.join(
-  __dirname,
-  '..',
-  '..',
-  'frontend',
-  'public',
-  'logo-namma-cabs.png'
-);
+// Try to find the new logo first, then fallback to old logo
+const getLogoPath = () => {
+  const possibleLogos = [
+    'logo.png',           // New logo (most common name)
+    'namma-cabs-logo.png', // Alternative new logo name
+    'logo-namma-cabs.png'  // Old logo (fallback)
+  ];
+  
+  for (const logoName of possibleLogos) {
+    const logoPath = path.join(__dirname, '..', '..', 'frontend', 'public', logoName);
+    if (fs.existsSync(logoPath)) {
+      return logoPath;
+    }
+  }
+  
+  // Return the old logo path as final fallback
+  return path.join(__dirname, '..', '..', 'frontend', 'public', 'logo-namma-cabs.png');
+};
+
+const LOGO_PATH = getLogoPath();
 
 function formatDate(dateStr) {
   if (!dateStr) return '';
@@ -183,32 +195,20 @@ async function generateInvoicePdf(booking, overrides = {}) {
     return currentY;
   };
 
-  // Try to load logo and position company name beside it
+  // Draw text-based logo: "namma" in green and "cabs" in black
   let currentY = A4_HEIGHT - margin;
-  let logoHeight = 0;
-  let logoWidth = 60;
+  const logoHeight = 40; // Height for text logo
   
-  try {
-    const logoBytes = fs.readFileSync(LOGO_PATH);
-    const logoImg = LOGO_PATH.toLowerCase().endsWith('.png')
-      ? await pdfDoc.embedPng(logoBytes)
-      : await pdfDoc.embedJpg(logoBytes);
-    logoWidth = 60;
-    logoHeight = (logoImg.height / logoImg.width) * logoWidth;
-    page.drawImage(logoImg, {
-      x: margin,
-      y: currentY - logoHeight,
-      width: logoWidth,
-      height: logoHeight,
-    });
-  } catch {
-    // no logo
-    logoHeight = 40; // Default height if no logo
-  }
-
-  // Company name positioned beside logo (vertically centered with logo)
-  const companyNameY = currentY - (logoHeight / 2) - 7; // Center vertically with logo
-  drawText('Namma Cabs', margin + logoWidth + 12, companyNameY, { font: fontBold, size: 20 });
+  // Draw "namma" in green
+  const greenColor = rgb(0.086, 0.639, 0.298); // #16a34a green color
+  drawText('namma', margin, currentY - 10, { font: fontBold, size: 24, color: greenColor });
+  
+  // Calculate width of "namma" to position "cabs" right after it
+  const nammaWidth = fontBold.widthOfTextAtSize('namma', 24);
+  const spacing = 4; // Small spacing between words
+  
+  // Draw "cabs" in black right after "namma"
+  drawText('cabs', margin + nammaWidth + spacing, currentY - 10, { font: fontBold, size: 24, color: black });
   
   // Company details (right aligned, starting from top of logo area)
   const rightX = margin + contentWidth;
@@ -306,14 +306,14 @@ async function generateInvoicePdf(booking, overrides = {}) {
     color: lightGray,
   });
 
-  // Table header text
+  // Table header text - adjusted column positions to prevent overlap
   const colPositions = {
     sl: margin + 5,
-    desc: margin + 40,
-    kms: margin + 260,
-    days: margin + 330,
-    rate: margin + 400,
-    amount: margin + contentWidth - 80,
+    desc: margin + 35,
+    kms: margin + 220,
+    days: margin + 280,
+    rate: margin + 330,
+    amount: margin + contentWidth - 75,
   };
 
   drawText('Sl No', colPositions.sl, tableTop - 15, { font: fontBold, size: 9 });
@@ -328,7 +328,8 @@ async function generateInvoicePdf(booking, overrides = {}) {
   
   drawText(data.sl_no || '1', colPositions.sl, rowY, { font: fontRegular, size: 9 });
   // Wrap service description properly within the description column width
-  const descMaxWidth = 210; // Max width for description column
+  // Adjusted max width to prevent overlap with other columns
+  const descMaxWidth = 180; // Max width for description column (reduced from 210)
   const descEndY = drawMultilineText(data.service_description || '', colPositions.desc, rowY, descMaxWidth, { 
     font: fontRegular,
     size: 8, 
@@ -336,7 +337,20 @@ async function generateInvoicePdf(booking, overrides = {}) {
   });
   drawText(data.total_kms || '0', colPositions.kms, rowY, { font: fontRegular, size: 9 });
   drawText(data.no_of_days || '-', colPositions.days, rowY, { font: fontRegular, size: 9 });
-  drawText(data.rate_details || '-', colPositions.rate, rowY, { font: fontRegular, size: 8 });
+  // Rate details - truncate text to fit within column width and prevent overlap
+  const rateMaxWidth = colPositions.amount - colPositions.rate - 10; // Leave 10px gap before amount
+  let rateText = data.rate_details || '-';
+  // Truncate text if it's too long to fit
+  const rateTextWidth = fontRegular.widthOfTextAtSize(rateText, 8);
+  if (rateTextWidth > rateMaxWidth) {
+    // Find the maximum number of characters that fit
+    let truncated = rateText;
+    while (fontRegular.widthOfTextAtSize(truncated + '...', 8) > rateMaxWidth && truncated.length > 0) {
+      truncated = truncated.slice(0, -1);
+    }
+    rateText = truncated + (truncated.length < rateText.length ? '...' : '');
+  }
+  drawText(rateText, colPositions.rate, rowY, { font: fontRegular, size: 8 });
   drawText(data.service_amount || '0.00', colPositions.amount, rowY, { font: fontBold, size: 10 });
 
   // Table border
@@ -412,13 +426,7 @@ async function generateInvoicePdf(booking, overrides = {}) {
     currentY -= 11;
   });
 
-  // Footer
-  drawText(
-    'This is a computer generated invoice.',
-    margin,
-    40,
-    { font: fontRegular, size: 8, color: gray, align: 'center', maxWidth: contentWidth }
-  );
+  // Footer removed - no longer showing "computer generated invoice" text
 
   const pdfBytes = await pdfDoc.save();
   return pdfBytes;

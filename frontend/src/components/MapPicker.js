@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import './MapPicker.css';
+import { loadGoogleMaps } from '../utils/googleMapsLoader';
 
 const MapPicker = ({ isOpen, onClose, onSelect, userLocation, initialLocation, title = "Select Location" }) => {
   const mapRef = useRef(null);
@@ -12,7 +13,7 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, initialLocation, t
   const [isLoading, setIsLoading] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
 
-  const googleKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
+  const googleKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY_NEW;
   const [mapsLoaded, setMapsLoaded] = useState(false);
   const [error, setError] = useState(null);
 
@@ -20,40 +21,42 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, initialLocation, t
     if (!isOpen) return;
 
     if (!googleKey) {
-      setError('Google Maps API key is not configured. Please set REACT_APP_GOOGLE_MAPS_API_KEY in your environment variables.');
+      setError('Google Maps API key is not configured. Please set REACT_APP_GOOGLE_MAPS_API_KEY_NEW in your environment variables.');
       return;
     }
 
-    // Load Google Maps script if not already loaded
-    if (!window.google || !window.google.maps) {
-      const existingScript = document.querySelector('script[src*="maps.googleapis.com"]');
-      if (existingScript) {
-        existingScript.addEventListener('load', () => {
-          setMapsLoaded(true);
-          setTimeout(initializeMap, 100);
-        });
-        if (window.google && window.google.maps) {
-          setMapsLoaded(true);
-          setTimeout(initializeMap, 100);
+    // Helper function to check if Google Maps is fully loaded
+    const isGoogleMapsReady = () => {
+      return window.google && 
+             window.google.maps && 
+             window.google.maps.Map &&
+             typeof window.google.maps.Map === 'function';
+    };
+
+    // Helper function to wait for Google Maps to be ready
+    const waitForGoogleMaps = (callback, maxAttempts = 50) => {
+      let attempts = 0;
+      const checkReady = () => {
+        attempts++;
+        if (isGoogleMapsReady()) {
+          callback();
+        } else if (attempts < maxAttempts) {
+          setTimeout(checkReady, 100);
+        } else {
+          setError('Google Maps failed to load. Please refresh the page.');
         }
-      } else {
-        const script = document.createElement('script');
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${googleKey}&libraries=places&loading=async`;
-        script.async = true;
-        script.defer = true;
-        script.onload = () => {
-          setMapsLoaded(true);
-          setTimeout(initializeMap, 100);
-        };
-        script.onerror = () => {
-          setError('Failed to load Google Maps. Please check your API key and network connection.');
-        };
-        document.head.appendChild(script);
-      }
-    } else {
-      setMapsLoaded(true);
-      setTimeout(initializeMap, 100);
-    }
+      };
+      checkReady();
+    };
+
+    loadGoogleMaps(googleKey)
+      .then(() => {
+        setMapsLoaded(true);
+        setTimeout(initializeMap, 100);
+      })
+      .catch((err) => {
+        setError('Failed to load Google Maps. Please check your API key and network connection.');
+      });
 
     return () => {
       // Cleanup
@@ -64,14 +67,37 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, initialLocation, t
   }, [isOpen, googleKey, userLocation]);
 
   const initializeMap = () => {
-    if (!mapRef.current || !window.google) return;
+    // Verify Google Maps API is fully loaded
+    if (!mapRef.current) {
+      console.error('[MapPicker] Map container not available');
+      return;
+    }
+
+    if (!window.google || !window.google.maps) {
+      console.error('[MapPicker] Google Maps API not loaded');
+      setError('Google Maps API failed to load. Please refresh the page.');
+      return;
+    }
+
+    if (typeof window.google.maps.Map !== 'function') {
+      console.error('[MapPicker] Google Maps Map constructor not available');
+      setError('Google Maps API is not fully loaded. Please wait a moment and try again.');
+      // Retry after a short delay
+      setTimeout(() => {
+        if (typeof window.google.maps.Map === 'function') {
+          initializeMap();
+        }
+      }, 500);
+      return;
+    }
 
     const defaultCenter = userLocation 
       ? { lat: userLocation.lat, lng: userLocation.lng }
       : { lat: 12.9716, lng: 77.5946 }; // Default to Bangalore, India
 
-    // Initialize map
-    const map = new window.google.maps.Map(mapRef.current, {
+    try {
+      // Initialize map
+      const map = new window.google.maps.Map(mapRef.current, {
       center: defaultCenter,
       zoom: userLocation ? 15 : 12,
       mapTypeControl: true,
@@ -80,13 +106,6 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, initialLocation, t
     });
 
     mapInstanceRef.current = map;
-
-    // If initial location is provided, set it up
-    if (initialLocation && initialLocation.lat && initialLocation.lng) {
-      map.setCenter({ lat: initialLocation.lat, lng: initialLocation.lng });
-      map.setZoom(17);
-      handleLocationSelect(initialLocation);
-    }
 
     // Add marker for user location if available
     if (userLocation) {
@@ -106,6 +125,15 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, initialLocation, t
       });
     }
 
+    // If initial location is provided, set it up after map is ready
+    if (initialLocation && initialLocation.lat && initialLocation.lng) {
+      setTimeout(() => {
+        map.setCenter({ lat: initialLocation.lat, lng: initialLocation.lng });
+        map.setZoom(17);
+        handleLocationSelect(initialLocation);
+      }, 100);
+    }
+
     // Initialize autocomplete
     if (searchInputRef.current && window.google.maps.places) {
       try {
@@ -114,21 +142,30 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, initialLocation, t
           {
             types: ['address', 'establishment'],
             componentRestrictions: { country: 'in' }, // Restrict to India
-            fields: ['geometry', 'formatted_address', 'address_components', 'place_id'],
+            fields: ['geometry', 'formatted_address', 'address_components', 'place_id', 'name'],
           }
         );
 
         autocompleteRef.current = autocomplete;
 
+        // Bind autocomplete to map bounds for better suggestions
+        autocomplete.bindTo('bounds', map);
+
         // When place is selected from autocomplete
         autocomplete.addListener('place_changed', () => {
           const place = autocomplete.getPlace();
-          if (place.geometry) {
+          if (place.geometry && place.geometry.location) {
+            const loc = place.geometry.location;
+            // Pan map to selected place
+            map.panTo(loc);
+            map.setZoom(16);
+            
             handleLocationSelect({
-              lat: place.geometry.location.lat(),
-              lng: place.geometry.location.lng(),
+              lat: loc.lat(),
+              lng: loc.lng(),
               address: place.formatted_address,
               place_id: place.place_id,
+              name: place.name,
               address_components: place.address_components,
             });
           }
@@ -138,23 +175,41 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, initialLocation, t
       }
     }
 
-    // Add click listener to map
+    // Add click listener to map - follows Google's recommended pattern
+    // Using MapMouseEvent.latLng as per Google Maps documentation
     map.addListener('click', (event) => {
-      const lat = event.latLng.lat();
-      const lng = event.latLng.lng();
+      // event.latLng is the recommended way to get coordinates from click
+      const latLng = event.latLng;
+      if (!latLng) return;
       
-      // Reverse geocode to get address
+      const lat = latLng.lat();
+      const lng = latLng.lng();
+      
+      // Reverse geocode to get address (TOS-compliant: only for user-selected locations)
       setIsGeocoding(true);
       const geocoder = new window.google.maps.Geocoder();
-      geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+      
+      // Restrict geocoding to India for better results
+      geocoder.geocode({ 
+        location: { lat, lng },
+        region: 'in' // Bias results to India
+      }, (results, status) => {
         setIsGeocoding(false);
-        if (status === 'OK' && results[0]) {
+        if (status === 'OK' && results && results[0]) {
+          // Filter to ensure result is in India (additional safety check)
+          const result = results.find(r => {
+            const components = r.address_components || [];
+            return components.some(comp => 
+              comp.types.includes('country') && comp.short_name === 'IN'
+            );
+          }) || results[0]; // Fallback to first result if no India match
+          
           handleLocationSelect({
             lat,
             lng,
-            address: results[0].formatted_address,
-            place_id: results[0].place_id,
-            address_components: results[0].address_components,
+            address: result.formatted_address,
+            place_id: result.place_id,
+            address_components: result.address_components,
           });
         } else {
           // Fallback: use coordinates as address
@@ -166,6 +221,10 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, initialLocation, t
         }
       });
     });
+    } catch (error) {
+      console.error('[MapPicker] Error initializing map:', error);
+      setError(`Failed to initialize map: ${error.message}. Please refresh the page.`);
+    }
   };
 
   const handleLocationSelect = (location) => {
@@ -190,20 +249,35 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, initialLocation, t
 
       // Update location when marker is dragged
       markerRef.current.addListener('dragend', (event) => {
-        const lat = event.latLng.lat();
-        const lng = event.latLng.lng();
+        const latLng = event.latLng;
+        if (!latLng) return;
+        
+        const lat = latLng.lat();
+        const lng = latLng.lng();
         
         setIsGeocoding(true);
         const geocoder = new window.google.maps.Geocoder();
-        geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+        // Restrict geocoding to India
+        geocoder.geocode({ 
+          location: { lat, lng },
+          region: 'in' // Bias results to India
+        }, (results, status) => {
           setIsGeocoding(false);
-          if (status === 'OK' && results[0]) {
+          if (status === 'OK' && results && results[0]) {
+            // Filter to ensure result is in India
+            const result = results.find(r => {
+              const components = r.address_components || [];
+              return components.some(comp => 
+                comp.types.includes('country') && comp.short_name === 'IN'
+              );
+            }) || results[0];
+            
             const newLocation = {
               lat,
               lng,
-              address: results[0].formatted_address,
-              place_id: results[0].place_id,
-              address_components: results[0].address_components,
+              address: result.formatted_address,
+              place_id: result.place_id,
+              address_components: result.address_components,
             };
             setSelectedLocation(newLocation);
           }
@@ -277,9 +351,9 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, initialLocation, t
         setError('Unable to get your location. Please enable location access.');
       },
       {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0
+        enableHighAccuracy: false,
+        timeout: 15000,
+        maximumAge: 60000
       }
     );
   };
@@ -306,7 +380,7 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, initialLocation, t
         <div className="map-picker-modal" onClick={(e) => e.stopPropagation()}>
           <div className="map-picker-error">
             <h3>Google Maps API Key Required</h3>
-            <p>Please set REACT_APP_GOOGLE_MAPS_API_KEY in your environment variables.</p>
+            <p>Please set REACT_APP_GOOGLE_MAPS_API_KEY_NEW in your environment variables.</p>
             <button onClick={handleClose} className="btn-close">Close</button>
           </div>
         </div>

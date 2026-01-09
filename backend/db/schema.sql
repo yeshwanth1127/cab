@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
     username TEXT UNIQUE NOT NULL,
     email TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
-    role TEXT DEFAULT 'user' CHECK (role IN ('user', 'admin')),
+    role TEXT DEFAULT 'user' CHECK (role IN ('user', 'admin', 'manager')),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -201,6 +201,19 @@ CREATE TABLE IF NOT EXISTS corporate_bookings (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (cab_id) REFERENCES cabs(id) ON DELETE SET NULL
+);
+
+-- Manager permissions table (for section-based access control)
+CREATE TABLE IF NOT EXISTS manager_permissions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    section_key TEXT NOT NULL,
+    can_view INTEGER DEFAULT 0,
+    can_edit INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, section_key),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 -- Insert default service-type cab types (only if they don't exist)

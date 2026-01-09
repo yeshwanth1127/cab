@@ -271,25 +271,151 @@
 @media (max-width: 768px) {
   .map-picker-overlay {
     padding: 0;
+    /* Better touch handling */
+    -webkit-overflow-scrolling: touch;
   }
 
   .map-picker-modal {
     max-width: 100%;
     max-height: 100vh;
     border-radius: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .map-picker-header {
+    padding: 16px;
+    flex-shrink: 0;
+  }
+
+  .map-picker-header h3 {
+    font-size: 1.25rem;
+  }
+
+  .btn-close {
+    width: 36px;
+    height: 36px;
+    font-size: 1.5rem;
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
+    touch-action: manipulation;
+  }
+
+  .map-picker-search {
+    padding: 12px 16px;
+    flex-shrink: 0;
+  }
+
+  .map-picker-search-input {
+    padding: 10px 12px;
+    font-size: 16px; /* Prevent zoom on iOS */
+    border-radius: 6px;
   }
 
   .map-picker-map-container {
-    min-height: 300px;
+    min-height: 50vh;
+    flex: 1;
+    position: relative;
+  }
+
+  .map-picker-map {
+    min-height: 50vh;
   }
 
   .map-picker-selected {
     flex-direction: column;
     align-items: stretch;
+    gap: 12px;
+    padding: 16px;
+    flex-shrink: 0;
+  }
+
+  .selected-location-info {
+    width: 100%;
+  }
+
+  .selected-location-info strong {
+    font-size: 0.85rem;
+    margin-bottom: 4px;
+  }
+
+  .selected-location-info p {
+    font-size: 0.85rem;
+    word-break: break-word;
   }
 
   .btn-confirm {
     width: 100%;
+    padding: 14px 20px;
+    font-size: 1rem;
+    -webkit-tap-highlight-color: rgba(66, 133, 244, 0.3);
+    touch-action: manipulation;
+  }
+
+  .btn-current-location {
+    padding: 10px 16px;
+    font-size: 0.9rem;
+    -webkit-tap-highlight-color: rgba(52, 168, 83, 0.3);
+    touch-action: manipulation;
+  }
+
+  .map-picker-actions {
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .map-picker-instructions {
+    padding: 12px 16px;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+  }
+
+  .map-picker-loading-overlay {
+    padding: 20px;
+  }
+
+  .map-picker-spinner {
+    width: 36px;
+    height: 36px;
+    border-width: 3px;
+  }
+}
+
+@media (max-width: 480px) {
+  .map-picker-header {
+    padding: 14px;
+  }
+
+  .map-picker-header h3 {
+    font-size: 1.1rem;
+  }
+
+  .map-picker-map-container {
+    min-height: 45vh;
+  }
+
+  .map-picker-selected {
+    padding: 14px;
+  }
+
+  .btn-confirm {
+    padding: 12px 18px;
+    font-size: 0.95rem;
+  }
+}
+
+/* Touch optimizations */
+@media (hover: none) and (pointer: coarse) {
+  .btn-close:hover {
+    background: #e0e0e0;
+  }
+
+  .btn-confirm:hover {
+    background: #357ae8;
+  }
+
+  .btn-current-location:hover:not(:disabled) {
+    background: #2d8f47;
   }
 }
 

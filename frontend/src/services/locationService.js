@@ -19,9 +19,9 @@ export const getCurrentLocation = () => {
         reject(error);
       },
       {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0,
+        enableHighAccuracy: false,
+        timeout: 15000,
+        maximumAge: 60000,
       }
     );
   });
@@ -110,20 +110,8 @@ export const searchPlacesGoogle = async (query, userLocation = null, apiKey) => 
     const data = await response.json();
     
     if (data.predictions) {
-      // Filter and prioritize results with street addresses
       return data.predictions
-        .filter(prediction => {
-          // Prefer predictions that look like street addresses
-          const desc = prediction.description.toLowerCase();
-          // Exclude if it's clearly a city or region (contains only city/state names)
-          const hasStreetIndicators = /\d/.test(desc) || // Has numbers (house numbers)
-            desc.includes('street') || desc.includes('road') || 
-            desc.includes('avenue') || desc.includes('lane') ||
-            desc.includes('nagar') || desc.includes('colony') ||
-            desc.includes('sector') || desc.includes('block');
-          return hasStreetIndicators || prediction.types.includes('street_address');
-        })
-        .map((prediction) => ({
+        .map(prediction => ({
           id: prediction.place_id,
           name: prediction.description,
           address: prediction.description,

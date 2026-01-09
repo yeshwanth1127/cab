@@ -11,7 +11,9 @@ router.post('/bookings', [
   body('phone_number').notEmpty().withMessage('Phone number is required'),
   body('company_name').notEmpty().withMessage('Company name is required'),
   body('pickup_point').notEmpty().withMessage('Pickup point is required'),
-  body('drop_point').notEmpty().withMessage('Drop point is required'),
+  body('service_type').isIn(['local', 'airport', 'outstation']).withMessage('Service type must be local, airport, or outstation'),
+  body('travel_date').notEmpty().withMessage('Travel date is required'),
+  body('travel_time').notEmpty().withMessage('Travel time is required'),
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -19,12 +21,33 @@ router.post('/bookings', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { name, phone_number, company_name, pickup_point, drop_point, notes } = req.body;
+    const { name, phone_number, company_name, pickup_point, service_type, travel_date, travel_time, notes } = req.body;
+
+    // Add columns if they don't exist (migration)
+    try {
+      await db.runAsync('ALTER TABLE corporate_bookings ADD COLUMN service_type TEXT');
+    } catch (e) {
+      // Column already exists, ignore
+    }
+    try {
+      await db.runAsync('ALTER TABLE corporate_bookings ADD COLUMN travel_date TEXT');
+    } catch (e) {
+      // Column already exists, ignore
+    }
+    try {
+      await db.runAsync('ALTER TABLE corporate_bookings ADD COLUMN travel_time TEXT');
+    } catch (e) {
+      // Column already exists, ignore
+    }
+    
+    // Use 'N/A' as default for drop_point since it's required by schema but not in the form
+    // (drop_point was removed from the form and replaced with service_type)
+    const drop_point = 'N/A';
 
     const result = await db.runAsync(
-      `INSERT INTO corporate_bookings (name, phone_number, company_name, pickup_point, drop_point, notes)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [name, phone_number, company_name, pickup_point, drop_point, notes || null]
+      `INSERT INTO corporate_bookings (name, phone_number, company_name, pickup_point, drop_point, service_type, travel_date, travel_time, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [name, phone_number, company_name, pickup_point, drop_point, service_type, travel_date, travel_time, notes || null]
     );
 
     const newBooking = await db.getAsync(
@@ -35,7 +58,15 @@ router.post('/bookings', [
     res.status(201).json(newBooking);
   } catch (error) {
     console.error('Error creating corporate booking:', error);
-    res.status(500).json({ error: 'Server error' });
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      body: req.body
+    });
+    res.status(500).json({ 
+      error: 'Server error',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 
@@ -126,9 +157,17 @@ router.put('/bookings/:id', [
       updates.push('pickup_point = ?');
       values.push(pickup_point);
     }
-    if (drop_point !== undefined) {
-      updates.push('drop_point = ?');
-      values.push(drop_point);
+    if (req.body.service_type !== undefined) {
+      updates.push('service_type = ?');
+      values.push(req.body.service_type);
+    }
+    if (req.body.travel_date !== undefined) {
+      updates.push('travel_date = ?');
+      values.push(req.body.travel_date);
+    }
+    if (req.body.travel_time !== undefined) {
+      updates.push('travel_time = ?');
+      values.push(req.body.travel_time);
     }
     if (status !== undefined) {
       updates.push('status = ?');
@@ -137,6 +176,10 @@ router.put('/bookings/:id', [
     if (notes !== undefined) {
       updates.push('notes = ?');
       values.push(notes);
+    }
+    if (req.body.fare_amount !== undefined) {
+      updates.push('fare_amount = ?');
+      values.push(req.body.fare_amount);
     }
 
     if (updates.length === 0) {

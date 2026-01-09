@@ -13,11 +13,13 @@ const CorporateBookingPage = () => {
     phone_number: '',
     company_name: '',
     pickup_point: '',
-    drop_point: '',
+    service_type: '',
+    travel_date: '',
+    travel_time: '',
+    time_period: 'AM',
     notes: '',
   });
   const [pickupLocation, setPickupLocation] = useState(null); // {address, lat, lng}
-  const [dropLocation, setDropLocation] = useState(null); // {address, lat, lng}
   const [userLocation, setUserLocation] = useState(null);
   const [loading, setLoading] = useState(false);
   const [bookingSuccess, setBookingSuccess] = useState(false);
@@ -40,9 +42,9 @@ const CorporateBookingPage = () => {
       
       const position = await new Promise((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0
+          enableHighAccuracy: false,
+          timeout: 15000,
+          maximumAge: 60000
         });
       });
 
@@ -89,6 +91,8 @@ const CorporateBookingPage = () => {
       console.error('Error getting location:', error);
       if (error.code === 1) {
         localStorage.setItem('locationConsent', 'denied');
+      } else if (error.code === 3) {
+        alert('Location timeout. Please select location manually.');
       }
     }
   };
@@ -123,8 +127,14 @@ const CorporateBookingPage = () => {
     if (!pickupLocation || !pickupLocation.address) {
       newErrors.pickup_point = 'Pickup point is required';
     }
-    if (!dropLocation || !dropLocation.address) {
-      newErrors.drop_point = 'Drop point is required';
+    if (!formData.service_type) {
+      newErrors.service_type = 'Service type is required';
+    }
+    if (!formData.travel_date) {
+      newErrors.travel_date = 'Travel date is required';
+    }
+    if (!formData.travel_time) {
+      newErrors.travel_time = 'Travel time is required';
     }
 
     setErrors(newErrors);
@@ -140,14 +150,16 @@ const CorporateBookingPage = () => {
 
     setLoading(true);
     try {
-      // Include lat/lng in the request
+      // Include lat/lng in the request and format time with AM/PM
+      const formattedTime = formData.travel_time ? `${formData.travel_time} ${formData.time_period}` : '';
       const payload = {
         ...formData,
         pickup_lat: pickupLocation ? pickupLocation.lat : null,
         pickup_lng: pickupLocation ? pickupLocation.lng : null,
-        drop_lat: dropLocation ? dropLocation.lat : null,
-        drop_lng: dropLocation ? dropLocation.lng : null,
+        travel_time: formattedTime,
       };
+      // Remove time_period from payload as it's now included in travel_time
+      delete payload.time_period;
       
       const response = await api.post('/corporate/bookings', payload);
       
@@ -160,11 +172,13 @@ const CorporateBookingPage = () => {
         phone_number: '',
         company_name: '',
         pickup_point: '',
-        drop_point: '',
+        service_type: '',
+        travel_date: '',
+        travel_time: '',
+        time_period: 'AM',
         notes: '',
       });
       setPickupLocation(null);
-      setDropLocation(null);
     } catch (error) {
       const errorMessage = error.response?.data?.error || 
                           error.response?.data?.errors?.[0]?.msg || 
@@ -192,8 +206,8 @@ const CorporateBookingPage = () => {
           <div className="booking-map-wrapper">
             <AnimatedMapBackground />
           </div>
-          <h2 className="corporate-booking-title">Corporate Booking Request</h2>
-          <p className="corporate-booking-subtitle">
+          <h2 className="corporate-booking-title" style={{ color: '#000000' }}>Corporate Booking Request</h2>
+          <p className="corporate-booking-subtitle" style={{ color: '#000000' }}>
             Fill out the form below to submit your corporate booking request. Our team will contact you shortly.
           </p>
           
@@ -277,21 +291,53 @@ const CorporateBookingPage = () => {
                 </div>
 
                 <div className="form-group">
-                  <label>Drop Point *</label>
-                  <LocationInput
-                    value={dropLocation}
-                    onSelect={(location) => {
-                      setDropLocation(location);
-                      setFormData(prev => ({ ...prev, drop_point: location ? location.address : '' }));
-                      if (errors.drop_point) {
-                        setErrors(prev => ({ ...prev, drop_point: '' }));
-                      }
-                    }}
-                    placeholder="Enter drop location"
-                    showCurrentLocation={false}
-                    userLocation={userLocation}
-                  />
-                  {errors.drop_point && <span className="error-message">{errors.drop_point}</span>}
+                  <label>Service Type *</label>
+                  <select
+                    name="service_type"
+                    value={formData.service_type}
+                    onChange={handleChange}
+                    className={errors.service_type ? 'error' : ''}
+                  >
+                    <option value="">Select service type</option>
+                    <option value="local">Local</option>
+                    <option value="airport">Airport</option>
+                    <option value="outstation">Outstation</option>
+                  </select>
+                  {errors.service_type && <span className="error-message">{errors.service_type}</span>}
+                </div>
+
+                <div className="form-group">
+                  <label>Date and Time *</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                    <input
+                      type="date"
+                      name="travel_date"
+                      value={formData.travel_date}
+                      onChange={handleChange}
+                      min={new Date().toISOString().split('T')[0]}
+                      className={errors.travel_date ? 'error' : ''}
+                      placeholder="Date"
+                    />
+                    <input
+                      type="time"
+                      name="travel_time"
+                      value={formData.travel_time}
+                      onChange={handleChange}
+                      className={errors.travel_time ? 'error' : ''}
+                      placeholder="Time"
+                    />
+                    <select
+                      name="time_period"
+                      value={formData.time_period}
+                      onChange={handleChange}
+                    >
+                      <option value="AM">AM</option>
+                      <option value="PM">PM</option>
+                    </select>
+                  </div>
+                  {(errors.travel_date || errors.travel_time) && (
+                    <span className="error-message">{errors.travel_date || errors.travel_time}</span>
+                  )}
                 </div>
 
                 <div className="form-group">
@@ -309,6 +355,7 @@ const CorporateBookingPage = () => {
                   type="submit"
                   disabled={loading}
                   className="btn btn-primary btn-block"
+                  style={{ color: '#000' }}
                 >
                   {loading ? 'Submitting...' : 'Submit Booking Request'}
                 </button>

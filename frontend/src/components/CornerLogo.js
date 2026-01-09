@@ -26,10 +26,10 @@ const CornerLogo = () => {
 
   return (
     <a href="/" className={className} aria-label="Namma Cabs home">
-      <img
-        src="/logo-namma-cabs.png"
-        alt="Namma Cabs – Adventure Awaits, Since 2015"
-      />
+      <span className="logo-text">
+        <span className="logo-namma">namma</span>
+        <span className="logo-cabs">cabs</span>
+      </span>
     </a>
   );
 };

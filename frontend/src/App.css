@@ -11,12 +11,23 @@
   transition: transform 0.25s ease, opacity 0.25s ease;
 }
 
-.corner-logo img {
-  height: 150px;
-  width: auto;
-  object-fit: contain;
-  display: block;
-  filter: brightness(1.7) drop-shadow(0 0 12px rgba(0, 0, 0, 0.65));
+.corner-logo .logo-text {
+  display: flex;
+  align-items: center;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: lowercase;
+  filter: drop-shadow(0 0 12px rgba(0, 0, 0, 0.65));
+}
+
+.corner-logo .logo-namma {
+  color: #16a34a;
+  margin-right: 4px;
+}
+
+.corner-logo .logo-cabs {
+  color: #000000;
 }
 
 .corner-logo.corner-logo--hidden {
@@ -25,9 +36,9 @@
 }
 
 @media (max-width: 768px) {
-  .corner-logo img {
-    height: 90px;
-    filter: brightness(1.7) drop-shadow(0 0 10px rgba(0, 0, 0, 0.7));
+  .corner-logo .logo-text {
+    font-size: 18px;
+    filter: drop-shadow(0 0 10px rgba(0, 0, 0, 0.7));
   }
 }
 
@@ -50,8 +61,7 @@
   display: inline-block;
   position: relative;
   overflow: hidden;
-  background: rgba(15, 23, 42, 0.35);
-  backdrop-filter: blur(12px);
+  background: rgba(15, 23, 42, 0.4);
   box-shadow: 0 10px 30px rgba(15, 23, 42, 0.35);
 }
 
@@ -78,15 +88,15 @@
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, rgba(250, 204, 21, 0.2), rgba(234, 179, 8, 0.25));
-  border-color: rgba(250, 204, 21, 0.7);
+  background: linear-gradient(135deg, rgba(22, 163, 74, 0.2), rgba(22, 163, 74, 0.25));
+  border-color: rgba(22, 163, 74, 0.7);
   color: #f9fafb;
 }
 
 .btn-primary:hover {
-  background: linear-gradient(135deg, rgba(250, 204, 21, 0.35), rgba(234, 179, 8, 0.4));
+  background: linear-gradient(135deg, rgba(22, 163, 74, 0.35), rgba(22, 163, 74, 0.4));
   transform: translateY(-3px);
-  box-shadow: 0 15px 40px rgba(250, 204, 21, 0.5);
+  box-shadow: 0 15px 40px rgba(22, 163, 74, 0.5);
 }
 
 .btn-secondary {
@@ -151,7 +161,7 @@
   left: 0;
   right: 0;
   height: 4px;
-  background: linear-gradient(90deg, #facc15 0%, #eab308 100%);
+  background: linear-gradient(90deg, #16a34a 0%, #16a34a 100%);
   transform: scaleX(0);
   transition: transform 0.3s ease;
 }
@@ -198,8 +208,8 @@
 .form-group select:focus,
 .form-group textarea:focus {
   outline: none;
-  border-color: #facc15;
-  box-shadow: 0 0 0 4px rgba(250, 204, 21, 0.1);
+  border-color: #16a34a;
+  box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.1);
   transform: translateY(-2px);
 }
 
@@ -268,12 +278,12 @@ a, button, input, select, textarea {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(135deg, #facc15 0%, #eab308 100%);
+  background: linear-gradient(135deg, #16a34a 0%, #16a34a 100%);
   border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(135deg, #eab308 0%, #d97706 100%);
+  background: linear-gradient(135deg, #16a34a 0%, #d97706 100%);
 }
 
 /* Mobile responsiveness */
@@ -289,5 +299,96 @@ a, button, input, select, textarea {
   .btn {
     width: 100%;
     justify-content: center;
+    /* Touch-friendly */
+    min-height: 44px;
+    -webkit-tap-highlight-color: rgba(22, 163, 74, 0.3);
+    touch-action: manipulation;
+  }
+
+  .btn:active {
+    transform: scale(0.98);
+  }
+
+  .form-group {
+    margin-bottom: 20px;
+  }
+
+  .form-group label {
+    font-size: 13px;
+    margin-bottom: 8px;
+  }
+
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
+    font-size: 16px; /* Prevent zoom on iOS */
+    padding: 12px 14px;
+    border-radius: 8px;
+  }
+
+  .error-message,
+  .success-message {
+    font-size: 13px;
+    margin-top: 6px;
+  }
+
+  .loading {
+    padding: 40px 20px;
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .container {
+    padding: 12px;
+  }
+
+  .card {
+    padding: 16px;
+  }
+
+  .btn {
+    padding: 12px 20px;
+    font-size: 15px;
+  }
+
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
+    padding: 10px 12px;
+    font-size: 16px;
+  }
+}
+
+/* Touch optimizations */
+@media (hover: none) and (pointer: coarse) {
+  .btn:hover {
+    transform: none;
+  }
+
+  .btn:active {
+    transform: scale(0.98);
+  }
+
+  .card:hover {
+    transform: none;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  }
+
+  .card:active {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 25px rgba(0, 0, 0, 0.1);
+  }
+
+  .form-group input:hover,
+  .form-group select:hover,
+  .form-group textarea:hover {
+    border-color: #e0e0e0;
+  }
+
+  .form-group input:focus,
+  .form-group select:focus,
+  .form-group textarea:focus {
+    transform: none;
   }
 }

@@ -243,7 +243,101 @@ const sendBookingConfirmationEmail = async (booking) => {
   }
 };
 
+const sendInvoiceEmail = async (booking, pdfBuffer, withGST = true) => {
+  // Don't send email if email service is not configured
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
+    console.log('Email service not configured. Skipping email send.');
+    return { success: false, message: 'Email service not configured' };
+  }
+
+  try {
+    const transporter = createTransporter();
+
+    const mailOptions = {
+      from: `"${process.env.EMAIL_FROM_NAME || 'Cab Booking System'}" <${process.env.EMAIL_USER}>`,
+      to: booking.passenger_email,
+      subject: `Invoice - Booking ID: ${booking.id} ${withGST ? '(With GST)' : '(Without GST)'}`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #16a34a 0%, #15803d 100%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }
+            .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px; }
+            .invoice-id { font-size: 24px; font-weight: bold; color: #16a34a; margin: 20px 0; }
+            .info-row { margin: 15px 0; padding: 10px; background: white; border-radius: 4px; }
+            .label { font-weight: bold; color: #666; }
+            .value { color: #333; }
+            .footer { text-align: center; margin-top: 30px; color: #666; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>📄 Invoice - Booking #${booking.id}</h1>
+            </div>
+            <div class="content">
+              <p>Dear ${booking.passenger_name},</p>
+              <p>Please find attached the invoice for your booking.</p>
+              <div class="invoice-id">Booking ID: ${booking.id}</div>
+              <div class="info-row">
+                <span class="label">Service Type:</span>
+                <span class="value">${booking.service_type === 'local' ? 'Local' : booking.service_type === 'airport' ? 'Airport' : 'Outstation'}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Total Fare:</span>
+                <span class="value">₹${booking.fare_amount}</span>
+              </div>
+              ${withGST ? '<div class="info-row"><span class="label">Invoice Type:</span><span class="value">With GST</span></div>' : ''}
+              <p style="margin-top: 30px;">Thank you for choosing our service!</p>
+              <p>Best regards,<br>Cab Booking System</p>
+            </div>
+            <div class="footer">
+              <p>This is an automated email. Please do not reply.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+      text: `
+        Invoice - Booking #${booking.id}
+        
+        Dear ${booking.passenger_name},
+        
+        Please find attached the invoice for your booking.
+        
+        Booking ID: ${booking.id}
+        Service Type: ${booking.service_type === 'local' ? 'Local' : booking.service_type === 'airport' ? 'Airport' : 'Outstation'}
+        Total Fare: ₹${booking.fare_amount}
+        ${withGST ? 'Invoice Type: With GST' : ''}
+        
+        Thank you for choosing our service!
+        
+        Best regards,
+        Cab Booking System
+      `,
+      attachments: [
+        {
+          filename: `invoice-${booking.id}${withGST ? '-with-gst' : ''}.pdf`,
+          content: pdfBuffer,
+          contentType: 'application/pdf'
+        }
+      ]
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log('Invoice email sent:', info.messageId);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error('Error sending invoice email:', error);
+    return { success: false, error: error.message };
+  }
+};
+
 module.exports = {
   sendBookingConfirmationEmail,
+  sendInvoiceEmail,
 };
 

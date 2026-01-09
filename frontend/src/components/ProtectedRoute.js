@@ -9,7 +9,7 @@ const ProtectedRoute = ({ children }) => {
     return <div className="loading">Loading...</div>;
   }
 
-  if (!user || user.role !== 'admin') {
+  if (!user || (user.role !== 'admin' && user.role !== 'manager')) {
     return <Navigate to="/admin/login" replace />;
   }
 

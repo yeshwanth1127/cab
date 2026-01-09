@@ -1,43 +1,190 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import MainNavbar from '../components/MainNavbar';
 import AnimatedMapBackground from '../components/AnimatedMapBackground';
-import './BookingPage.css';
+import './ContactPage.css';
 
 const ContactPage = () => {
+  const [isVisible, setIsVisible] = useState({});
+  const contactRefs = {
+    header: useRef(null),
+    address: useRef(null),
+    phone: useRef(null),
+    email: useRef(null),
+  };
+
+  useEffect(() => {
+    const observers = Object.keys(contactRefs).map((key) => {
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              setIsVisible((prev) => ({ ...prev, [key]: true }));
+            }
+          });
+        },
+        { threshold: 0.2, rootMargin: '0px 0px -50px 0px' }
+      );
+
+      if (contactRefs[key].current) {
+        observer.observe(contactRefs[key].current);
+      }
+
+      return observer;
+    });
+
+    return () => {
+      observers.forEach((observer) => observer.disconnect());
+    };
+  }, []);
+
+  const contactInfo = {
+    address: {
+      icon: '📍',
+      title: 'Visit Us',
+      details: [
+        'No 44/B, Sri Venkateswara building',
+        'Maheshwaramma Temple Street, Kadirenahalli',
+        'Banashankari 2nd Stage, Bangalore – 560070',
+      ],
+      action: 'Get Directions',
+      link: 'https://www.google.com/maps?q=No+44/B,+Sri+Venkateswara+building,+Maheshwaramma+Temple+Street,+Kadirenahalli,+Banashankari+2nd+Stage,+Bangalore+560070',
+    },
+    phone: {
+      icon: '📞',
+      title: 'Call Us',
+      details: ['97312 67516', '96202 67516'],
+      action: 'Call Now',
+      link: 'tel:+919731267516',
+    },
+    email: {
+      icon: '✉️',
+      title: 'Email Us',
+      details: ['nammacabs.2022@gmail.com'],
+      action: 'Send Email',
+      link: 'mailto:nammacabs.2022@gmail.com',
+    },
+  };
+
   return (
-    <div className="booking-page contact-page">
+    <div className="contact-page">
       <MainNavbar />
       <div className="contact-map-wrapper">
         <AnimatedMapBackground />
       </div>
 
-      <section className="home-section contact-section">
-        <div className="home-section-inner">
-          <div className="contact-card">
-            <h2>Contact Us</h2>
-            <p>
-              We&apos;re here to help with bookings, pricing, or any questions about your
-              trip with <strong>Namma Cabs</strong>.
-            </p>
+      <div className="contact-container">
+        {/* Hero Header */}
+        <div
+          ref={contactRefs.header}
+          className={`contact-hero ${isVisible.header ? 'visible' : ''}`}
+        >
+          <h1 className="contact-title">
+            <span className="title-line">Get in <span className="highlight">Touch</span></span>
+          </h1>
+          <p className="contact-subtitle">
+            We&apos;re here to help with bookings, pricing, or any questions about your
+            trip with <strong>Namma Cabs</strong>.
+          </p>
+        </div>
 
-            <div className="contact-car">
-              <img src="/carbackside.png" alt="Namma Cabs car back" />
-              <div className="contact-car-window">
-                <div>No 44/B, Sri Venkateswara building.</div>
-                <div>Maheshwaramma Temple Street, Kadirenahalli,</div>
-                <div>Banashankari 2nd Stage, Bangalore &ndash; 560070</div>
-              </div>
-              <div className="contact-car-tag contact-car-phone">
-                📞 97312 67516<br />
-                📞 96202 67516
-              </div>
-              <div className="contact-car-tag contact-car-email">
-                ✉️ nammacabs.2022@gmail.com
-              </div>
+        {/* Contact Cards Grid */}
+        <div className="contact-cards-grid">
+          {/* Address Card */}
+          <div
+            ref={contactRefs.address}
+            className={`contact-card address-card ${isVisible.address ? 'visible' : ''}`}
+          >
+            <div className="card-icon-wrapper">
+              <div className="card-icon">{contactInfo.address.icon}</div>
+              <div className="icon-pulse"></div>
             </div>
+            <h3 className="card-title">{contactInfo.address.title}</h3>
+            <div className="card-content">
+              {contactInfo.address.details.map((line, index) => (
+                <p key={index} className="card-line">
+                  {line}
+                </p>
+              ))}
+            </div>
+            <a
+              href={contactInfo.address.link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="card-action-btn"
+            >
+              {contactInfo.address.action}
+              <span className="btn-arrow">→</span>
+            </a>
+            <div className="card-decoration"></div>
+          </div>
+
+          {/* Phone Card */}
+          <div
+            ref={contactRefs.phone}
+            className={`contact-card phone-card ${isVisible.phone ? 'visible' : ''}`}
+          >
+            <div className="card-icon-wrapper">
+              <div className="card-icon">{contactInfo.phone.icon}</div>
+              <div className="icon-pulse"></div>
+            </div>
+            <h3 className="card-title">{contactInfo.phone.title}</h3>
+            <div className="card-content">
+              {contactInfo.phone.details.map((number, index) => (
+                <a
+                  key={index}
+                  href={`tel:+91${number.replace(/\s/g, '')}`}
+                  className="card-phone-link"
+                >
+                  {number}
+                </a>
+              ))}
+            </div>
+            <a
+              href={contactInfo.phone.link}
+              className="card-action-btn"
+            >
+              {contactInfo.phone.action}
+              <span className="btn-arrow">→</span>
+            </a>
+            <div className="card-decoration"></div>
+          </div>
+
+          {/* Email Card */}
+          <div
+            ref={contactRefs.email}
+            className={`contact-card email-card ${isVisible.email ? 'visible' : ''}`}
+          >
+            <div className="card-icon-wrapper">
+              <div className="card-icon">{contactInfo.email.icon}</div>
+              <div className="icon-pulse"></div>
+            </div>
+            <h3 className="card-title">{contactInfo.email.title}</h3>
+            <div className="card-content">
+              <a
+                href={contactInfo.email.link}
+                className="card-email-link"
+              >
+                {contactInfo.email.details[0]}
+              </a>
+            </div>
+            <a
+              href={contactInfo.email.link}
+              className="card-action-btn"
+            >
+              {contactInfo.email.action}
+              <span className="btn-arrow">→</span>
+            </a>
+            <div className="card-decoration"></div>
           </div>
         </div>
-      </section>
+
+        {/* Bottom CTA Section */}
+        <div className="contact-cta">
+          <p className="cta-text">
+            Need immediate assistance? <strong>Call us now!</strong>
+          </p>
+        </div>
+      </div>
     </div>
   );
 };

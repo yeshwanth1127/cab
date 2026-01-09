@@ -245,10 +245,22 @@ void main() {
         uniforms.rayDir.value = dir;
       };
 
+      let lastTime = 0;
+      const targetFPS = 30; // Reduce from 60fps to 30fps
+      const frameInterval = 1000 / targetFPS;
+
       const loop = (t) => {
         if (!rendererRef.current || !uniformsRef.current || !meshRef.current) {
           return;
         }
+
+        // Throttle to target FPS
+        const elapsed = t - lastTime;
+        if (elapsed < frameInterval) {
+          animationIdRef.current = requestAnimationFrame(loop);
+          return;
+        }
+        lastTime = t - (elapsed % frameInterval);
 
         uniforms.iTime.value = t * 0.001;
 

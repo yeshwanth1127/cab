@@ -7,4 +7,25 @@
   overflow: hidden;
 }
 
+/* Mobile optimizations */
+@media (max-width: 768px) {
+  .light-rays-container {
+    /* Reduce complexity on mobile for better performance */
+    opacity: 0.7;
+  }
+}
+
+@media (max-width: 480px) {
+  .light-rays-container {
+    opacity: 0.6;
+  }
+}
+
+/* Reduce animations on low-end devices */
+@media (prefers-reduced-motion: reduce) {
+  .light-rays-container {
+    display: none;
+  }
+}
+
 

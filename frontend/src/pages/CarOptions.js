@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import api from '../services/api';
+import api, { getImageUrl } from '../services/api';
 import MainNavbar from '../components/MainNavbar';
 import AnimatedMapBackground from '../components/AnimatedMapBackground';
 import './CarOptions.css';
@@ -54,9 +54,12 @@ const CarOptions = () => {
               <div className="car-options-grid">
                 {options.map((opt) => {
                   // Try to get image from image_urls array first, then image_url
-                  const imageUrl = (opt.image_urls && opt.image_urls.length > 0) 
+                  const relativeImageUrl = (opt.image_urls && opt.image_urls.length > 0) 
                     ? opt.image_urls[0] 
                     : (opt.image_url || null);
+                  
+                  // Convert relative path to full URL
+                  const imageUrl = getImageUrl(relativeImageUrl);
                   
                   return (
                     <div key={opt.id} className="car-option-card">

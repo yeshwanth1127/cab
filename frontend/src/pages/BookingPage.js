@@ -1,11 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../services/api';
+import api, { getImageUrl } from '../services/api';
 import LocationInput from '../components/LocationInput';
 import AnimatedMapBackground from '../components/AnimatedMapBackground';
 import LightRays from '../components/LightRays';
 import MainNavbar from '../components/MainNavbar';
 import './BookingPage.css';
+
+// KIA (Kempegowda International Airport) constants
+const KIA_LOCATION = {
+  address: 'Kempegowda International Airport Bangalore',
+  lat: 13.1986,
+  lng: 77.7066
+};
 
 const BookingPage = () => {
   const navigate = useNavigate();
@@ -22,7 +29,8 @@ const BookingPage = () => {
   const [userLocation, setUserLocation] = useState(null);
   const [selectedCarOptionId, setSelectedCarOptionId] = useState(null);
   const [numberOfHours, setNumberOfHours] = useState(''); // For local bookings only
-  const [numberOfDays, setNumberOfDays] = useState(''); // For outstation round trips
+  const [pickupDateTime, setPickupDateTime] = useState(''); // For outstation round trips
+  const [dropDateTime, setDropDateTime] = useState(''); // For outstation round trips
   const [fare, setFare] = useState(null);
   const [loading, setLoading] = useState(false);
   const [calculating, setCalculating] = useState(false);
@@ -41,6 +49,7 @@ const BookingPage = () => {
   const [allCarOptions, setAllCarOptions] = useState([]); // All cars for the Available Car Options section
   const [carImageIndices, setCarImageIndices] = useState({}); // Track image index per car
   const [showConfirmation, setShowConfirmation] = useState(false);
+  const [routesExpanded, setRoutesExpanded] = useState(false);
 
   const formatDuration = (minutes) => {
     if (!minutes || isNaN(minutes)) return null;
@@ -76,6 +85,10 @@ const BookingPage = () => {
       setStopB(null);
       setDropLocation(null);
       setAdditionalStops([]);
+      
+      // Reset locations when service type changes
+      setFromLocation(null);
+      setToLocation(null);
     } else {
       // If no service type selected, show all cars (or empty)
       setCarOptionCards([]);
@@ -87,6 +100,8 @@ const BookingPage = () => {
       setStopB(null);
       setDropLocation(null);
       setAdditionalStops([]);
+      setFromLocation(null);
+      setToLocation(null);
     }
   }, [serviceType]);
 
@@ -98,9 +113,9 @@ const BookingPage = () => {
       
       const position = await new Promise((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0
+          enableHighAccuracy: false,
+          timeout: 15000,
+          maximumAge: 60000
         });
       });
 
@@ -142,6 +157,8 @@ const BookingPage = () => {
       // Remember that user denied or location is unavailable so we don't ask again
       if (error.code === 1) { // PERMISSION_DENIED
         localStorage.setItem('locationConsent', 'denied');
+      } else if (error.code === 3) { // TIMEOUT
+        alert('Location timeout. Please select location manually.');
       }
     }
   };
@@ -194,8 +211,8 @@ const BookingPage = () => {
           return;
         }
       } else if (tripType === 'round_trip') {
-        if (!pickupLocation || !numberOfDays) {
-          alert('Please fill in pickup location and number of days');
+        if (!pickupLocation || !pickupDateTime || !dropDateTime) {
+          alert('Please fill in pickup location, pickup date & time, and drop date & time');
           return;
         }
       } else if (tripType === 'multiple_way') {
@@ -205,9 +222,9 @@ const BookingPage = () => {
         }
       }
     } else {
-      // airport
-      if (!serviceType || !fromLocation || !toLocation || !selectedCarOptionId) {
-        alert('Please fill in all fields');
+      // airport: User must select either FROM or TO (one will be auto-set to KIA)
+      if (!serviceType || (!fromLocation && !toLocation) || !selectedCarOptionId) {
+        alert('Please select at least one location (FROM or TO) and select a car');
         return;
       }
     }
@@ -235,7 +252,8 @@ const BookingPage = () => {
           requestData.to = pickupLocation ? { lat: pickupLocation.lat, lng: pickupLocation.lng } : null; // Round trip returns to pickup
           requestData.from_location = pickupLocation ? pickupLocation.address : '';
           requestData.to_location = pickupLocation ? pickupLocation.address : '';
-          requestData.number_of_days = parseInt(numberOfDays, 10);
+          requestData.pickup_date_time = pickupDateTime;
+          requestData.drop_date_time = dropDateTime;
         } else if (tripType === 'multiple_way') {
           requestData.from = pickupLocation ? { lat: pickupLocation.lat, lng: pickupLocation.lng } : null;
           requestData.from_location = pickupLocation ? pickupLocation.address : '';
@@ -247,11 +265,38 @@ const BookingPage = () => {
           requestData.stops = allStops.map(s => s.address || s);
         }
       } else {
-        // airport
-        requestData.from = fromLocation ? { lat: fromLocation.lat, lng: fromLocation.lng } : null;
-        requestData.to = toLocation ? { lat: toLocation.lat, lng: toLocation.lng } : null;
-        requestData.from_location = fromLocation ? fromLocation.address : '';
-        requestData.to_location = toLocation ? toLocation.address : '';
+        // airport: Determine which is KIA and which is user's location
+        const isFromKIA = fromLocation && fromLocation.address === KIA_LOCATION.address;
+        const isToKIA = toLocation && toLocation.address === KIA_LOCATION.address;
+        
+        // If user selected FROM, TO should be KIA (and vice versa)
+        // Ensure one is always KIA
+        if (isFromKIA) {
+          // FROM is KIA, TO is user's location
+          requestData.from = { lat: KIA_LOCATION.lat, lng: KIA_LOCATION.lng };
+          requestData.to = toLocation ? { lat: toLocation.lat, lng: toLocation.lng } : { lat: KIA_LOCATION.lat, lng: KIA_LOCATION.lng };
+          requestData.from_location = KIA_LOCATION.address;
+          requestData.to_location = toLocation ? toLocation.address : KIA_LOCATION.address;
+        } else if (isToKIA) {
+          // TO is KIA, FROM is user's location
+          requestData.from = fromLocation ? { lat: fromLocation.lat, lng: fromLocation.lng } : { lat: KIA_LOCATION.lat, lng: KIA_LOCATION.lng };
+          requestData.to = { lat: KIA_LOCATION.lat, lng: KIA_LOCATION.lng };
+          requestData.from_location = fromLocation ? fromLocation.address : KIA_LOCATION.address;
+          requestData.to_location = KIA_LOCATION.address;
+        } else {
+          // Neither is explicitly KIA - if FROM is set, assume TO should be KIA, else FROM should be KIA
+          if (fromLocation) {
+            requestData.from = { lat: fromLocation.lat, lng: fromLocation.lng };
+            requestData.to = { lat: KIA_LOCATION.lat, lng: KIA_LOCATION.lng };
+            requestData.from_location = fromLocation.address;
+            requestData.to_location = KIA_LOCATION.address;
+          } else if (toLocation) {
+            requestData.from = { lat: KIA_LOCATION.lat, lng: KIA_LOCATION.lng };
+            requestData.to = { lat: toLocation.lat, lng: toLocation.lng };
+            requestData.from_location = KIA_LOCATION.address;
+            requestData.to_location = toLocation.address;
+          }
+        }
       }
 
       console.log('[FRONTEND DEBUG] Sending calculate-fare request:', JSON.stringify(requestData, null, 2));
@@ -261,6 +306,13 @@ const BookingPage = () => {
       console.log('[FRONTEND DEBUG] Received response:', JSON.stringify(response.data, null, 2));
       console.log('[FRONTEND DEBUG] Distance in response:', response.data.distance_km);
       console.log('[FRONTEND DEBUG] Time in response:', response.data.estimated_time_minutes);
+
+      // Check if airport booking distance exceeds 70km
+      if (serviceType === 'airport' && response.data.distance_km > 70) {
+        alert(`The distance for this airport booking is ${response.data.distance_km.toFixed(1)} km, which exceeds our airport service limit of 70 km. Please use the "Outstation" cab type for trips longer than 70 km.`);
+        setCalculating(false);
+        return;
+      }
 
       setFare(response.data);
       setShowBookingForm(true);
@@ -317,6 +369,8 @@ const BookingPage = () => {
           bookingPayload.from_lng = pickupLocation ? pickupLocation.lng : null;
           bookingPayload.to_lat = pickupLocation ? pickupLocation.lat : null;
           bookingPayload.to_lng = pickupLocation ? pickupLocation.lng : null;
+          bookingPayload.pickup_date_time = pickupDateTime;
+          bookingPayload.drop_date_time = dropDateTime;
         } else if (tripType === 'multiple_way') {
           bookingPayload.from_location = pickupLocation ? pickupLocation.address : '';
           bookingPayload.from_lat = pickupLocation ? pickupLocation.lat : null;
@@ -330,13 +384,42 @@ const BookingPage = () => {
         bookingPayload.distance_km = fare.distance_km || 0;
         bookingPayload.estimated_time_minutes = fare.estimated_time_minutes || 0;
       } else {
-        // airport
-        bookingPayload.from_location = fromLocation ? fromLocation.address : '';
-        bookingPayload.to_location = toLocation ? toLocation.address : '';
-        bookingPayload.from_lat = fromLocation ? fromLocation.lat : null;
-        bookingPayload.from_lng = fromLocation ? fromLocation.lng : null;
-        bookingPayload.to_lat = toLocation ? toLocation.lat : null;
-        bookingPayload.to_lng = toLocation ? toLocation.lng : null;
+        // airport: Determine which is KIA and which is user's location (same logic as calculateFare)
+        const isFromKIA = fromLocation && fromLocation.address === KIA_LOCATION.address;
+        const isToKIA = toLocation && toLocation.address === KIA_LOCATION.address;
+        
+        if (isFromKIA) {
+          bookingPayload.from_location = KIA_LOCATION.address;
+          bookingPayload.to_location = toLocation ? toLocation.address : KIA_LOCATION.address;
+          bookingPayload.from_lat = KIA_LOCATION.lat;
+          bookingPayload.from_lng = KIA_LOCATION.lng;
+          bookingPayload.to_lat = toLocation ? toLocation.lat : KIA_LOCATION.lat;
+          bookingPayload.to_lng = toLocation ? toLocation.lng : KIA_LOCATION.lng;
+        } else if (isToKIA) {
+          bookingPayload.from_location = fromLocation ? fromLocation.address : KIA_LOCATION.address;
+          bookingPayload.to_location = KIA_LOCATION.address;
+          bookingPayload.from_lat = fromLocation ? fromLocation.lat : KIA_LOCATION.lat;
+          bookingPayload.from_lng = fromLocation ? fromLocation.lng : KIA_LOCATION.lng;
+          bookingPayload.to_lat = KIA_LOCATION.lat;
+          bookingPayload.to_lng = KIA_LOCATION.lng;
+        } else {
+          // Fallback: if FROM is set, assume TO is KIA, else FROM is KIA
+          if (fromLocation) {
+            bookingPayload.from_location = fromLocation.address;
+            bookingPayload.to_location = KIA_LOCATION.address;
+            bookingPayload.from_lat = fromLocation.lat;
+            bookingPayload.from_lng = fromLocation.lng;
+            bookingPayload.to_lat = KIA_LOCATION.lat;
+            bookingPayload.to_lng = KIA_LOCATION.lng;
+          } else if (toLocation) {
+            bookingPayload.from_location = KIA_LOCATION.address;
+            bookingPayload.to_location = toLocation.address;
+            bookingPayload.from_lat = KIA_LOCATION.lat;
+            bookingPayload.from_lng = KIA_LOCATION.lng;
+            bookingPayload.to_lat = toLocation.lat;
+            bookingPayload.to_lng = toLocation.lng;
+          }
+        }
         bookingPayload.distance_km = fare.distance_km;
         bookingPayload.estimated_time_minutes = fare.estimated_time_minutes;
       }
@@ -490,7 +573,6 @@ const BookingPage = () => {
                             className="hours-select"
                           >
                             <option value="">Select hours</option>
-                            <option value="2">2 hours</option>
                             <option value="4">4 hours</option>
                             <option value="8">8 hours</option>
                             <option value="12">12 hours</option>
@@ -554,22 +636,25 @@ const BookingPage = () => {
                               userLocation={userLocation}
                             />
                             <div className="form-group">
-                              <label>Number of Days *</label>
-                              <select
-                                value={numberOfDays}
-                                onChange={(e) => setNumberOfDays(e.target.value)}
+                              <label>Pickup Date & Time *</label>
+                              <input
+                                type="datetime-local"
+                                value={pickupDateTime}
+                                onChange={(e) => setPickupDateTime(e.target.value)}
                                 required
-                                className="hours-select"
-                              >
-                                <option value="">Select days</option>
-                                <option value="1">1 day (300 km)</option>
-                                <option value="2">2 days (600 km)</option>
-                                <option value="3">3 days (900 km)</option>
-                                <option value="4">4 days (1200 km)</option>
-                                <option value="5">5 days (1500 km)</option>
-                                <option value="6">6 days (1800 km)</option>
-                                <option value="7">7 days (2100 km)</option>
-                              </select>
+                                className="form-control"
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label>Drop Date & Time *</label>
+                              <input
+                                type="datetime-local"
+                                value={dropDateTime}
+                                onChange={(e) => setDropDateTime(e.target.value)}
+                                required
+                                className="form-control"
+                                min={pickupDateTime}
+                              />
                             </div>
                           </>
                         )}
@@ -634,7 +719,7 @@ const BookingPage = () => {
                               </button>
                             )}
                             <LocationInput
-                              label="Drop Location *"
+                              label="Final Drop Location *"
                               value={dropLocation}
                               onSelect={setDropLocation}
                               placeholder="Enter final drop location"
@@ -645,12 +730,12 @@ const BookingPage = () => {
                             <div className="form-group" style={{ 
                               marginTop: '20px', 
                               padding: '15px', 
-                              backgroundColor: 'rgba(250, 204, 21, 0.1)', 
+                              backgroundColor: 'rgba(22, 163, 74, 0.1)', 
                               borderRadius: '8px',
-                              border: '1px solid rgba(250, 204, 21, 0.3)'
+                              border: '1px solid rgba(22, 163, 74, 0.3)'
                             }}>
                               <p style={{ margin: 0, fontWeight: 600, color: '#ffffff' }}>
-                                📞 Need assistance? Contact us at: <a href="tel:+915547444589" style={{ color: '#facc15', textDecoration: 'none' }}>+91 5547444589</a>
+                                📞 Need assistance? Contact us at: <a href="tel:+915547444589" style={{ color: '#16a34a', textDecoration: 'none' }}>+91 5547444589</a>
                               </p>
                             </div>
                           </>
@@ -658,10 +743,17 @@ const BookingPage = () => {
                       </>
                     ) : (
                       <>
+                        {/* Airport bookings: User can select either FROM or TO, the other auto-fills to KIA */}
                         <LocationInput
                           label="From Location"
                           value={fromLocation}
-                          onSelect={setFromLocation}
+                          onSelect={(location) => {
+                            setFromLocation(location);
+                            // If user selects FROM, auto-set TO to KIA
+                            if (location && (!toLocation || toLocation.address === KIA_LOCATION.address)) {
+                              setToLocation(KIA_LOCATION);
+                            }
+                          }}
                           placeholder="Enter pickup location or click 📍 for current location"
                           showCurrentLocation={true}
                           userLocation={userLocation}
@@ -670,13 +762,44 @@ const BookingPage = () => {
                         <LocationInput
                           label="To Location"
                           value={toLocation}
-                          onSelect={setToLocation}
-                          placeholder="Enter destination"
+                          onSelect={(location) => {
+                            setToLocation(location);
+                            // If user selects TO, auto-set FROM to KIA
+                            if (location && (!fromLocation || fromLocation.address === KIA_LOCATION.address)) {
+                              setFromLocation(KIA_LOCATION);
+                            }
+                          }}
+                          placeholder="Enter drop location"
                           showCurrentLocation={false}
                           userLocation={userLocation}
                         />
+                        <div className="form-group" style={{ 
+                          marginTop: '-10px', 
+                          padding: '10px', 
+                          backgroundColor: 'rgba(22, 163, 74, 0.1)', 
+                          borderRadius: '8px',
+                          border: '1px solid rgba(22, 163, 74, 0.3)',
+                          fontSize: '13px'
+                        }}>
+                          <p style={{ margin: 0, color: '#ffffff' }}>
+                            💡 Tip: Select either location - the other will automatically be set to Kempegowda International Airport
+                          </p>
+                        </div>
                       </>
                     )}
+
+                    <div className="form-group">
+                      <label>Travel Date & Time *</label>
+                      <input
+                        type="datetime-local"
+                        value={bookingData.travel_date}
+                        onChange={(e) =>
+                          setBookingData({ ...bookingData, travel_date: e.target.value })
+                        }
+                        required
+                        className="form-control"
+                      />
+                    </div>
 
                     <div className="form-group">
                       <label>Select Car *</label>
@@ -684,9 +807,11 @@ const BookingPage = () => {
                         {Array.isArray(carOptionCards) && carOptionCards.map((opt) => {
                           const isSelected = selectedCarOptionId === opt.id;
                           const carImageIndex = carImageIndices[opt.id] || 0;
-                          const carImages = Array.isArray(opt.image_urls) 
+                          const rawCarImages = Array.isArray(opt.image_urls) 
                             ? opt.image_urls 
                             : (opt.image_url ? [opt.image_url] : []);
+                          // Convert relative paths to full URLs
+                          const carImages = rawCarImages.map(url => getImageUrl(url)).filter(Boolean);
                           
                           return (
                             <div
@@ -806,7 +931,7 @@ const BookingPage = () => {
                          (tripType === 'round_trip' && !pickupLocation) ||
                          (tripType === 'multiple_way' && (!pickupLocation || !stopA || !stopB || !dropLocation))
                        ) :
-                       (!fromLocation || !toLocation))
+                       (!toLocation))
                     }
                     className="btn btn-primary btn-block"
                   >
@@ -913,17 +1038,6 @@ const BookingPage = () => {
                           setBookingData({ ...bookingData, passenger_email: e.target.value })
                         }
                         placeholder="Enter your email"
-                      />
-                    </div>
-
-                    <div className="form-group">
-                      <label>Travel Date & Time (Optional)</label>
-                      <input
-                        type="datetime-local"
-                        value={bookingData.travel_date}
-                        onChange={(e) =>
-                          setBookingData({ ...bookingData, travel_date: e.target.value })
-                        }
                       />
                     </div>
 
@@ -1102,14 +1216,14 @@ const BookingPage = () => {
                     )}
                     
                     <div className="booking-summary-item" style={{ 
-                      borderTop: '2px solid rgba(250, 204, 21, 0.3)', 
+                      borderTop: '2px solid rgba(22, 163, 74, 0.3)', 
                       marginTop: '16px', 
                       paddingTop: '16px',
                       fontSize: '20px',
                       fontWeight: '700'
                     }}>
-                      <span className="booking-summary-label" style={{ color: '#facc15' }}>Total Fare:</span>
-                      <span className="booking-summary-value" style={{ color: '#facc15' }}>₹{fare.fare}</span>
+                      <span className="booking-summary-label" style={{ color: '#16a34a' }}>Total Fare:</span>
+                      <span className="booking-summary-value" style={{ color: '#16a34a' }}>₹{fare.fare}</span>
                     </div>
                     
                     <div className="booking-confirmation-actions">
@@ -1179,7 +1293,7 @@ const BookingPage = () => {
             <h3 style={{ 
               fontSize: '28px', 
               fontWeight: '700', 
-              color: '#facc15', 
+              color: '#16a34a', 
               marginTop: '40px', 
               marginBottom: '20px',
               textAlign: 'center'
@@ -1218,8 +1332,8 @@ const BookingPage = () => {
               and dedicated account management for hassle-free business travel.
             </p>
             <div style={{ 
-              background: 'linear-gradient(135deg, rgba(250, 204, 21, 0.15) 0%, rgba(234, 179, 8, 0.1) 100%)',
-              border: '2px solid rgba(250, 204, 21, 0.3)',
+              background: 'linear-gradient(135deg, rgba(22, 163, 74, 0.15) 0%, rgba(22, 163, 74, 0.1) 100%)',
+              border: '2px solid rgba(22, 163, 74, 0.3)',
               borderRadius: '16px',
               padding: '30px',
               marginTop: '30px',
@@ -1228,7 +1342,7 @@ const BookingPage = () => {
               <h4 style={{ 
                 fontSize: '22px', 
                 fontWeight: '700', 
-                color: '#facc15', 
+                color: '#16a34a', 
                 marginBottom: '20px',
                 textAlign: 'center'
               }}>
@@ -1242,23 +1356,23 @@ const BookingPage = () => {
                 color: '#e5e7eb'
               }}>
                 <li style={{ marginBottom: '12px' }}>
-                  <strong style={{ color: '#facc15' }}>✓</strong> <strong>Dedicated Fleet Management</strong> – 
+                  <strong style={{ color: '#16a34a' }}>✓</strong> <strong>Dedicated Fleet Management</strong> – 
                   Assigned vehicles and drivers for consistent, reliable service
                 </li>
                 <li style={{ marginBottom: '12px' }}>
-                  <strong style={{ color: '#facc15' }}>✓</strong> <strong>Flexible Billing & Invoicing</strong> – 
+                  <strong style={{ color: '#16a34a' }}>✓</strong> <strong>Flexible Billing & Invoicing</strong> – 
                   Monthly billing cycles, GST-compliant invoices, and detailed usage reports
                 </li>
                 <li style={{ marginBottom: '12px' }}>
-                  <strong style={{ color: '#facc15' }}>✓</strong> <strong>Cost-Effective Solutions</strong> – 
+                  <strong style={{ color: '#16a34a' }}>✓</strong> <strong>Cost-Effective Solutions</strong> – 
                   Volume discounts, fixed monthly rates, and transparent pricing with no hidden charges
                 </li>
                 <li style={{ marginBottom: '12px' }}>
-                  <strong style={{ color: '#facc15' }}>✓</strong> <strong>Employee Safety First</strong> – 
+                  <strong style={{ color: '#16a34a' }}>✓</strong> <strong>Employee Safety First</strong> – 
                   Verified drivers, insured vehicles, and comprehensive safety protocols
                 </li>
                 <li style={{ marginBottom: '12px' }}>
-                  <strong style={{ color: '#facc15' }}>✓</strong> <strong>Customized Routes & Schedules</strong> – 
+                  <strong style={{ color: '#16a34a' }}>✓</strong> <strong>Customized Routes & Schedules</strong> – 
                   Tailored transportation plans for shift-based employees and regular commutes
                 </li>
               </ul>
@@ -1268,12 +1382,12 @@ const BookingPage = () => {
               lineHeight: '1.8', 
               marginTop: '30px',
               textAlign: 'center',
-              color: '#facc15',
+              color: '#16a34a',
               fontWeight: '600'
             }}>
               Ready to streamline your company&apos;s transportation? 
               <a href="/corporate" style={{ 
-                color: '#facc15', 
+                color: '#16a34a', 
                 textDecoration: 'underline',
                 marginLeft: '8px',
                 fontWeight: '700'
@@ -1301,7 +1415,7 @@ const BookingPage = () => {
             </p>
           </div>
           
-          <div className="outstation-routes-grid">
+          <div className={`outstation-routes-grid ${routesExpanded ? 'routes-expanded' : ''}`}>
             {[
               'Mysore', 'Salem', 'Coorg', 'Chikmagalur', 'Mangalore', 
               'Dharwad', 'Shivamogga', 'Chennai', 'Madurai', 'Coimbatore',
@@ -1325,6 +1439,14 @@ const BookingPage = () => {
                 <span className="route-button-arrow">→</span>
               </button>
             ))}
+          </div>
+          <div className="routes-expand-wrapper">
+            <button
+              className="routes-expand-button"
+              onClick={() => setRoutesExpanded(!routesExpanded)}
+            >
+              {routesExpanded ? 'Show Less' : 'View All Routes'}
+            </button>
           </div>
         </div>
       </section>

@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const db = require('../db/database');
-const { authenticateToken, requireAdmin } = require('../middleware/auth');
+const { authenticateToken, requireAdmin, requireManagerPermission } = require('../middleware/auth');
 const PDFDocument = require('pdfkit');
 
 const router = express.Router();
@@ -28,6 +28,12 @@ if (!fs.existsSync(driversUploadDir)) {
   fs.mkdirSync(driversUploadDir, { recursive: true });
 }
 
+// File upload dir for car documents
+const carDocumentsUploadDir = path.join(__dirname, '..', 'uploads', 'car-documents');
+if (!fs.existsSync(carDocumentsUploadDir)) {
+  fs.mkdirSync(carDocumentsUploadDir, { recursive: true });
+}
+
 // Receipts directory (shared with public bookings router)
 const receiptsDir = path.join(__dirname, '..', 'receipts');
 if (!fs.existsSync(receiptsDir)) {
@@ -39,6 +45,8 @@ const storage = multer.diskStorage({
     // decide folder based on route
     if (req.originalUrl.includes('/drivers')) {
       cb(null, driversUploadDir);
+    } else if (req.originalUrl.includes('/cars') && req.originalUrl.includes('/register')) {
+      cb(null, carDocumentsUploadDir);
     } else {
       cb(null, carOptionsUploadDir);
     }
@@ -75,27 +83,65 @@ router.get('/cab-types', async (req, res) => {
   }
 });
 
-// Create cab type
-router.post('/cab-types', [
-  body('name').notEmpty().withMessage('Name is required'),
-  body('base_fare').isNumeric().withMessage('Base fare must be a number'),
-  body('per_km_rate').isNumeric().withMessage('Per km rate must be a number'),
-], async (req, res) => {
+// Create cab type - NO VALIDATION ON OPTIONAL FIELDS
+router.post('/cab-types', async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+    console.log('=== CREATE CAB TYPE REQUEST ===');
+    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    
+    // Only validate name - everything else is optional
+    let { name, description, base_fare, per_km_rate, per_minute_rate, capacity } = req.body;
+    
+    // Validate name
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ error: 'Name is required' });
+    }
+    
+    // Trim name
+    name = name.trim();
+    
+    // All numeric fields are optional - convert to defaults if empty/invalid
+    let sanitizedBaseFare = 0;
+    if (base_fare !== '' && base_fare !== null && base_fare !== undefined) {
+      const num = parseFloat(base_fare);
+      if (!isNaN(num)) sanitizedBaseFare = num;
+    }
+    
+    let sanitizedPerKmRate = 0;
+    if (per_km_rate !== '' && per_km_rate !== null && per_km_rate !== undefined) {
+      const num = parseFloat(per_km_rate);
+      if (!isNaN(num)) sanitizedPerKmRate = num;
+    }
+    
+    let sanitizedPerMinuteRate = 0;
+    if (per_minute_rate !== '' && per_minute_rate !== null && per_minute_rate !== undefined) {
+      const num = parseFloat(per_minute_rate);
+      if (!isNaN(num)) sanitizedPerMinuteRate = num;
+    }
+    
+    let sanitizedCapacity = 4; // default
+    if (capacity !== '' && capacity !== null && capacity !== undefined) {
+      const num = parseInt(capacity);
+      if (!isNaN(num) && num >= 1) sanitizedCapacity = num;
     }
 
-    const { name, description, base_fare, per_km_rate, per_minute_rate, capacity } = req.body;
+    console.log('Sanitized values:', {
+      name,
+      description: description || null,
+      base_fare: sanitizedBaseFare,
+      per_km_rate: sanitizedPerKmRate,
+      per_minute_rate: sanitizedPerMinuteRate,
+      capacity: sanitizedCapacity
+    });
 
     const result = await db.runAsync(
       `INSERT INTO cab_types (name, description, base_fare, per_km_rate, per_minute_rate, capacity)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      [name, description || null, base_fare, per_km_rate, per_minute_rate || 0, capacity || 4]
+      [name, description || null, sanitizedBaseFare, sanitizedPerKmRate, sanitizedPerMinuteRate, sanitizedCapacity]
     );
 
     const newCabType = await db.getAsync('SELECT * FROM cab_types WHERE id = ?', [result.lastID]);
+    console.log('Cab type created successfully:', newCabType);
     res.status(201).json(newCabType);
   } catch (error) {
     console.error('Error creating cab type:', error);
@@ -463,11 +509,13 @@ router.get('/bookings', async (req, res) => {
   try {
     const { limit } = req.query;
     let query = `SELECT b.*, ct.name as cab_type_name, co.name as car_option_name,
-              c.vehicle_number, c.driver_name, c.driver_phone
+              c.vehicle_number, c.driver_name as cab_driver_name, c.driver_phone as cab_driver_phone,
+              d.name as driver_name, d.phone as driver_phone
        FROM bookings b
        LEFT JOIN cab_types ct ON b.cab_type_id = ct.id
        LEFT JOIN car_options co ON b.car_option_id = co.id
        LEFT JOIN cabs c ON b.cab_id = c.id
+       LEFT JOIN drivers d ON b.driver_id = d.id
        ORDER BY b.booking_date DESC, b.id DESC`;
     
     if (limit) {
@@ -475,7 +523,13 @@ router.get('/bookings', async (req, res) => {
     }
     
     const result = await db.allAsync(query);
-    res.json(result);
+    // Use driver from bookings table if available, otherwise fall back to cab driver
+    const processedResult = result.map(booking => ({
+      ...booking,
+      driver_name: booking.driver_name || booking.cab_driver_name || null,
+      driver_phone: booking.driver_phone || booking.cab_driver_phone || null
+    }));
+    res.json(processedResult);
   } catch (error) {
     console.error('Error fetching bookings:', error);
     res.status(500).json({ error: 'Server error' });
@@ -666,6 +720,133 @@ router.put('/bookings/:id/status', [
   } catch (error) {
     console.error('Error updating booking status:', error);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Assign/reassign driver and car to booking
+router.put('/bookings/:id/assign', [
+  body('driver_id').optional({ nullable: true }).isInt().withMessage('driver_id must be int'),
+  body('cab_id').optional({ nullable: true }).isInt().withMessage('cab_id must be int'),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    const { id } = req.params;
+    const { driver_id, cab_id } = req.body;
+
+    const booking = await db.getAsync('SELECT * FROM bookings WHERE id = ?', [id]);
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    let driverName = null;
+    let driverPhone = null;
+    if (driver_id) {
+      const driver = await db.getAsync('SELECT * FROM drivers WHERE id = ?', [driver_id]);
+      if (!driver) return res.status(404).json({ error: 'Driver not found' });
+      driverName = driver.name;
+      driverPhone = driver.phone;
+    }
+
+    // Update both driver and cab if provided
+    const updates = [];
+    const values = [];
+    
+    if (driver_id !== undefined) {
+      updates.push('driver_id = ?');
+      updates.push('driver_name = ?');
+      updates.push('driver_phone = ?');
+      values.push(driver_id || null, driverName, driverPhone);
+    }
+    
+    if (cab_id !== undefined) {
+      updates.push('cab_id = ?');
+      values.push(cab_id || null);
+    }
+    
+    if (updates.length > 0) {
+      values.push(id);
+      await db.runAsync(
+        `UPDATE bookings SET ${updates.join(', ')} WHERE id = ?`,
+        values
+      );
+    }
+
+    const updated = await db.getAsync(
+      `SELECT b.*, ct.name as cab_type_name, co.name as car_option_name,
+              c.vehicle_number, c.driver_name as cab_driver_name, c.driver_phone as cab_driver_phone,
+              d.name as driver_name, d.phone as driver_phone
+       FROM bookings b
+       LEFT JOIN cab_types ct ON b.cab_type_id = ct.id
+       LEFT JOIN car_options co ON b.car_option_id = co.id
+       LEFT JOIN cabs c ON b.cab_id = c.id
+       LEFT JOIN drivers d ON b.driver_id = d.id
+       WHERE b.id = ?`,
+      [id]
+    );
+    
+    if (!updated) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    // Use driver from bookings table if available, otherwise fall back to cab driver
+    const processedResult = {
+      ...updated,
+      driver_name: updated.driver_name || updated.cab_driver_name || null,
+      driver_phone: updated.driver_phone || updated.cab_driver_phone || null
+    };
+
+    res.json(processedResult);
+  } catch (error) {
+    console.error('Error assigning driver to booking:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Send invoice email
+router.post('/bookings/:id/send-invoice', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { withGST = true } = req.body;
+
+    const booking = await db.getAsync(
+      `SELECT b.*, u.username, u.email, ct.name as cab_type_name, co.name as car_option_name,
+              c.vehicle_number, c.driver_name, c.driver_phone
+       FROM bookings b
+       LEFT JOIN users u ON b.user_id = u.id
+       LEFT JOIN cab_types ct ON b.cab_type_id = ct.id
+       LEFT JOIN car_options co ON b.car_option_id = co.id
+       LEFT JOIN cabs c ON b.cab_id = c.id
+       WHERE b.id = ?`,
+      [id]
+    );
+
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    if (!booking.passenger_email) {
+      return res.status(400).json({ error: 'Passenger email not found' });
+    }
+
+    // Generate PDF
+    const { generateInvoicePdf } = require('../services/invoiceService');
+    const pdfBytes = await generateInvoicePdf(booking, { withGST });
+
+    // Send email with PDF attachment
+    const { sendInvoiceEmail } = require('../services/emailService');
+    const emailResult = await sendInvoiceEmail(booking, pdfBytes, withGST);
+
+    if (emailResult.success) {
+      res.json({ message: 'Invoice email sent successfully', success: true });
+    } else {
+      res.status(500).json({ error: emailResult.message || 'Error sending email' });
+    }
+  } catch (error) {
+    console.error('Error sending invoice email:', error);
+    res.status(500).json({ error: 'Error sending invoice email' });
   }
 });
 
@@ -1340,16 +1521,18 @@ router.delete('/drivers/:id', async (req, res) => {
 });
 
 // ========== CORPORATE BOOKINGS (ADMIN) ==========
+// Corporate bookings require 'event-bookings' permission
 
-router.get('/corporate-bookings', async (req, res) => {
+router.get('/corporate-bookings', requireManagerPermission('event-bookings'), async (req, res) => {
   try {
     const rows = await db.allAsync(
       `SELECT cb.*, 
               d.name as driver_name_ref, d.phone as driver_phone_ref,
-              c.vehicle_number
+              c.vehicle_number, ct.name as cab_type_name
        FROM corporate_bookings cb
        LEFT JOIN drivers d ON cb.driver_id = d.id
        LEFT JOIN cabs c ON cb.cab_id = c.id
+       LEFT JOIN cab_types ct ON c.cab_type_id = ct.id
        ORDER BY cb.created_at DESC`
     );
     res.json(rows);
@@ -1359,10 +1542,145 @@ router.get('/corporate-bookings', async (req, res) => {
   }
 });
 
-router.put('/corporate-bookings/:id/assign', [
-  body('driver_id').optional({ nullable: true }).isInt().withMessage('driver_id must be int'),
-  body('cab_id').optional({ nullable: true }).isInt().withMessage('cab_id must be int'),
-], async (req, res) => {
+// Export corporate bookings to Excel with GST
+// Requires 'bills-invoices' permission
+router.get('/corporate-bookings/export/excel', requireManagerPermission('bills-invoices'), async (req, res) => {
+  try {
+    const XLSX = require('xlsx');
+    
+    const bookings = await db.allAsync(
+      `SELECT cb.*, 
+              d.name as driver_name_ref, d.phone as driver_phone_ref,
+              c.vehicle_number
+       FROM corporate_bookings cb
+       LEFT JOIN drivers d ON cb.driver_id = d.id
+       LEFT JOIN cabs c ON cb.cab_id = c.id
+       ORDER BY cb.created_at DESC`
+    );
+    
+    // Ensure fare_amount is included (it should be in cb.* but explicitly check)
+
+    // Helper function to format date
+    const formatDate = (dateStr) => {
+      if (!dateStr) return '';
+      try {
+        const date = new Date(dateStr);
+        return date.toLocaleString('en-IN', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZone: 'Asia/Kolkata'
+        });
+      } catch {
+        return dateStr;
+      }
+    };
+
+    // Helper function to calculate GST (assuming 18% GST)
+    const calculateGST = (amount) => {
+      if (!amount || amount === 0) return { subTotal: 0, cgst: 0, sgst: 0, gst: 0, total: 0 };
+      const subTotal = parseFloat(amount);
+      const gst = subTotal * 0.18; // 18% GST
+      const cgst = gst / 2; // 9% CGST
+      const sgst = gst / 2; // 9% SGST
+      const total = subTotal + gst;
+      return { subTotal, cgst, sgst, gst, total };
+    };
+
+    // Prepare data for Excel
+    const excelData = bookings.map((booking, index) => {
+      // If fare_amount exists, use it; otherwise set to empty string (can be filled manually)
+      const fareAmount = booking.fare_amount !== null && booking.fare_amount !== undefined ? booking.fare_amount : '';
+      const numericFare = fareAmount && fareAmount !== '' ? parseFloat(fareAmount) : 0;
+      const gstCalc = calculateGST(numericFare);
+      
+      return {
+        'S.No': index + 1,
+        'Booking ID': booking.id,
+        'Name': booking.name || '',
+        'Phone Number': booking.phone_number || '',
+        'Company Name': booking.company_name || '',
+        'Pickup Point': booking.pickup_point || '',
+        'Drop Point': booking.drop_point || '',
+        'Status': booking.status || '',
+        'Driver Name': booking.driver_name || booking.driver_name_ref || '',
+        'Driver Phone': booking.driver_phone || booking.driver_phone_ref || '',
+        'Vehicle Number': booking.vehicle_number || '',
+        'Fare Amount (₹)': fareAmount !== '' ? (typeof fareAmount === 'number' ? fareAmount.toFixed(2) : fareAmount) : '',
+        'Sub Total (₹)': numericFare > 0 ? gstCalc.subTotal.toFixed(2) : '',
+        'CGST @ 9% (₹)': numericFare > 0 ? gstCalc.cgst.toFixed(2) : '',
+        'SGST @ 9% (₹)': numericFare > 0 ? gstCalc.sgst.toFixed(2) : '',
+        'Total GST @ 18% (₹)': numericFare > 0 ? gstCalc.gst.toFixed(2) : '',
+        'Grand Total (₹)': numericFare > 0 ? gstCalc.total.toFixed(2) : '',
+        'Assigned At': formatDate(booking.assigned_at),
+        'Created At': formatDate(booking.created_at),
+        'Updated At': formatDate(booking.updated_at),
+        'Notes': booking.notes || ''
+      };
+    });
+
+    // Create workbook and worksheet
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.json_to_sheet(excelData);
+
+    // Set column widths
+    const columnWidths = [
+      { wch: 6 },   // S.No
+      { wch: 12 },  // Booking ID
+      { wch: 20 },  // Name
+      { wch: 15 },  // Phone Number
+      { wch: 25 },  // Company Name
+      { wch: 30 },  // Pickup Point
+      { wch: 30 },  // Drop Point
+      { wch: 12 },  // Status
+      { wch: 20 },  // Driver Name
+      { wch: 15 },  // Driver Phone
+      { wch: 15 },  // Vehicle Number
+      { wch: 15 },  // Fare Amount
+      { wch: 15 },  // Sub Total
+      { wch: 15 },  // CGST
+      { wch: 15 },  // SGST
+      { wch: 18 },  // Total GST
+      { wch: 18 },  // Grand Total
+      { wch: 20 },  // Assigned At
+      { wch: 20 },  // Created At
+      { wch: 20 },  // Updated At
+      { wch: 40 }   // Notes
+    ];
+    worksheet['!cols'] = columnWidths;
+
+    // Add worksheet to workbook
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Corporate Bookings');
+
+    // Generate Excel file buffer
+    const excelBuffer = XLSX.write(workbook, { 
+      type: 'buffer', 
+      bookType: 'xlsx',
+      cellStyles: true
+    });
+
+    // Set response headers
+    const timestamp = new Date().toISOString().split('T')[0];
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=corporate-bookings-invoices-${timestamp}.xlsx`);
+    
+    res.send(excelBuffer);
+  } catch (error) {
+    console.error('Error exporting corporate bookings to Excel:', error);
+    res.status(500).json({ error: 'Error generating Excel export' });
+  }
+});
+
+// Assign corporate booking - requires edit permission for event-bookings
+router.put('/corporate-bookings/:id/assign', 
+  requireManagerPermission('event-bookings', true), // true = requires edit permission
+  [
+    body('driver_id').optional({ nullable: true }).isInt().withMessage('driver_id must be int'),
+    body('cab_id').optional({ nullable: true }).isInt().withMessage('cab_id must be int'),
+  ], 
+  async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -1429,6 +1747,108 @@ router.put('/corporate-bookings/:id/assign', [
     res.json(updated);
   } catch (error) {
     console.error('Error assigning corporate booking:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update corporate booking status
+// Requires edit permission for event-bookings
+router.put('/corporate-bookings/:id', 
+  requireManagerPermission('event-bookings', true), // true = requires edit permission
+  [
+    body('status').optional().isIn(['pending', 'confirmed', 'in_progress', 'completed', 'cancelled']).withMessage('Invalid status'),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const { id } = req.params;
+      const { status } = req.body;
+
+      const existing = await db.getAsync(
+        'SELECT * FROM corporate_bookings WHERE id = ?',
+        [id]
+      );
+
+      if (!existing) {
+        return res.status(404).json({ error: 'Corporate booking not found' });
+      }
+
+      if (status) {
+        await db.runAsync(
+          'UPDATE corporate_bookings SET status = ? WHERE id = ?',
+          [status, id]
+        );
+      }
+
+      const updated = await db.getAsync(
+        `SELECT cb.*, 
+                d.name as driver_name_ref, d.phone as driver_phone_ref,
+                c.vehicle_number, ct.name as cab_type_name
+         FROM corporate_bookings cb
+         LEFT JOIN drivers d ON cb.driver_id = d.id
+         LEFT JOIN cabs c ON cb.cab_id = c.id
+         LEFT JOIN cab_types ct ON c.cab_type_id = ct.id
+         WHERE cb.id = ?`,
+        [id]
+      );
+
+      res.json(updated);
+    } catch (error) {
+      console.error('Error updating corporate booking:', error);
+      res.status(500).json({ error: 'Server error' });
+    }
+  }
+);
+
+// Register car with documents
+router.post('/cars/register', upload.single('documents'), [
+  body('name').notEmpty().withMessage('Car name is required'),
+  body('category').isIn(['SUV', 'Sedan']).withMessage('Category must be SUV or Sedan'),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { name, category } = req.body;
+    let documentsUrl = null;
+
+    if (req.file) {
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      documentsUrl = `${baseUrl}/uploads/car-documents/${req.file.filename}`;
+    }
+
+    // Create registered_cars table if it doesn't exist
+    await db.runAsync(`
+      CREATE TABLE IF NOT EXISTS registered_cars (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        category TEXT NOT NULL CHECK (category IN ('SUV', 'Sedan')),
+        documents_url TEXT,
+        is_active INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    const result = await db.runAsync(
+      `INSERT INTO registered_cars (name, category, documents_url) VALUES (?, ?, ?)`,
+      [name, category, documentsUrl]
+    );
+
+    const newCar = await db.getAsync(
+      'SELECT * FROM registered_cars WHERE id = ?',
+      [result.lastID]
+    );
+
+    res.status(201).json(newCar);
+  } catch (error) {
+    console.error('Error registering car:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

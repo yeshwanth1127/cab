@@ -46,7 +46,7 @@ router.post('/calculate-fare', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { from, to, from_location, to_location, cab_type_id, service_type, trip_type, distance_km, estimated_time_minutes, number_of_hours, number_of_days } = req.body;
+    let { from, to, from_location, to_location, cab_type_id, service_type, trip_type, distance_km, estimated_time_minutes, number_of_hours, number_of_days } = req.body;
     
     console.log('[BACKEND DEBUG] ========== CALCULATE FARE REQUEST ==========');
     console.log('[BACKEND DEBUG] service_type:', service_type);
@@ -73,19 +73,40 @@ router.post('/calculate-fare', [
       if (!trip_type || (typeof trip_type === 'string' && !trip_type.trim())) {
         return res.status(400).json({ error: 'Trip type is required for outstation bookings' });
       }
-      // For round trip outstation, number_of_days is required
+      // For round trip outstation, pickup_date_time and drop_date_time are required
       if (trip_type === 'round_trip') {
-        if (!number_of_days || Number(number_of_days) <= 0) {
-          return res.status(400).json({ error: 'Number of days is required and must be greater than 0 for outstation round trips' });
-        }
-        if (!Number.isInteger(Number(number_of_days))) {
-          return res.status(400).json({ error: 'Number of days must be a valid integer for outstation round trips' });
+        if (!req.body.pickup_date_time || !req.body.drop_date_time) {
+          return res.status(400).json({ error: 'Pickup date & time and drop date & time are required for outstation round trips' });
         }
       }
     } else {
-      // Validate airport bookings require from_location and to_location
-      if (!from_location || !to_location) {
-        return res.status(400).json({ error: 'From location and To location are required for airport bookings' });
+      // Validate airport bookings require at least one location (FROM or TO)
+      if (!from_location && !to_location) {
+        return res.status(400).json({ error: 'At least one location (FROM or TO) is required for airport bookings' });
+      }
+      // For airport bookings, ensure one location is KIA
+      const KIA_LOCATION = 'Kempegowda International Airport Bangalore';
+      const KIA_COORDS = { lat: 13.1986, lng: 77.7066 };
+      
+      // Determine which location is KIA and set the other accordingly
+      if (service_type === 'airport') {
+        const isFromKIA = from_location === KIA_LOCATION;
+        const isToKIA = to_location === KIA_LOCATION;
+        
+        if (!isFromKIA && !isToKIA) {
+          // Neither is KIA - if FROM is provided, set TO to KIA, else set FROM to KIA
+          if (from_location) {
+            to_location = KIA_LOCATION;
+            to = KIA_COORDS;
+          } else if (to_location) {
+            from_location = KIA_LOCATION;
+            from = KIA_COORDS;
+          }
+        } else if (isFromKIA && !from) {
+          from = KIA_COORDS;
+        } else if (isToKIA && !to) {
+          to = KIA_COORDS;
+        }
       }
     }
 
@@ -172,6 +193,8 @@ router.post('/calculate-fare', [
     } else {
       // Airport + Outstation: use Google Distance Matrix when coordinates are provided
       console.log(`[DISTANCE DEBUG] ${service_type} booking - checking for distance calculation`);
+      
+      // For airport bookings, FROM is already set to KIA above, TO is user's drop location
       console.log('[DISTANCE DEBUG] from:', JSON.stringify(from, null, 2));
       console.log('[DISTANCE DEBUG] to:', JSON.stringify(to, null, 2));
       console.log('[DISTANCE DEBUG] distance_km provided:', distance_km);
@@ -254,10 +277,10 @@ router.post('/calculate-fare', [
         if (from) console.log('[DISTANCE DEBUG] from has lat/lng:', !!from.lat, !!from.lng);
         if (to) console.log('[DISTANCE DEBUG] to has lat/lng:', !!to.lat, !!to.lng);
         
-        // For airport bookings, coordinates are required
-        if (service_type === 'airport' && (!from || !to)) {
+        // For airport bookings, to coordinates are required (from is always KIA)
+        if (service_type === 'airport' && (!to || !to.lat || !to.lng)) {
           return res.status(400).json({ 
-            error: 'From and To coordinates (lat, lng) are required for airport bookings' 
+            error: 'Drop location coordinates (lat, lng) are required for airport bookings' 
           });
         }
 
@@ -401,7 +424,8 @@ router.post('/calculate-fare', [
         service_multiplier: rateMeter ? 1.0 : multiplier,
         service_type: service_type,
         number_of_hours: service_type === 'local' ? number_of_hours : null,
-        number_of_days: service_type === 'outstation' && trip_type === 'round_trip' ? number_of_days || 1 : null,
+        pickup_date_time: service_type === 'outstation' && trip_type === 'round_trip' ? req.body.pickup_date_time : null,
+        drop_date_time: service_type === 'outstation' && trip_type === 'round_trip' ? req.body.drop_date_time : null,
       },
     };
     
@@ -437,7 +461,7 @@ router.post('/', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const {
+    let {
       from_location,
       to_location,
       cab_type_id,
@@ -453,6 +477,8 @@ router.post('/', [
       travel_date,
       notes,
       number_of_hours,
+      pickup_date_time,
+      drop_date_time,
     } = req.body;
 
     // Validate local bookings require number_of_hours and from_location
@@ -469,9 +495,35 @@ router.post('/', [
         return res.status(400).json({ error: 'Trip type is required for outstation bookings' });
       }
     } else {
-      // Validate airport bookings require from_location and to_location
-      if (!from_location || !to_location) {
-        return res.status(400).json({ error: 'From location and To location are required for airport bookings' });
+      // Validate airport bookings require at least one location (FROM or TO)
+      if (!to_location && !from_location) {
+        return res.status(400).json({ error: 'At least one location (FROM or TO) is required for airport bookings' });
+      }
+      // For airport bookings, ensure one location is KIA
+      const KIA_LOCATION = 'Kempegowda International Airport Bangalore';
+      const KIA_COORDS = { lat: 13.1986, lng: 77.7066 };
+      
+      // Determine which location is KIA and set the other accordingly
+      if (service_type === 'airport') {
+        const isFromKIA = from_location === KIA_LOCATION;
+        const isToKIA = to_location === KIA_LOCATION;
+        
+        if (!isFromKIA && !isToKIA) {
+          // Neither is KIA - if FROM is provided, set TO to KIA, else set FROM to KIA
+          if (from_location) {
+            req.body.to_location = KIA_LOCATION;
+            req.body.to = KIA_COORDS;
+            to_location = KIA_LOCATION;
+          } else if (to_location) {
+            req.body.from_location = KIA_LOCATION;
+            req.body.from = KIA_COORDS;
+            from_location = KIA_LOCATION;
+          }
+        } else if (isFromKIA && (!req.body.from || !req.body.from.lat)) {
+          req.body.from = KIA_COORDS;
+        } else if (isToKIA && (!req.body.to || !req.body.to.lat)) {
+          req.body.to = KIA_COORDS;
+        }
       }
     }
 
@@ -582,51 +634,52 @@ router.post('/', [
         // The fare will be calculated based on base fare and trip type multiplier
         distance = 0; // Will be calculated later if needed
         time = 0; // Will be calculated later if needed
-      } else if (!distance && req.body.from && req.body.to && req.body.from.lat && req.body.from.lng && req.body.to.lat && req.body.to.lng) {
+      } else if (!distance && req.body.from && req.body.from.lat && req.body.from.lng && req.body.to && req.body.to.lat && req.body.to.lng) {
         // Airport bookings: use Google Distance Matrix API
+        // For airport bookings, FROM is already set to KIA, TO is user's drop location
         try {
-          // First, check cache (routes table with coordinates)
-          const tolerance = 0.001; // ~100 meters tolerance
-          const cachedRoute = await db.getAsync(
-            `SELECT distance_km, estimated_time_minutes FROM routes 
-             WHERE from_lat IS NOT NULL 
-             AND from_lng IS NOT NULL 
-             AND to_lat IS NOT NULL 
-             AND to_lng IS NOT NULL
-             AND ABS(from_lat - ?) < ? 
-             AND ABS(from_lng - ?) < ?
-             AND ABS(to_lat - ?) < ?
-             AND ABS(to_lng - ?) < ?
-             AND is_active = 1
-             LIMIT 1`,
-            [req.body.from.lat, tolerance, req.body.from.lng, tolerance, req.body.to.lat, tolerance, req.body.to.lng, tolerance]
-          );
+            // First, check cache (routes table with coordinates)
+            const tolerance = 0.001; // ~100 meters tolerance
+            const cachedRoute = await db.getAsync(
+              `SELECT distance_km, estimated_time_minutes FROM routes 
+               WHERE from_lat IS NOT NULL 
+               AND from_lng IS NOT NULL 
+               AND to_lat IS NOT NULL 
+               AND to_lng IS NOT NULL
+               AND ABS(from_lat - ?) < ? 
+               AND ABS(from_lng - ?) < ?
+               AND ABS(to_lat - ?) < ?
+               AND ABS(to_lng - ?) < ?
+               AND is_active = 1
+               LIMIT 1`,
+              [req.body.from.lat, tolerance, req.body.from.lng, tolerance, req.body.to.lat, tolerance, req.body.to.lng, tolerance]
+            );
 
-          if (cachedRoute) {
-            distance = parseFloat(cachedRoute.distance_km);
-            time = cachedRoute.estimated_time_minutes;
-          } else {
-            // Call Google Distance Matrix API
-            const result = await getDistanceAndTime(req.body.from, req.body.to);
-            distance = result.distance_km;
-            time = result.duration_min;
+            if (cachedRoute) {
+              distance = parseFloat(cachedRoute.distance_km);
+              time = cachedRoute.estimated_time_minutes;
+            } else {
+              // Call Google Distance Matrix API
+              const result = await getDistanceAndTime(req.body.from, req.body.to);
+              distance = result.distance_km;
+              time = result.duration_min;
 
-            // Cache the result in routes table
-            try {
-              await db.runAsync(
-                `INSERT INTO routes (from_location, to_location, from_lat, from_lng, to_lat, to_lng, distance_km, estimated_time_minutes, is_active)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-                [
-                  from_location || '',
-                  to_location || '',
-                  req.body.from.lat,
-                  req.body.from.lng,
-                  req.body.to.lat,
-                  req.body.to.lng,
-                  distance,
-                  time
-                ]
-              );
+              // Cache the result in routes table
+              try {
+                await db.runAsync(
+                  `INSERT INTO routes (from_location, to_location, from_lat, from_lng, to_lat, to_lng, distance_km, estimated_time_minutes, is_active)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+                  [
+                    from_location || '',
+                    to_location || '',
+                    req.body.from.lat,
+                    req.body.from.lng,
+                    req.body.to.lat,
+                    req.body.to.lng,
+                    distance,
+                    time
+                  ]
+                );
             } catch (cacheError) {
               // Log but don't fail if caching fails
               console.warn('Failed to cache route:', cacheError.message);
@@ -728,7 +781,7 @@ router.post('/', [
         cab_type_id,
         req.body.car_option_id || null,
         from_location || null,
-        (service_type === 'local') ? 'N/A' : (to_location || 'N/A'), // Set 'N/A' only for local bookings
+        (service_type === 'local') ? 'N/A' : (to_location || 'N/A'), // For airport, to_location is user's drop location
         distance || 0,
         time || 0,
         fare,
@@ -738,19 +791,36 @@ router.post('/', [
         passenger_email, // Now required
         travel_date || null,
         (() => {
+          let finalNotes = notes || '';
+          
+          // For round trip, add pickup and drop date/time to notes
+          if (service_type === 'outstation' && trip_type === 'round_trip') {
+            const dateTimeInfo = [];
+            if (req.body.pickup_date_time) {
+              dateTimeInfo.push(`Pickup: ${req.body.pickup_date_time}`);
+            }
+            if (req.body.drop_date_time) {
+              dateTimeInfo.push(`Drop: ${req.body.drop_date_time}`);
+            }
+            if (dateTimeInfo.length > 0) {
+              finalNotes = finalNotes ? `${finalNotes}\n${dateTimeInfo.join(', ')}` : dateTimeInfo.join(', ');
+            }
+          }
+          
           // For multiple way trips, add stops to notes
           if (service_type === 'outstation' && trip_type === 'multiple_way' && stops) {
             try {
               const stopsArray = typeof stops === 'string' ? JSON.parse(stops) : stops;
               if (Array.isArray(stopsArray) && stopsArray.length > 0) {
                 const stopsText = `Stops: ${stopsArray.join(' → ')}`;
-                return notes ? `${notes}\n${stopsText}` : stopsText;
+                finalNotes = finalNotes ? `${finalNotes}\n${stopsText}` : stopsText;
               }
             } catch (e) {
               // If parsing fails, just use original notes
             }
           }
-          return notes || null;
+          
+          return finalNotes || null;
         })(),
         service_type || 'local',
         service_type === 'local' ? (number_of_hours ? parseInt(number_of_hours) : null) : null,
@@ -859,11 +929,13 @@ router.get('/:id', async (req, res) => {
     const { id } = req.params;
     const booking = await db.getAsync(
       `SELECT b.*, ct.name as cab_type_name, co.name as car_option_name,
-              c.vehicle_number, c.driver_name, c.driver_phone
+              c.vehicle_number, c.driver_name as cab_driver_name, c.driver_phone as cab_driver_phone,
+              d.name as driver_name, d.phone as driver_phone
        FROM bookings b
        LEFT JOIN cab_types ct ON b.cab_type_id = ct.id
        LEFT JOIN car_options co ON b.car_option_id = co.id
        LEFT JOIN cabs c ON b.cab_id = c.id
+       LEFT JOIN drivers d ON b.driver_id = d.id
        WHERE b.id = ?`,
       [id]
     );
@@ -872,7 +944,14 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Booking not found' });
     }
 
-    res.json(booking);
+    // Use driver from bookings table if available, otherwise fall back to cab driver
+    const processedBooking = {
+      ...booking,
+      driver_name: booking.driver_name || booking.cab_driver_name || null,
+      driver_phone: booking.driver_phone || booking.cab_driver_phone || null
+    };
+
+    res.json(processedBooking);
   } catch (error) {
     console.error('Error fetching booking:', error);
     res.status(500).json({ error: 'Server error' });

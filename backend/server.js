@@ -29,6 +29,9 @@ app.use('/api/bookings', require('./routes/bookings'));
 app.use('/api/routes', require('./routes/routes'));
 app.use('/api/car-options', require('./routes/carOptions'));
 app.use('/api/corporate', require('./routes/corporate'));
+app.use('/api/events', require('./routes/events'));
+app.use('/api/address', require('./routes/address'));
+app.use('/api/places', require('./routes/places'));
 
 // Health check
 app.get('/api/health', (req, res) => {

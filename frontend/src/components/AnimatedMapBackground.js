@@ -38,9 +38,16 @@ const AnimatedMapBackground = () => {
     };
   }, []);
 
-  // Track mouse globally and set target offset (opposite direction)
+  // Track mouse globally and set target offset (opposite direction) - throttled
   useEffect(() => {
+    let lastTime = 0;
+    const throttleMs = 50; // Throttle to ~20fps for mouse tracking
+
     const handleMouseMove = (e) => {
+      const currentTime = Date.now();
+      if (currentTime - lastTime < throttleMs) return;
+      lastTime = currentTime;
+
       const width = window.innerWidth || 1;
       const height = window.innerHeight || 1;
       const x = e.clientX;
@@ -57,18 +64,36 @@ const AnimatedMapBackground = () => {
       };
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mousemove', handleMouseMove, { passive: true });
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
     };
   }, []);
 
-  // Animate center for parallax effect
+  // Animate center for parallax effect (throttled for performance)
   useEffect(() => {
-    const animate = () => {
+    let lastTime = 0;
+    const throttleMs = 16; // ~60fps max
+
+    const animate = (currentTime) => {
+      if (currentTime - lastTime < throttleMs) {
+        animationFrameRef.current = requestAnimationFrame(animate);
+        return;
+      }
+      lastTime = currentTime;
+
       if (mapRef.current) {
         const { dx: targetDx, dy: targetDy } = targetOffsetRef.current;
         const { dx, dy } = currentOffsetRef.current;
+
+        // Check if change is significant enough to update
+        const deltaX = Math.abs(targetDx - dx);
+        const deltaY = Math.abs(targetDy - dy);
+        
+        if (deltaX < 0.0001 && deltaY < 0.0001) {
+          animationFrameRef.current = requestAnimationFrame(animate);
+          return;
+        }
 
         // Smooth easing
         const easedDx = dx + (targetDx - dx) * 0.05;
