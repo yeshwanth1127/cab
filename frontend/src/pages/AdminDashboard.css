@@ -1,7 +1,21 @@
+/* Global: Prevent horizontal scroll everywhere */
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
 .admin-dashboard {
   min-height: 100vh;
   background: radial-gradient(circle at top left, #0f172a, #020617);
   position: relative;
+  overflow-x: hidden;
+  width: 100%;
+  max-width: 100vw;
+  box-sizing: border-box;
 }
 
 .admin-navbar {
@@ -48,12 +62,14 @@
 .admin-container {
   display: flex;
   width: 100%;
-  max-width: 100%;
+  max-width: 100vw;
   margin: 0;
   gap: 0;
   padding: 0;
   animation: fadeIn 0.8s ease-out;
   min-height: calc(100vh - 100px);
+  overflow-x: hidden;
+  box-sizing: border-box;
 }
 
 .sidebar {
@@ -219,9 +235,13 @@
   margin-left: 320px;
   background: #f8fafc;
   padding: 40px;
-  min-height: 100vh;
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
   animation: fadeIn 0.8s ease-out 0.2s both;
   width: calc(100% - 320px);
+  box-sizing: border-box;
+  max-width: calc(100vw - 320px);
 }
 
 .dashboard-layout {
@@ -944,6 +964,7 @@
   align-items: center;
   margin-bottom: 30px;
   animation: fadeIn 0.6s ease-out;
+  flex-shrink: 0;
 }
 
 .section-header h2 {
@@ -956,35 +977,92 @@
   background-clip: text;
 }
 
-/* Table wrapper for horizontal scrolling */
+/* Table wrapper - NO horizontal scroll */
 .data-table-wrapper {
   width: 100%;
-  overflow-x: auto;
-  overflow-y: visible;
+  overflow-x: hidden;
+  overflow-y: auto;
   margin-top: 20px;
   border-radius: 12px;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
   animation: fadeIn 0.8s ease-out;
   -webkit-overflow-scrolling: touch;
+  max-height: calc(100vh - 300px);
+  box-sizing: border-box;
+  max-width: 100%;
+  position: relative;
+}
+
+/* Ensure booking list pages fit within viewport */
+.main-content > div {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-height: calc(100vh - 80px);
+  overflow: hidden;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.main-content > div > .section-header,
+.main-content > div > .booking-filters-box {
+  flex-shrink: 0;
+}
+
+.main-content > div > .data-table-wrapper,
+.main-content > div > .rate-meters-container {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .data-table {
   width: 100%;
-  min-width: 1400px; /* Ensure minimum width for all columns */
   border-collapse: collapse;
   background: white;
   margin: 0;
-  table-layout: fixed;
+  table-layout: auto;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Ensure bills and invoices table is contained within screen */
+.data-table-wrapper {
+  position: relative;
+}
+
+.data-table-wrapper table.data-table {
+  width: 100%;
+  max-width: 100%;
+}
+
+.data-table-wrapper table.data-table th,
+.data-table-wrapper table.data-table td {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-wrap: break-word;
+}
+
+/* Actions column can be wider */
+.data-table-wrapper table.data-table th:last-child,
+.data-table-wrapper table.data-table td:last-child {
+  max-width: 250px;
+  white-space: normal;
 }
 
 .data-table th,
 .data-table td {
-  padding: 16px 12px;
+  padding: 12px 8px;
   text-align: left;
   border-bottom: 1px solid #f0f0f0;
   vertical-align: top;
   word-wrap: break-word;
   overflow-wrap: break-word;
+  white-space: normal;
+  font-size: 13px;
+  box-sizing: border-box;
 }
 
 .data-table th:first-child,
@@ -1083,7 +1161,8 @@
 .data-table th:last-child:not(:nth-child(13)),
 .data-table td:last-child:not(:nth-child(13)) {
   white-space: normal;
-  min-width: 150px;
+  width: auto;
+  max-width: 150px;
 }
 
 .data-table th {
@@ -1091,91 +1170,79 @@
   font-weight: 700;
   color: #333;
   text-transform: uppercase;
-  font-size: 12px;
-  letter-spacing: 1px;
+  font-size: 11px;
+  letter-spacing: 0.5px;
   position: sticky;
   top: 0;
   z-index: 10;
+  white-space: normal;
+  word-wrap: break-word;
 }
 
-/* Optimize column widths for better fit - using fixed widths */
+/* Responsive column widths - fit within viewport, total = 100% */
 .data-table th:nth-child(1),
 .data-table td:nth-child(1) {
-  width: 60px;
-  min-width: 60px;
+  width: 3%;
 }
 
 .data-table th:nth-child(2),
 .data-table td:nth-child(2) {
-  width: 90px;
-  min-width: 90px;
+  width: 5%;
 }
 
 .data-table th:nth-child(3),
 .data-table td:nth-child(3) {
-  width: 150px;
-  min-width: 150px;
+  width: 9%;
 }
 
 .data-table th:nth-child(4),
 .data-table td:nth-child(4) {
-  width: 150px;
-  min-width: 150px;
+  width: 9%;
 }
 
 .data-table th:nth-child(5),
 .data-table td:nth-child(5) {
-  width: 80px;
-  min-width: 80px;
+  width: 5%;
 }
 
 .data-table th:nth-child(6),
 .data-table td:nth-child(6) {
-  width: 120px;
-  min-width: 120px;
+  width: 7%;
 }
 
 .data-table th:nth-child(7),
 .data-table td:nth-child(7) {
-  width: 200px;
-  min-width: 200px;
-  min-width: 130px;
+  width: 11%;
 }
 
 .data-table th:nth-child(8),
 .data-table td:nth-child(8) {
-  width: 140px;
-  min-width: 140px;
+  width: 8%;
 }
 
 .data-table th:nth-child(9),
 .data-table td:nth-child(9) {
-  width: 130px;
-  min-width: 130px;
+  width: 7%;
 }
 
 .data-table th:nth-child(10),
 .data-table td:nth-child(10) {
-  width: 90px;
-  min-width: 90px;
+  width: 5%;
 }
 
 .data-table th:nth-child(11),
 .data-table td:nth-child(11) {
-  width: 130px;
-  min-width: 130px;
+  width: 7%;
 }
 
 .data-table th:nth-child(12),
 .data-table td:nth-child(12) {
-  width: 160px;
-  min-width: 160px;
+  width: 9%;
 }
 
 .data-table th:nth-child(13),
 .data-table td:nth-child(13) {
-  width: 220px;
-  min-width: 220px;
+  width: 16%;
 }
 
 .data-table tr {
@@ -1421,6 +1488,7 @@
   padding: 24px;
   margin-bottom: 24px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  flex-shrink: 0;
 }
 
 .booking-filters {
@@ -1851,6 +1919,7 @@
   background: rgba(0, 0, 0, 0.6);
   z-index: 900;
   backdrop-filter: blur(2px);
+  cursor: pointer;
 }
 
 .mobile-menu-close-btn {
@@ -1984,7 +2053,8 @@
 
   /* Data Tables - Mobile Card Grid Layout */
   .data-table-wrapper {
-    overflow: visible;
+    overflow-x: hidden;
+    overflow-y: visible;
   }
 
   .data-table {
@@ -2514,10 +2584,24 @@
   .data-table-wrapper,
   .data-table,
   .data-table tbody,
-  .data-table tr {
+  .data-table tr,
+  .data-table th,
+  .data-table td {
     max-width: 100%;
     overflow-x: hidden;
     box-sizing: border-box;
+  }
+  
+  .data-table {
+    table-layout: auto !important;
+    width: 100% !important;
+  }
+  
+  .data-table th,
+  .data-table td {
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
   }
 
   /* Fix booking cards to not be elongated */
@@ -2662,6 +2746,7 @@
 /* Rate Meters Styles */
 .rate-meters-container {
   margin-top: 20px;
+  padding-right: 10px;
 }
 
 .rate-meter-service-section {

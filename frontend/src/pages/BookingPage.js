@@ -171,7 +171,60 @@ const BookingPage = () => {
       const response = await api.get(url);
       // Ensure we always set an array
       const data = response.data;
-      setCarOptionCards(Array.isArray(data) ? data : []);
+      
+      // Filter cars based on service type
+      let filteredData = Array.isArray(data) ? data : [];
+      
+      if (serviceTypeFilter) {
+        // Canonical categories we want to show in the UI
+        const allowedCategories = serviceTypeFilter === 'outstation'
+          ? new Set(['Sedan', 'SUV', 'Innova Crysta', 'TT', 'Mini Bus'])
+          : new Set(['Sedan', 'SUV', 'Innova Crysta']);
+
+        const normalizeCategory = (raw) => {
+          const s = String(raw || '').toLowerCase().trim().replace(/\s+/g, ' ');
+          if (!s) return null;
+
+          // Sedan
+          if (s === 'sedan' || s.includes('sedan')) return 'Sedan';
+
+          // SUV
+          if (s === 'suv' || s.includes('suv')) return 'SUV';
+
+          // Innova Crysta
+          if (s.includes('crysta') || s.includes('innova crysta')) return 'Innova Crysta';
+
+          // TT (Tempo Traveller / Tempo)
+          if (s === 'tt' || s.includes('tempo traveller') || s.includes('tempo') || s.includes('traveller')) return 'TT';
+
+          // Mini Bus
+          if (s.includes('mini bus') || s.includes('minibus')) return 'Mini Bus';
+
+          return null;
+        };
+
+        const inferCategory = (car) => {
+          // 1) Prefer explicit subtype (most reliable if configured)
+          const fromSubtype = normalizeCategory(car?.car_subtype);
+          if (fromSubtype) return fromSubtype;
+
+          // 2) Fallback to name/description hints
+          const fromName = normalizeCategory(car?.name);
+          if (fromName) return fromName;
+
+          const fromDesc = normalizeCategory(car?.description);
+          if (fromDesc) return fromDesc;
+
+          return null;
+        };
+
+        filteredData = filteredData.filter((car) => {
+          const cat = inferCategory(car);
+          return cat ? allowedCategories.has(cat) : false;
+        });
+      }
+      
+      setCarOptionCards(filteredData);
     } catch (error) {
       console.error('Error fetching public car options:', error);
       // Ensure we always have an array even on error

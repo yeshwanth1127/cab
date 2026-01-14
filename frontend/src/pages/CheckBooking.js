@@ -139,7 +139,7 @@ const CheckBooking = () => {
 
                   {booking.car_option_name && (
                     <div className="detail-item">
-                      <span className="detail-label">Car Option:</span>
+                      <span className="detail-label">Category:</span>
                       <span className="detail-value">{booking.car_option_name}</span>
                     </div>
                   )}

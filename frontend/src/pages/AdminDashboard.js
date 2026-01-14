@@ -135,7 +135,33 @@ const AdminDashboard = () => {
     fromDate: '',
     toDate: '',
   });
-  const [billsFilter, setBillsFilter] = useState('all'); // 'all', 'bookings', 'corporate'
+  const [billsFilter, setBillsFilter] = useState('all'); // 'all', 'bookings', 'corporate', 'invoices'
+  const [invoices, setInvoices] = useState([]);
+  const [invoiceFormData, setInvoiceFormData] = useState({
+    invoice_no: '',
+    invoice_date: new Date().toISOString().split('T')[0],
+    company_gstin: '29AHYPC7622F1ZZ',
+    hsn_sac: '996411',
+    customer_name: '',
+    customer_address: '',
+    customer_phone: '',
+    customer_email: '',
+    customer_state: '',
+    customer_gst: '',
+    service_description: '',
+    sl_no: '1',
+    total_kms: '0',
+    no_of_days: '-',
+    rate_details: '',
+    service_amount: '0',
+    toll_tax: '0',
+    state_tax: '0',
+    driver_batta: '0',
+    parking_charges: '0',
+    placard_charges: '0',
+    extras: '0',
+    with_gst: false
+  });
   const [corporateFilter, setCorporateFilter] = useState('all'); // 'all', 'pending', 'confirmed', 'in_progress', 'completed', 'cancelled'
   const [eventFilter, setEventFilter] = useState('all'); // 'all', 'weddings', 'birthdays', 'others'
   const [loading, setLoading] = useState(false);
@@ -173,11 +199,8 @@ const AdminDashboard = () => {
     { key: 'trip-end', label: 'Trip End', description: 'View completed trips' },
     { key: 'cancelled-bookings', label: 'Cancelled Bookings', description: 'View cancelled bookings' },
     { key: 'create-booking', label: 'Create Booking', description: 'Create new bookings manually' },
-    { key: 'car-availability', label: 'Car Availability', description: 'View and manage car availability' },
-    { key: 'rate-meters', label: 'Rate Meters', description: 'Manage rate meters and pricing' },
-    { key: 'cab-types', label: 'Cab Types', description: 'Manage cab types and fares' },
-    { key: 'car-options', label: 'Car Options', description: 'Manage car options and models' },
-    { key: 'cabs', label: 'Cabs', description: 'Manage individual cabs and vehicles' },
+    // Car Availability and standalone Cab Types / Car Options / Cabs sections have been removed from manager permissions
+    { key: 'rate-meters', label: 'Rate Meters', description: 'Manage rate meters, cab types and pricing' },
     { key: 'drivers', label: 'Drivers', description: 'Manage drivers' },
     { key: 'event-bookings', label: 'Event Bookings', description: 'Manage event bookings' },
     { key: 'bills-invoices', label: 'Bills & Invoices', description: 'View and generate invoices' },
@@ -186,6 +209,26 @@ const AdminDashboard = () => {
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [receiptWithGST, setReceiptWithGST] = useState(true);
+
+  // Safety: prevent "stuck overlay" issues by closing mobile overlay when resizing to desktop
+  useEffect(() => {
+    if (!isMobile) {
+      setSidebarOpen(false);
+    }
+  }, [isMobile]);
+
+  // Global escape-to-close for any open overlay/modal
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key !== 'Escape') return;
+      setSidebarOpen(false);
+      setShowBookingModal(false);
+      setShowAddCarModal(false);
+      setShowForm(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
   
   // Create Booking state
   const [newBooking, setNewBooking] = useState({
@@ -201,7 +244,7 @@ const AdminDashboard = () => {
     number_of_hours: '',
     number_of_days: '',
     cab_type_id: '',
-    car_option_id: '',
+    category: '',
     notes: '',
     fare_amount: '',
   });
@@ -429,7 +472,7 @@ const AdminDashboard = () => {
         setBookings(bookingsRes.data || []);
       } else if (activeTab === 'bills-invoices') {
         const fetchPromises = [api.get('/admin/bookings')];
-        // Only fetch corporate bookings if user has permission
+        // Only fetch corporate bookings and invoices if user has permission
         if (user?.role === 'admin' || hasAccess('bills-invoices')) {
           fetchPromises.push(api.get('/admin/corporate-bookings').catch(err => {
             // If permission denied, return empty array
@@ -439,12 +482,21 @@ const AdminDashboard = () => {
             }
             throw err;
           }));
+          fetchPromises.push(api.get('/admin/invoices').catch(err => {
+            if (err.response?.status === 403) {
+              return { data: [] };
+            }
+            throw err;
+          }));
         } else {
           fetchPromises.push(Promise.resolve({ data: [] }));
+          fetchPromises.push(Promise.resolve({ data: [] }));
         }
-        const [bookingsRes, corporateRes] = await Promise.all(fetchPromises);
+        const results = await Promise.all(fetchPromises);
+        const [bookingsRes, corporateRes, invoicesRes] = results;
         setBookings(bookingsRes.data);
-        setCorporateBookings(corporateRes.data || []);
+        setCorporateBookings(corporateRes?.data || []);
+        setInvoices(invoicesRes?.data || []);
       } else if (activeTab === 'car-options') {
         const response = await api.get('/admin/car-options');
         setCarOptions(response.data);
@@ -590,7 +642,26 @@ const AdminDashboard = () => {
         // JSON body for all other tabs
         // Sanitize formData: convert empty strings to null for optional numeric fields
         const sanitizedData = { ...formData };
-        if (actualTab === 'cab-types') {
+        if (actualTab === 'rate-meters') {
+          // Handle rate meter specific fields
+          if (sanitizedData.hours === '' || sanitizedData.hours === undefined) {
+            sanitizedData.hours = null;
+          } else if (sanitizedData.hours !== null) {
+            sanitizedData.hours = parseInt(sanitizedData.hours);
+          }
+          if (sanitizedData.trip_type === '' || sanitizedData.trip_type === undefined) {
+            sanitizedData.trip_type = null;
+          }
+          // Convert numeric fields
+          const floatFields = ['base_fare', 'per_km_rate', 'per_hour_rate', 'extra_hour_rate', 'extra_km_rate'];
+          floatFields.forEach(field => {
+            if (sanitizedData[field] === '' || sanitizedData[field] === undefined) {
+              sanitizedData[field] = 0;
+            } else if (sanitizedData[field] !== null) {
+              sanitizedData[field] = parseFloat(sanitizedData[field]) || 0;
+            }
+          });
+        } else if (actualTab === 'cab-types') {
           // Convert empty strings to null for optional numeric fields
           const floatFields = ['base_fare', 'per_km_rate', 'per_minute_rate'];
           floatFields.forEach(field => {
@@ -642,7 +713,15 @@ const AdminDashboard = () => {
 
   const openEditForm = (item) => {
     setEditingItem(item);
-    setFormData(item);
+    // Ensure all new fields are included
+    const formDataWithDefaults = {
+      ...item,
+      hours: item.hours || undefined,
+      extra_hour_rate: item.extra_hour_rate || 0,
+      extra_km_rate: item.extra_km_rate || 0,
+      trip_type: item.trip_type || undefined,
+    };
+    setFormData(formDataWithDefaults);
     setCarOptionImageFiles([]);
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1118,8 +1197,8 @@ const AdminDashboard = () => {
       const stopBAddr = multipleWayStops.stopB?.address || (typeof multipleWayStops.stopB === 'string' ? multipleWayStops.stopB : '');
       const dropAddr = multipleWayStops.drop?.address || (typeof multipleWayStops.drop === 'string' ? multipleWayStops.drop : '');
       
-      if (!pickupAddr || !stopAAddr || !stopBAddr || !dropAddr) {
-        alert('Please fill in all required locations for multiple way trip (Pickup, Stop A, Stop B, and Final Drop)');
+      if (!pickupAddr || !stopAAddr || !dropAddr) {
+        alert('Please fill in all required locations for multiple way trip (Pickup, Stop A, and Final Drop). Stop B is optional.');
         return;
       }
     }
@@ -1150,12 +1229,17 @@ const AdminDashboard = () => {
         const dropAddr = multipleWayStops.drop?.address || (typeof multipleWayStops.drop === 'string' ? multipleWayStops.drop : '');
         
         bookingPayload.from_location = pickupAddr;
-        // Combine all stops: stopA, stopB, additional stops, and final drop
+        // Combine all stops: stopA, stopB (if provided), additional stops, and final drop
         const additionalStopsAddrs = multipleWayStops.additionalStops
           .map(s => s?.address || (typeof s === 'string' ? s : ''))
           .filter(addr => addr && addr.trim() !== '');
         
-        const allStops = [stopAAddr, stopBAddr, ...additionalStopsAddrs, dropAddr];
+        // Only include stopB if it's provided
+        const allStops = [stopAAddr];
+        if (stopBAddr && stopBAddr.trim() !== '') {
+          allStops.push(stopBAddr);
+        }
+        allStops.push(...additionalStopsAddrs, dropAddr);
         bookingPayload.to_location = allStops.join(' → ');
         bookingPayload.stops = JSON.stringify(allStops);
       } else {
@@ -1189,8 +1273,8 @@ const AdminDashboard = () => {
         bookingPayload.cab_type_id = parseInt(newBooking.cab_type_id);
       }
 
-      if (newBooking.car_option_id && newBooking.car_option_id !== '') {
-        bookingPayload.car_option_id = parseInt(newBooking.car_option_id);
+      if (newBooking.category && newBooking.category.trim() !== '') {
+        bookingPayload.category = newBooking.category.trim();
       }
 
       const response = await api.post('/bookings', bookingPayload);
@@ -1211,7 +1295,7 @@ const AdminDashboard = () => {
         number_of_hours: '',
         number_of_days: '',
         cab_type_id: '',
-        car_option_id: '',
+        category: '',
         notes: '',
         fare_amount: '',
       });
@@ -1427,7 +1511,20 @@ const AdminDashboard = () => {
               >
                 <span className="sidebar-icon">🧾</span>
                 <span className="sidebar-text">Bills and Invoices</span>
-                <span className="sidebar-subtext">Generate Invoices</span>
+                <span className="sidebar-subtext">View Invoices</span>
+              </button>
+            )}
+            {hasAccess('bills-invoices') && (
+              <button
+                className={activeTab === 'create-invoice' ? 'active' : ''}
+                onClick={() => {
+                  setActiveTab('create-invoice');
+                  if (isMobile) setSidebarOpen(false);
+                }}
+              >
+                <span className="sidebar-icon">➕</span>
+                <span className="sidebar-text">Create Invoice</span>
+                <span className="sidebar-subtext">New Invoice</span>
               </button>
             )}
           </div>
@@ -1505,34 +1602,8 @@ const AdminDashboard = () => {
                 }}
               >
                 <span className="sidebar-icon">💰</span>
-                <span className="sidebar-text">Rate Meter</span>
+                <span className="sidebar-text">Rate Meter & Cab Types</span>
                 <span className="sidebar-subtext">Fleet Management</span>
-              </button>
-            )}
-            {hasAccess('car-availability') && (
-              <button
-                className={activeTab === 'car-availability' ? 'active' : ''}
-                onClick={() => {
-                  setActiveTab('car-availability');
-                  if (isMobile) setSidebarOpen(false);
-                }}
-              >
-                <span className="sidebar-icon">🚗</span>
-                <span className="sidebar-text">Car Availability</span>
-                <span className="sidebar-subtext">Real-time Status</span>
-              </button>
-            )}
-            {hasAccess('cabs') && (
-              <button
-                className={activeTab === 'cabs' ? 'active' : ''}
-                onClick={() => {
-                  setActiveTab('cabs');
-                  if (isMobile) setSidebarOpen(false);
-                }}
-              >
-                <span className="sidebar-icon">🚗</span>
-                <span className="sidebar-text">Cabs</span>
-                <span className="sidebar-subtext">Manage Vehicles</span>
               </button>
             )}
           </div>
@@ -1568,8 +1639,8 @@ const AdminDashboard = () => {
                   // Find first accessible tab
                   const accessibleTabs = [
                     'dashboard', 'enquiries', 'confirmed-bookings', 'driver-assigned',
-                    'trip-end', 'cancelled-bookings', 'create-booking', 'car-availability',
-                    'rate-meters', 'cab-types', 'car-options', 'cabs', 'drivers',
+                    'trip-end', 'cancelled-bookings', 'create-booking',
+                    'rate-meters', 'drivers',
                     'event-bookings', 'bills-invoices'
                   ];
                   const firstAccessible = accessibleTabs.find(tab => hasAccess(tab));
@@ -1590,26 +1661,26 @@ const AdminDashboard = () => {
                 <div className="pie-chart-wrapper">
                   <Pie
                     data={{
-                      labels: ['Total Bookings', 'Active Cabs', 'Cab Types', 'Recent Bookings (7 days)'],
+                      labels: ['Completed Bookings', 'Assigned Bookings', 'Cancelled Bookings', 'Enquiries'],
                       datasets: [
                         {
                           label: 'Count',
                           data: [
-                            stats.totalBookings,
-                            stats.totalCabs,
-                            stats.totalCabTypes,
-                            stats.recentBookings
+                            stats.completedBookings || 0,
+                            stats.assignedBookings || 0,
+                            stats.cancelledBookings || 0,
+                            stats.enquiriesBookings || 0
                           ],
                           backgroundColor: [
-                            'rgba(22, 163, 74, 0.8)',
-                            'rgba(59, 130, 246, 0.8)',
-                            'rgba(168, 85, 247, 0.8)',
-                            'rgba(245, 158, 11, 0.8)'
+                            'rgba(34, 197, 94, 0.8)',  // Completed - light green
+                            'rgba(37, 99, 235, 0.8)',  // Assigned - light blue
+                            'rgba(239, 68, 68, 0.8)',  // Cancelled - red
+                            'rgba(245, 158, 11, 0.8)'  // Enquiries - amber
                           ],
                           borderColor: [
-                            'rgba(22, 163, 74, 1)',
-                            'rgba(59, 130, 246, 1)',
-                            'rgba(168, 85, 247, 1)',
+                            'rgba(34, 197, 94, 1)',
+                            'rgba(37, 99, 235, 1)',
+                            'rgba(239, 68, 68, 1)',
                             'rgba(245, 158, 11, 1)'
                           ],
                           borderWidth: 2
@@ -1648,64 +1719,26 @@ const AdminDashboard = () => {
                         animateRotate: true,
                         animateScale: true,
                         duration: 1000
-                      },
-                      onClick: (event, elements) => {
-                        if (elements.length > 0) {
-                          const clickedIndex = elements[0].index;
-                          // 0: Total Bookings, 1: Active Cabs, 2: Cab Types, 3: Recent Bookings (7 days)
-                          if (clickedIndex === 0) {
-                            // Total Bookings - go to enquiries tab
-                            setActiveTab('enquiries');
-                            setBookingFilters({
-                              status: 'all',
-                              serviceType: 'all',
-                              cabType: 'all',
-                              search: '',
-                              fromDate: '',
-                              toDate: '',
-                            });
-                          } else if (clickedIndex === 1) {
-                            // Active Cabs - go to car-availability tab
-                            setActiveTab('car-availability');
-                          } else if (clickedIndex === 2) {
-                            // Cab Types - go to cab-types tab
-                            setActiveTab('cab-types');
-                          } else if (clickedIndex === 3) {
-                            // Recent Bookings (7 days) - go to enquiries with date filter
-                            const today = new Date();
-                            const sevenDaysAgo = new Date(today);
-                            sevenDaysAgo.setDate(today.getDate() - 7);
-                            setActiveTab('enquiries');
-                            setBookingFilters({
-                              status: 'all',
-                              serviceType: 'all',
-                              cabType: 'all',
-                              search: '',
-                              fromDate: sevenDaysAgo.toISOString().split('T')[0],
-                              toDate: today.toISOString().split('T')[0],
-                            });
-                          }
-                        }
                       }
                     }}
                   />
                 </div>
                 <div className="chart-stats-summary">
                   <div className="stat-summary-item">
-                    <span className="stat-label">Total Bookings:</span>
-                    <span className="stat-value">{stats.totalBookings}</span>
+                    <span className="stat-label">Completed:</span>
+                    <span className="stat-value">{stats.completedBookings || 0}</span>
                   </div>
                   <div className="stat-summary-item">
-                    <span className="stat-label">Active Cabs:</span>
-                    <span className="stat-value">{stats.totalCabs}</span>
+                    <span className="stat-label">Assigned:</span>
+                    <span className="stat-value">{stats.assignedBookings || 0}</span>
                   </div>
                   <div className="stat-summary-item">
-                    <span className="stat-label">Cab Types:</span>
-                    <span className="stat-value">{stats.totalCabTypes}</span>
+                    <span className="stat-label">Cancelled:</span>
+                    <span className="stat-value">{stats.cancelledBookings || 0}</span>
                   </div>
                   <div className="stat-summary-item">
-                    <span className="stat-label">Recent (7 days):</span>
-                    <span className="stat-value">{stats.recentBookings}</span>
+                    <span className="stat-label">Enquiries:</span>
+                    <span className="stat-value">{stats.enquiriesBookings || 0}</span>
                   </div>
                 </div>
               </div>
@@ -1920,7 +1953,7 @@ const AdminDashboard = () => {
 
                   {selectedBooking.car_option_name && (
                     <div className="detail-item">
-                      <div className="detail-heading">Car Option</div>
+                      <div className="detail-heading">Category</div>
                       <div className="detail-divider"></div>
                       <div className="detail-text">{selectedBooking.car_option_name}</div>
                     </div>
@@ -2169,12 +2202,12 @@ const AdminDashboard = () => {
 
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
                         <LocationInput
-                          label="Stop B *"
+                          label="Stop B (Optional)"
                           value={multipleWayStops.stopB}
                           onSelect={(location) => {
                             setMultipleWayStops({ ...multipleWayStops, stopB: location });
                           }}
-                          placeholder="Enter second stop location"
+                          placeholder="Enter second stop location (optional)"
                           userLocation={userLocation}
                         />
                         <LocationInput
@@ -2339,20 +2372,16 @@ const AdminDashboard = () => {
                     </div>
 
                     <div className="form-group">
-                      <label>Car Option (Optional)</label>
-                      <select
-                        value={newBooking.car_option_id}
+                      <label>Category (Optional)</label>
+                      <input
+                        type="text"
+                        value={newBooking.category}
                         onChange={(e) => {
-                          setNewBooking({ ...newBooking, car_option_id: e.target.value });
+                          setNewBooking({ ...newBooking, category: e.target.value });
                         }}
-                      >
-                        <option value="">Select Car (Optional)</option>
-                        {carOptions.map((car) => (
-                          <option key={car.id} value={car.id}>
-                            {car.name}
-                          </option>
-                        ))}
-                      </select>
+                        placeholder="Enter category name"
+                        className="form-control"
+                      />
                     </div>
                   </div>
 
@@ -2500,57 +2529,7 @@ const AdminDashboard = () => {
             </div>
           )}
 
-          {activeTab === 'cabs' && hasAccess('cabs') && (
-            <div>
-              <div className="section-header">
-                <h2>Cab Details</h2>
-                <button onClick={openCreateForm} className="btn btn-primary" style={{ color: '#000' }}>
-                  + Add Cab
-                </button>
-              </div>
-              <div className="data-table-wrapper">
-                <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Vehicle Number</th>
-                    <th>Cab Type</th>
-                    <th>Driver Name</th>
-                    <th>Driver Phone</th>
-                    <th>Available</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {cabs.map((cab) => (
-                    <tr key={cab.id}>
-                      <td>{cab.vehicle_number}</td>
-                      <td>{cab.cab_type_name}</td>
-                      <td>{cab.driver_name || '-'}</td>
-                      <td>{cab.driver_phone || '-'}</td>
-                      <td>{cab.is_available ? 'Yes' : 'No'}</td>
-                      <td>{cab.is_active ? 'Active' : 'Inactive'}</td>
-                      <td>
-                        <button
-                          onClick={() => openEditForm(cab)}
-                          className="btn btn-secondary btn-sm"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete('cabs', cab.id)}
-                          className="btn btn-danger btn-sm"
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              </div>
-            </div>
-          )}
+          {/* Standalone Cabs tab has been removed; cab information is now managed under Rate Meter & Cab Types. */}
 
           {activeTab === 'rate-meters' && hasAccess('rate-meters') && (
             <div>
@@ -2558,7 +2537,7 @@ const AdminDashboard = () => {
                 <h2>Rate Meter Management</h2>
               </div>
 
-              {/* Subsection Tabs */}
+              {/* Subsection Tabs (only Rate Meter now; Cab Types is shown inside this section) */}
               <div style={{ display: 'flex', gap: '10px', marginBottom: '30px', borderBottom: '2px solid #e5e7eb' }}>
                 <button
                   onClick={() => setRateMeterSubsection('rate-meters')}
@@ -2574,51 +2553,6 @@ const AdminDashboard = () => {
                   }}
                 >
                   Rate Meter
-                </button>
-                <button
-                  onClick={() => setRateMeterSubsection('cab-types')}
-                  style={{
-                    padding: '12px 24px',
-                    border: 'none',
-                    background: rateMeterSubsection === 'cab-types' ? '#16a34a' : 'transparent',
-                    color: rateMeterSubsection === 'cab-types' ? 'white' : '#6b7280',
-                    cursor: 'pointer',
-                    borderBottom: rateMeterSubsection === 'cab-types' ? '3px solid #16a34a' : '3px solid transparent',
-                    fontWeight: rateMeterSubsection === 'cab-types' ? '600' : '400',
-                    transition: 'all 0.3s ease'
-                  }}
-                >
-                  Cab Types
-                </button>
-                <button
-                  onClick={() => setRateMeterSubsection('car-options')}
-                  style={{
-                    padding: '12px 24px',
-                    border: 'none',
-                    background: rateMeterSubsection === 'car-options' ? '#16a34a' : 'transparent',
-                    color: rateMeterSubsection === 'car-options' ? 'white' : '#6b7280',
-                    cursor: 'pointer',
-                    borderBottom: rateMeterSubsection === 'car-options' ? '3px solid #16a34a' : '3px solid transparent',
-                    fontWeight: rateMeterSubsection === 'car-options' ? '600' : '400',
-                    transition: 'all 0.3s ease'
-                  }}
-                >
-                  Car Options
-                </button>
-                <button
-                  onClick={() => setRateMeterSubsection('cabs')}
-                  style={{
-                    padding: '12px 24px',
-                    border: 'none',
-                    background: rateMeterSubsection === 'cabs' ? '#16a34a' : 'transparent',
-                    color: rateMeterSubsection === 'cabs' ? 'white' : '#6b7280',
-                    cursor: 'pointer',
-                    borderBottom: rateMeterSubsection === 'cabs' ? '3px solid #16a34a' : '3px solid transparent',
-                    fontWeight: rateMeterSubsection === 'cabs' ? '600' : '400',
-                    transition: 'all 0.3s ease'
-                  }}
-                >
-                  Cab Details
                 </button>
               </div>
 
@@ -2659,10 +2593,12 @@ const AdminDashboard = () => {
                                   setFormData({
                                     service_type: serviceType,
                                     car_category: '',
-                                    base_fare: 0,
+                                    base_fare: serviceType === 'airport' ? 0 : '',
                                     per_km_rate: 0,
-                                    per_minute_rate: 0,
-                                    per_hour_rate: 0,
+                                    hours: serviceType === 'local' ? '' : undefined,
+                                    extra_hour_rate: serviceType === 'local' ? 0 : undefined,
+                                    extra_km_rate: serviceType === 'local' ? 0 : undefined,
+                                    trip_type: serviceType === 'outstation' ? '' : undefined,
                                   });
                                   setEditingItem(null);
                                   setShowForm(true);
@@ -2697,16 +2633,42 @@ const AdminDashboard = () => {
                                     {serviceType === 'local' ? (
                                       <>
                                         <div className="rate-detail-item">
+                                          <span className="rate-label">Hours:</span>
+                                          <span className="rate-value">{rate.hours || '-'} hrs</span>
+                                        </div>
+                                        <div className="rate-detail-item">
                                           <span className="rate-label">Base Fare:</span>
                                           <span className="rate-value">₹{rate.base_fare}</span>
                                         </div>
                                         <div className="rate-detail-item">
-                                          <span className="rate-label">Per Hour:</span>
-                                          <span className="rate-value">₹{rate.per_hour_rate}</span>
+                                          <span className="rate-label">Extra Hour:</span>
+                                          <span className="rate-value">₹{rate.extra_hour_rate || 0}</span>
+                                        </div>
+                                        <div className="rate-detail-item">
+                                          <span className="rate-label">Extra KM:</span>
+                                          <span className="rate-value">₹{rate.extra_km_rate || 0}</span>
+                                        </div>
+                                      </>
+                                    ) : serviceType === 'airport' ? (
+                                      <>
+                                        <div className="rate-detail-item">
+                                          <span className="rate-label">Per KM:</span>
+                                          <span className="rate-value">₹{rate.per_km_rate}</span>
+                                        </div>
+                                        <div className="rate-detail-item" style={{ fontSize: '11px', color: '#6b7280', fontStyle: 'italic' }}>
+                                          (Fare will be doubled)
                                         </div>
                                       </>
                                     ) : (
                                       <>
+                                        <div className="rate-detail-item">
+                                          <span className="rate-label">Trip Type:</span>
+                                          <span className="rate-value">
+                                            {rate.trip_type === 'one_way' ? 'One Way' : 
+                                             rate.trip_type === 'round_trip' ? 'Round Trip' : 
+                                             rate.trip_type === 'multiple_way' ? 'Multiple Way' : '-'}
+                                          </span>
+                                        </div>
                                         <div className="rate-detail-item">
                                           <span className="rate-label">Base Fare:</span>
                                           <span className="rate-value">₹{rate.base_fare}</span>
@@ -2735,9 +2697,9 @@ const AdminDashboard = () => {
               </div>
               )}
 
-              {/* Cab Types Subsection */}
-              {rateMeterSubsection === 'cab-types' && (
-                <div>
+              {/* Cab Types are now shown inside the Rate Meter section instead of a separate subsection */}
+              {rateMeterSubsection === 'rate-meters' && (
+                <div style={{ marginTop: '40px' }}>
                   <div className="section-header">
                     <h2>Cab Types</h2>
                     <button onClick={openCreateForm} className="btn btn-primary" style={{ color: '#000' }}>
@@ -2840,130 +2802,8 @@ const AdminDashboard = () => {
                 </div>
               )}
 
-              {/* Car Options Subsection */}
-              {rateMeterSubsection === 'car-options' && (
-                <div>
-                  <div className="section-header">
-                    <h2>Car Options</h2>
-                    <button onClick={openCreateForm} className="btn btn-primary">
-                      + Add Car Option
-                    </button>
-                  </div>
-                  <div className="data-table-wrapper">
-                    <table className="data-table">
-                      <thead>
-                        <tr>
-                          <th>Name</th>
-                          <th>Image</th>
-                          <th>Description</th>
-                          <th>Sort Order</th>
-                          <th>Status</th>
-                          <th>Actions</th>
-                        </tr>
-                      </thead>
-                    <tbody>
-                      {carOptions.map((opt) => (
-                        <tr key={opt.id}>
-                          <td data-label="Name">{opt.name}</td>
-                          <td data-label="Image">
-                            {opt.image_url ? (
-                              <div>
-                                <img
-                                  src={getImageUrl(opt.image_url)}
-                                  alt={opt.name}
-                                  style={{ width: '80px', height: '48px', objectFit: 'cover', borderRadius: '6px' }}
-                                />
-                                <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
-                                  {Array.isArray(opt.image_urls)
-                                    ? `${opt.image_urls.length} image${opt.image_urls.length === 1 ? '' : 's'} uploaded`
-                                    : '1 image uploaded'}
-                                </div>
-                              </div>
-                            ) : (
-                              <span style={{ color: '#9ca3af' }}>No image uploaded</span>
-                            )}
-                          </td>
-                          <td data-label="Description" style={{ maxWidth: '320px' }}>
-                            <span style={{ display: 'block', whiteSpace: 'pre-wrap' }}>
-                              {opt.description || '-'}
-                            </span>
-                          </td>
-                          <td data-label="Sort Order">{opt.sort_order ?? 0}</td>
-                          <td data-label="Status">{opt.is_active ? 'Active' : 'Inactive'}</td>
-                          <td data-label="Actions">
-                            <button
-                              onClick={() => openEditForm(opt)}
-                              className="btn btn-secondary btn-sm"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleDelete('car-options', opt.id)}
-                              className="btn btn-danger btn-sm"
-                            >
-                              Delete
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  </div>
-                </div>
-              )}
-
-              {/* Cab Details Subsection */}
-              {rateMeterSubsection === 'cabs' && (
-                <div>
-                  <div className="section-header">
-                    <h2>Cab Details</h2>
-                    <button onClick={openCreateForm} className="btn btn-primary" style={{ color: '#000' }}>
-                      + Add Cab
-                    </button>
-                  </div>
-                  <div className="data-table-wrapper">
-                    <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Vehicle Number</th>
-                        <th>Cab Type</th>
-                        <th>Driver Name</th>
-                        <th>Driver Phone</th>
-                        <th>Available</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {cabs.map((cab) => (
-                        <tr key={cab.id}>
-                          <td>{cab.vehicle_number}</td>
-                          <td>{cab.cab_type_name}</td>
-                          <td>{cab.driver_name || '-'}</td>
-                          <td>{cab.driver_phone || '-'}</td>
-                          <td>{cab.is_available ? 'Yes' : 'No'}</td>
-                          <td>{cab.is_active ? 'Active' : 'Inactive'}</td>
-                          <td>
-                            <button
-                              onClick={() => openEditForm(cab)}
-                              className="btn btn-secondary btn-sm"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleDelete('cabs', cab.id)}
-                              className="btn btn-danger btn-sm"
-                            >
-                              Delete
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  </div>
-                </div>
-              )}
+              {/* Car Options and standalone Cab Details subsections have been removed from Rate Meter.
+                  Car models for marketing are still managed via existing data, but not as separate fleet tabs. */}
             </div>
           )}
 
@@ -3128,7 +2968,7 @@ const AdminDashboard = () => {
                       <th>Service</th>
                       <th>Details</th>
                       <th>Cab Type</th>
-                      <th>Car Option</th>
+                      <th>Category</th>
                       <th>Passenger</th>
                       <th>Phone</th>
                       <th>Fare</th>
@@ -3253,7 +3093,7 @@ const AdminDashboard = () => {
                               )}
                             </td>
                             <td data-label="Cab Type">{booking.cab_type_name}</td>
-                            <td data-label="Car Option">{booking.car_option_name || '-'}</td>
+                            <td data-label="Category">{booking.car_option_name || '-'}</td>
                             <td data-label="Passenger">{booking.passenger_name}</td>
                             <td data-label="Phone">{booking.passenger_phone}</td>
                             <td data-label="Fare">₹{booking.fare_amount}</td>
@@ -4444,165 +4284,570 @@ const AdminDashboard = () => {
             </div>
           )}
 
+          {activeTab === 'create-invoice' && hasAccess('bills-invoices') && (
+            <div>
+              <div className="section-header">
+                <h2>Create Invoice</h2>
+              </div>
+              <div className="card" style={{ padding: '30px', marginTop: '20px' }}>
+                <h3 style={{ marginBottom: '20px' }}>Create New Invoice</h3>
+                <form onSubmit={async (e) => {
+                    e.preventDefault();
+                    try {
+                      setLoading(true);
+                      // Calculate totals
+                      const serviceAmount = parseFloat(invoiceFormData.service_amount || 0);
+                      const tollTax = parseFloat(invoiceFormData.toll_tax || 0);
+                      const stateTax = parseFloat(invoiceFormData.state_tax || 0);
+                      const driverBatta = parseFloat(invoiceFormData.driver_batta || 0);
+                      const parkingCharges = parseFloat(invoiceFormData.parking_charges || 0);
+                      const placardCharges = parseFloat(invoiceFormData.placard_charges || 0);
+                      const extras = parseFloat(invoiceFormData.extras || 0);
+                      const subTotal = serviceAmount + tollTax + stateTax + driverBatta + parkingCharges + placardCharges + extras;
+                      const gstRate = 0.18;
+                      const gstAmount = invoiceFormData.with_gst ? (subTotal * gstRate) : 0;
+                      const cgstAmount = invoiceFormData.with_gst ? (gstAmount / 2) : 0;
+                      const sgstAmount = invoiceFormData.with_gst ? (gstAmount / 2) : 0;
+                      const grandTotal = subTotal + gstAmount;
+
+                      const payload = {
+                        ...invoiceFormData,
+                        service_amount: serviceAmount,
+                        toll_tax: tollTax,
+                        state_tax: stateTax,
+                        driver_batta: driverBatta,
+                        parking_charges: parkingCharges,
+                        placard_charges: placardCharges,
+                        extras: extras,
+                        sub_total: subTotal,
+                        gst_amount: gstAmount,
+                        cgst_amount: cgstAmount,
+                        sgst_amount: sgstAmount,
+                        grand_total: grandTotal,
+                        with_gst: invoiceFormData.with_gst ? 1 : 0
+                      };
+
+                      await api.post('/admin/invoices', payload);
+                      alert('Invoice created successfully!');
+                      // Reset form
+                      setInvoiceFormData({
+                        invoice_no: '',
+                        invoice_date: new Date().toISOString().split('T')[0],
+                        company_gstin: '29AHYPC7622F1ZZ',
+                        hsn_sac: '996411',
+                        customer_name: '',
+                        customer_address: '',
+                        customer_phone: '',
+                        customer_email: '',
+                        customer_state: '',
+                        customer_gst: '',
+                        service_description: '',
+                        sl_no: '1',
+                        total_kms: '0',
+                        no_of_days: '-',
+                        rate_details: '',
+                        service_amount: '0',
+                        toll_tax: '0',
+                        state_tax: '0',
+                        driver_batta: '0',
+                        parking_charges: '0',
+                        placard_charges: '0',
+                        extras: '0',
+                        with_gst: false
+                      });
+                      // Refresh invoices list
+                      const invoicesRes = await api.get('/admin/invoices');
+                      setInvoices(invoicesRes.data);
+                      // Switch to bills-invoices tab to view the new invoice
+                      setActiveTab('bills-invoices');
+                    } catch (error) {
+                      console.error('Error creating invoice:', error);
+                      alert(error.response?.data?.error || error.response?.data?.errors?.[0]?.msg || 'Error creating invoice');
+                    } finally {
+                      setLoading(false);
+                    }
+                  }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
+                      <div className="form-group">
+                        <label>Invoice Number *</label>
+                        <input
+                          type="text"
+                          value={invoiceFormData.invoice_no}
+                          onChange={(e) => setInvoiceFormData({ ...invoiceFormData, invoice_no: e.target.value })}
+                          required
+                          placeholder="e.g., NC-001"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Invoice Date *</label>
+                        <input
+                          type="date"
+                          value={invoiceFormData.invoice_date}
+                          onChange={(e) => setInvoiceFormData({ ...invoiceFormData, invoice_date: e.target.value })}
+                          required
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>With GST</label>
+                        <select
+                          value={invoiceFormData.with_gst ? 'yes' : 'no'}
+                          onChange={(e) => setInvoiceFormData({ ...invoiceFormData, with_gst: e.target.value === 'yes' })}
+                        >
+                          <option value="no">Without GST</option>
+                          <option value="yes">With GST</option>
+                        </select>
+                      </div>
+                      {invoiceFormData.with_gst && (
+                        <>
+                          <div className="form-group">
+                            <label>Company GSTIN</label>
+                            <input
+                              type="text"
+                              value={invoiceFormData.company_gstin}
+                              onChange={(e) => setInvoiceFormData({ ...invoiceFormData, company_gstin: e.target.value })}
+                              placeholder="29AHYPC7622F1ZZ"
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label>HSN/SAC</label>
+                            <input
+                              type="text"
+                              value={invoiceFormData.hsn_sac}
+                              onChange={(e) => setInvoiceFormData({ ...invoiceFormData, hsn_sac: e.target.value })}
+                              placeholder="996411"
+                            />
+                          </div>
+                        </>
+                      )}
+                      <div className="form-group">
+                        <label>Customer Name *</label>
+                        <input
+                          type="text"
+                          value={invoiceFormData.customer_name}
+                          onChange={(e) => setInvoiceFormData({ ...invoiceFormData, customer_name: e.target.value })}
+                          required
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Customer Address</label>
+                        <textarea
+                          value={invoiceFormData.customer_address}
+                          onChange={(e) => setInvoiceFormData({ ...invoiceFormData, customer_address: e.target.value })}
+                          rows="3"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Customer Phone</label>
+                        <input
+                          type="tel"
+                          value={invoiceFormData.customer_phone}
+                          onChange={(e) => setInvoiceFormData({ ...invoiceFormData, customer_phone: e.target.value })}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Customer Email</label>
+                        <input
+                          type="email"
+                          value={invoiceFormData.customer_email}
+                          onChange={(e) => setInvoiceFormData({ ...invoiceFormData, customer_email: e.target.value })}
+                        />
+                      </div>
+                      {invoiceFormData.with_gst && (
+                        <>
+                          <div className="form-group">
+                            <label>Customer State</label>
+                            <input
+                              type="text"
+                              value={invoiceFormData.customer_state}
+                              onChange={(e) => setInvoiceFormData({ ...invoiceFormData, customer_state: e.target.value })}
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label>Customer GST</label>
+                            <input
+                              type="text"
+                              value={invoiceFormData.customer_gst}
+                              onChange={(e) => setInvoiceFormData({ ...invoiceFormData, customer_gst: e.target.value })}
+                            />
+                          </div>
+                        </>
+                      )}
+                      <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                        <label>Service Description</label>
+                        <textarea
+                          value={invoiceFormData.service_description}
+                          onChange={(e) => setInvoiceFormData({ ...invoiceFormData, service_description: e.target.value })}
+                          rows="4"
+                          placeholder="Service details, pickup/drop locations, etc."
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>SL No</label>
+                        <input
+                          type="text"
+                          value={invoiceFormData.sl_no}
+                          onChange={(e) => setInvoiceFormData({ ...invoiceFormData, sl_no: e.target.value })}
+                          placeholder="1"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Total KMs</label>
+                        <input
+                          type="text"
+                          value={invoiceFormData.total_kms}
+                          onChange={(e) => setInvoiceFormData({ ...invoiceFormData, total_kms: e.target.value })}
+                          placeholder="0"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>No. of Days</label>
+                        <input
+                          type="text"
+                          value={invoiceFormData.no_of_days}
+                          onChange={(e) => setInvoiceFormData({ ...invoiceFormData, no_of_days: e.target.value })}
+                          placeholder="-"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Rate Details</label>
+                        <input
+                          type="text"
+                          value={invoiceFormData.rate_details}
+                          onChange={(e) => setInvoiceFormData({ ...invoiceFormData, rate_details: e.target.value })}
+                          placeholder="Cab type, category, etc."
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Service Amount (₹) *</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={invoiceFormData.service_amount}
+                          onChange={(e) => setInvoiceFormData({ ...invoiceFormData, service_amount: e.target.value })}
+                          required
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Toll Tax (₹)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={invoiceFormData.toll_tax}
+                          onChange={(e) => setInvoiceFormData({ ...invoiceFormData, toll_tax: e.target.value })}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>State Tax (₹)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={invoiceFormData.state_tax}
+                          onChange={(e) => setInvoiceFormData({ ...invoiceFormData, state_tax: e.target.value })}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Driver Batta (₹)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={invoiceFormData.driver_batta}
+                          onChange={(e) => setInvoiceFormData({ ...invoiceFormData, driver_batta: e.target.value })}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Parking Charges (₹)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={invoiceFormData.parking_charges}
+                          onChange={(e) => setInvoiceFormData({ ...invoiceFormData, parking_charges: e.target.value })}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Placard Charges (₹)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={invoiceFormData.placard_charges}
+                          onChange={(e) => setInvoiceFormData({ ...invoiceFormData, placard_charges: e.target.value })}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Extras (₹)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={invoiceFormData.extras}
+                          onChange={(e) => setInvoiceFormData({ ...invoiceFormData, extras: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    <div style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>
+                      <button type="submit" className="btn btn-primary" disabled={loading}>
+                        {loading ? 'Creating...' : 'Create Invoice'}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => setActiveTab('bills-invoices')}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                </form>
+              </div>
+            </div>
+          )}
+
           {activeTab === 'bills-invoices' && hasAccess('bills-invoices') && (
             <div>
               <div className="section-header">
                 <h2>Bills and Invoices</h2>
-                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                  <label style={{ fontSize: '14px', fontWeight: '600' }}>Filter:</label>
-                  <select
-                    value={billsFilter}
-                    onChange={(e) => setBillsFilter(e.target.value)}
-                    style={{
-                      padding: '8px 16px',
-                      borderRadius: '6px',
-                      border: '1px solid #d1d5db',
-                      fontSize: '14px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <option value="all">All Bookings</option>
-                    <option value="bookings">Regular Bookings</option>
-                    <option value="corporate">Corporate Bookings</option>
-                  </select>
-                </div>
               </div>
-              <div className="data-table-wrapper">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Booking ID</th>
-                      <th>Type</th>
-                      <th>Passenger</th>
-                      <th>Service Type</th>
-                      <th>From</th>
-                      <th>To</th>
-                      <th>Fare (₹)</th>
-                      <th>Status</th>
-                      <th>Date</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(() => {
-                      let displayData = [];
-                      const hasCorporateAccess = user?.role === 'admin' || hasAccess('bills-invoices');
-                      if (billsFilter === 'all') {
-                        displayData = [
-                          ...bookings.map(b => ({ ...b, type: 'booking' })),
-                          ...(hasCorporateAccess ? corporateBookings.map(cb => ({ ...cb, type: 'corporate', id: cb.id, passenger_name: cb.name, passenger_phone: cb.phone_number, service_type: cb.service_type || 'local', from_location: cb.pickup_point, to_location: cb.drop_point || '-', fare_amount: cb.fare_amount || 0, booking_status: cb.status, booking_date: cb.created_at })) : [])
-                        ];
-                      } else if (billsFilter === 'bookings') {
-                        displayData = bookings.map(b => ({ ...b, type: 'booking' }));
-                      } else if (billsFilter === 'corporate') {
-                        displayData = hasCorporateAccess ? corporateBookings.map(cb => ({ ...cb, type: 'corporate', id: cb.id, passenger_name: cb.name, passenger_phone: cb.phone_number, service_type: cb.service_type || 'local', from_location: cb.pickup_point, to_location: cb.drop_point || '-', fare_amount: cb.fare_amount || 0, booking_status: cb.status, booking_date: cb.created_at })) : [];
-                      }
-                      
-                      // Sort by date (most recent first)
-                      displayData.sort((a, b) => {
-                        const dateA = new Date(a.booking_date || a.created_at || 0);
-                        const dateB = new Date(b.booking_date || b.created_at || 0);
-                        return dateB - dateA;
-                      });
-                      
-                      if (displayData.length === 0) {
-                        return (
-                          <tr>
-                            <td colSpan="10" style={{ textAlign: 'center', padding: '40px' }}>
-                              <p className="text-muted">No bookings found</p>
-                            </td>
-                          </tr>
-                        );
-                      }
-                      
-                      return displayData.map((booking) => (
-                        <tr key={`${booking.type}-${booking.id}`} className="booking-table-row">
-                          <td>
-                            <strong style={{ color: '#16a34a' }}>#{booking.id}</strong>
-                          </td>
-                          <td>
-                            <span style={{
-                              padding: '4px 8px',
-                              borderRadius: '4px',
-                              fontSize: '12px',
-                              fontWeight: '600',
-                              backgroundColor: booking.type === 'corporate' ? '#dbeafe' : '#f3f4f6',
-                              color: booking.type === 'corporate' ? '#1e40af' : '#374151'
-                            }}>
-                              {booking.type === 'corporate' ? 'Corporate' : 'Regular'}
-                            </span>
-                          </td>
-                          <td>
-                            <div>
-                              <strong>{booking.passenger_name || '-'}</strong>
-                              <br />
-                              <small style={{ color: '#6b7280' }}>{booking.passenger_phone || '-'}</small>
-                            </div>
-                          </td>
-                          <td>
-                            <span className={`service-badge ${booking.service_type || 'local'}`}>
-                              {booking.service_type === 'local' ? 'Local' : 
-                               booking.service_type === 'airport' ? 'Airport' : 
-                               booking.service_type === 'outstation' ? 'Outstation' : 'Local'}
-                            </span>
-                          </td>
-                          <td>{booking.from_location || 'N/A'}</td>
-                          <td>{booking.to_location || 'N/A'}</td>
-                          <td>
-                            <strong style={{ color: '#16a34a', fontSize: '16px' }}>
-                              ₹{parseFloat(booking.fare_amount || 0).toFixed(2)}
-                            </strong>
-                          </td>
-                          <td>
-                            <span className={`status-badge ${booking.booking_status || 'pending'}`}>
-                              {booking.booking_status || 'pending'}
-                            </span>
-                          </td>
-                          <td>
-                            {booking.booking_date 
-                              ? new Date(booking.booking_date).toLocaleDateString('en-IN', {
-                                  day: '2-digit',
-                                  month: 'short',
-                                  year: 'numeric'
-                                })
-                              : '-'}
-                          </td>
-                          <td>
-                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                              {booking.type === 'booking' ? (
-                                <>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleGenerateInvoice(booking.id, false);
-                                    }}
-                                    className="btn btn-secondary btn-sm"
-                                    title="Generate Invoice without GST"
-                                  >
-                                    Invoice (No GST)
-                                  </button>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleGenerateInvoice(booking.id, true);
-                                    }}
-                                    className="btn btn-primary btn-sm"
-                                    title="Generate Invoice with GST"
-                                  >
-                                    Invoice (GST)
-                                  </button>
-                                </>
-                              ) : (
-                                <span style={{ fontSize: '12px', color: '#6b7280' }}>Corporate Booking</span>
-                              )}
-                            </div>
-                          </td>
+              <div className="booking-filters-box" style={{ marginTop: '20px', marginBottom: '20px' }}>
+                    <label style={{ fontSize: '14px', fontWeight: '600' }}>Filter:</label>
+                    <select
+                      value={billsFilter}
+                      onChange={(e) => setBillsFilter(e.target.value)}
+                      style={{
+                        padding: '8px 16px',
+                        borderRadius: '6px',
+                        border: '1px solid #d1d5db',
+                        fontSize: '14px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <option value="all">All</option>
+                      <option value="bookings">Regular Bookings</option>
+                      <option value="corporate">Corporate Bookings</option>
+                      <option value="invoices">Manual Invoices</option>
+                    </select>
+                  </div>
+                  <div className="data-table-wrapper">
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>ID/Invoice No</th>
+                          <th>Type</th>
+                          <th>Customer/Passenger</th>
+                          <th>Service Type</th>
+                          <th>From</th>
+                          <th>To</th>
+                          <th>Amount (₹)</th>
+                          <th>Status</th>
+                          <th>Date</th>
+                          <th>Actions</th>
                         </tr>
-                      ));
-                    })()}
-                  </tbody>
-                </table>
-              </div>
+                      </thead>
+                      <tbody>
+                        {(() => {
+                          let displayData = [];
+                          const hasCorporateAccess = user?.role === 'admin' || hasAccess('bills-invoices');
+                          if (billsFilter === 'all') {
+                            displayData = [
+                              ...bookings.map(b => ({ ...b, type: 'booking' })),
+                              ...(hasCorporateAccess ? corporateBookings.map(cb => ({ ...cb, type: 'corporate', id: cb.id, passenger_name: cb.name, passenger_phone: cb.phone_number, service_type: cb.service_type || 'local', from_location: cb.pickup_point, to_location: cb.drop_point || '-', fare_amount: cb.fare_amount || 0, booking_status: cb.status, booking_date: cb.created_at })) : []),
+                              ...invoices.map(inv => ({ ...inv, type: 'invoice', id: inv.id, passenger_name: inv.customer_name, passenger_phone: inv.customer_phone, service_type: 'local', from_location: inv.customer_address, to_location: 'N/A', fare_amount: inv.grand_total, booking_status: 'completed', booking_date: inv.invoice_date }))
+                            ];
+                          } else if (billsFilter === 'bookings') {
+                            displayData = bookings.map(b => ({ ...b, type: 'booking' }));
+                          } else if (billsFilter === 'corporate') {
+                            displayData = hasCorporateAccess ? corporateBookings.map(cb => ({ ...cb, type: 'corporate', id: cb.id, passenger_name: cb.name, passenger_phone: cb.phone_number, service_type: cb.service_type || 'local', from_location: cb.pickup_point, to_location: cb.drop_point || '-', fare_amount: cb.fare_amount || 0, booking_status: cb.status, booking_date: cb.created_at })) : [];
+                          } else if (billsFilter === 'invoices') {
+                            displayData = invoices.map(inv => ({ ...inv, type: 'invoice', id: inv.id, passenger_name: inv.customer_name, passenger_phone: inv.customer_phone, service_type: 'local', from_location: inv.customer_address, to_location: 'N/A', fare_amount: inv.grand_total, booking_status: 'completed', booking_date: inv.invoice_date }));
+                          }
+                          
+                          // Sort by date (most recent first)
+                          displayData.sort((a, b) => {
+                            const dateA = new Date(a.booking_date || a.created_at || a.invoice_date || 0);
+                            const dateB = new Date(b.booking_date || b.created_at || b.invoice_date || 0);
+                            return dateB - dateA;
+                          });
+                          
+                          if (displayData.length === 0) {
+                            return (
+                              <tr>
+                                <td colSpan="10" style={{ textAlign: 'center', padding: '40px' }}>
+                                  <p className="text-muted">No records found</p>
+                                </td>
+                              </tr>
+                            );
+                          }
+                          
+                          return displayData.map((item) => (
+                            <tr key={`${item.type}-${item.id}`} className="booking-table-row">
+                              <td>
+                                <strong style={{ color: '#16a34a' }}>
+                                  {item.type === 'invoice' ? item.invoice_no : `#${item.id}`}
+                                </strong>
+                              </td>
+                              <td>
+                                <span style={{
+                                  padding: '4px 8px',
+                                  borderRadius: '4px',
+                                  fontSize: '12px',
+                                  fontWeight: '600',
+                                  backgroundColor: item.type === 'corporate' ? '#dbeafe' : item.type === 'invoice' ? '#fef3c7' : '#f3f4f6',
+                                  color: item.type === 'corporate' ? '#1e40af' : item.type === 'invoice' ? '#92400e' : '#374151'
+                                }}>
+                                  {item.type === 'corporate' ? 'Corporate' : item.type === 'invoice' ? 'Invoice' : 'Regular'}
+                                </span>
+                              </td>
+                              <td>
+                                <div>
+                                  <strong>{item.passenger_name || item.customer_name || '-'}</strong>
+                                  <br />
+                                  <small style={{ color: '#6b7280' }}>{item.passenger_phone || item.customer_phone || '-'}</small>
+                                </div>
+                              </td>
+                              <td>
+                                <span className={`service-badge ${item.service_type || 'local'}`}>
+                                  {item.service_type === 'local' ? 'Local' : 
+                                   item.service_type === 'airport' ? 'Airport' : 
+                                   item.service_type === 'outstation' ? 'Outstation' : 'Local'}
+                                </span>
+                              </td>
+                              <td>{item.from_location || 'N/A'}</td>
+                              <td>{item.to_location || 'N/A'}</td>
+                              <td>
+                                <strong style={{ color: '#16a34a', fontSize: '16px' }}>
+                                  ₹{parseFloat(item.fare_amount || item.grand_total || 0).toFixed(2)}
+                                </strong>
+                              </td>
+                              <td>
+                                {item.type === 'invoice' ? (
+                                  <span style={{
+                                    padding: '4px 8px',
+                                    borderRadius: '4px',
+                                    fontSize: '12px',
+                                    fontWeight: '600',
+                                    backgroundColor: '#d1fae5',
+                                    color: '#065f46'
+                                  }}>
+                                    {item.with_gst ? 'With GST' : 'No GST'}
+                                  </span>
+                                ) : (
+                                  <span className={`status-badge ${item.booking_status || 'pending'}`}>
+                                    {item.booking_status || 'pending'}
+                                  </span>
+                                )}
+                              </td>
+                              <td>
+                                {(item.booking_date || item.invoice_date || item.created_at)
+                                  ? new Date(item.booking_date || item.invoice_date || item.created_at).toLocaleDateString('en-IN', {
+                                      day: '2-digit',
+                                      month: 'short',
+                                      year: 'numeric'
+                                    })
+                                  : '-'}
+                              </td>
+                              <td>
+                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                  {item.type === 'booking' ? (
+                                    <>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleGenerateInvoice(item.id, false);
+                                        }}
+                                        className="btn btn-secondary btn-sm"
+                                        title="Generate Invoice without GST"
+                                      >
+                                        Invoice (No GST)
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleGenerateInvoice(item.id, true);
+                                        }}
+                                        className="btn btn-primary btn-sm"
+                                        title="Generate Invoice with GST"
+                                      >
+                                        Invoice (GST)
+                                      </button>
+                                    </>
+                                  ) : (item.type === 'invoice' || item.invoice_no) ? (
+                                    <>
+                                      <button
+                                        onClick={async (e) => {
+                                          e.stopPropagation();
+                                          try {
+                                            const invoiceId = item.id || item.invoice_id;
+                                            if (!invoiceId) {
+                                              alert('Invoice ID not found');
+                                              return;
+                                            }
+                                            const response = await api.get(`/admin/invoices/${invoiceId}/pdf`, {
+                                              params: { withGST: false },
+                                              responseType: 'blob'
+                                            });
+                                            const url = window.URL.createObjectURL(new Blob([response.data]));
+                                            const link = document.createElement('a');
+                                            link.href = url;
+                                            link.setAttribute('download', `invoice-${item.invoice_no || invoiceId}-no-gst.pdf`);
+                                            document.body.appendChild(link);
+                                            link.click();
+                                            link.remove();
+                                          } catch (error) {
+                                            console.error('Error downloading invoice:', error);
+                                            alert('Error downloading invoice: ' + (error.response?.data?.error || error.message));
+                                          }
+                                        }}
+                                        className="btn btn-secondary btn-sm"
+                                        title="Download Invoice without GST"
+                                        style={{ marginRight: '4px' }}
+                                      >
+                                        Invoice (No GST)
+                                      </button>
+                                      <button
+                                        onClick={async (e) => {
+                                          e.stopPropagation();
+                                          try {
+                                            const invoiceId = item.id || item.invoice_id;
+                                            if (!invoiceId) {
+                                              alert('Invoice ID not found');
+                                              return;
+                                            }
+                                            const response = await api.get(`/admin/invoices/${invoiceId}/pdf`, {
+                                              params: { withGST: true },
+                                              responseType: 'blob'
+                                            });
+                                            const url = window.URL.createObjectURL(new Blob([response.data]));
+                                            const link = document.createElement('a');
+                                            link.href = url;
+                                            link.setAttribute('download', `invoice-${item.invoice_no || invoiceId}-with-gst.pdf`);
+                                            document.body.appendChild(link);
+                                            link.click();
+                                            link.remove();
+                                          } catch (error) {
+                                            console.error('Error downloading invoice:', error);
+                                            alert('Error downloading invoice: ' + (error.response?.data?.error || error.message));
+                                          }
+                                        }}
+                                        className="btn btn-primary btn-sm"
+                                        title="Download Invoice with GST"
+                                      >
+                                        Invoice (GST)
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <span style={{ fontSize: '12px', color: '#6b7280' }}>Corporate Booking</span>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ));
+                        })()}
+                      </tbody>
+                    </table>
+                  </div>
             </div>
           )}
 
@@ -5270,69 +5515,7 @@ const AdminDashboard = () => {
           )}
 
 
-          {activeTab === 'car-availability' && hasAccess('car-availability') && (
-            <div>
-              <div className="section-header">
-                <h2>Car Availability</h2>
-                <div style={{ fontSize: '14px', color: '#6b7280' }}>
-                  Last updated: {new Date().toLocaleTimeString()}
-                </div>
-              </div>
-              <div className="data-table-wrapper">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Vehicle Number</th>
-                      <th>Cab Type</th>
-                      <th>Driver Name</th>
-                      <th>Driver Phone</th>
-                      <th>Available</th>
-                      <th>Status</th>
-                      <th>Last Updated</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {cabs.map((cab) => {
-                      const cabType = cabTypes.find(ct => ct.id === cab.cab_type_id);
-                      return (
-                        <tr key={cab.id}>
-                          <td><strong>{cab.vehicle_number}</strong></td>
-                          <td>{cabType?.name || cab.cab_type_name || '-'}</td>
-                          <td>{cab.driver_name || '-'}</td>
-                          <td>{cab.driver_phone || '-'}</td>
-                          <td>
-                            <span style={{
-                              padding: '4px 12px',
-                              borderRadius: '12px',
-                              fontSize: '12px',
-                              fontWeight: '600',
-                              backgroundColor: cab.is_available ? '#d1fae5' : '#fee2e2',
-                              color: cab.is_available ? '#065f46' : '#991b1b'
-                            }}>
-                              {cab.is_available ? '✓ Available' : '✗ Unavailable'}
-                            </span>
-                          </td>
-                          <td>
-                            <span style={{
-                              padding: '4px 12px',
-                              borderRadius: '12px',
-                              fontSize: '12px',
-                              fontWeight: '600',
-                              backgroundColor: cab.is_active ? '#dbeafe' : '#f3f4f6',
-                              color: cab.is_active ? '#1e40af' : '#6b7280'
-                            }}>
-                              {cab.is_active ? 'Active' : 'Inactive'}
-                            </span>
-                          </td>
-                          <td>{cab.updated_at ? new Date(cab.updated_at).toLocaleString() : '-'}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
+          {/* Standalone Car Availability section removed; availability is implied from cab configuration under Fleet Management. */}
 
           {activeTab === 'car-options' && hasAccess('car-options') && (
             <div>
@@ -5702,9 +5885,18 @@ const AdminDashboard = () => {
                         <select
                           required
                           value={formData.service_type || ''}
-                          onChange={(e) =>
-                            setFormData({ ...formData, service_type: e.target.value })
-                          }
+                          onChange={(e) => {
+                            const newServiceType = e.target.value;
+                            // Reset form data when service type changes
+                            setFormData({ 
+                              ...formData, 
+                              service_type: newServiceType,
+                              car_category: '',
+                              base_fare: newServiceType === 'airport' ? 0 : '',
+                              hours: newServiceType === 'local' ? '' : undefined,
+                              trip_type: newServiceType === 'outstation' ? '' : undefined,
+                            });
+                          }}
                         >
                           <option value="">Select service type</option>
                           <option value="local">Local</option>
@@ -5713,56 +5905,89 @@ const AdminDashboard = () => {
                         </select>
                       </div>
                       <div className="form-group">
-                        <label>Car Category *</label>
+                        <label>Car Category</label>
                         <select
-                          required
                           value={formData.car_category || ''}
                           onChange={(e) =>
                             setFormData({ ...formData, car_category: e.target.value })
                           }
                         >
                           <option value="">Select car category</option>
-                          {rateMeterCategories.length === 0 ? (
-                            <option value="" disabled>
-                              No assigned car categories found. Assign cars to cab types first.
-                            </option>
-                          ) : (
-                            rateMeterCategories.map((cat) => (
-                              <option key={cat} value={cat}>
-                                {cat}
-                              </option>
-                            ))
-                          )}
+                          {formData.service_type === 'local' || formData.service_type === 'airport' ? (
+                            <>
+                              <option value="Sedan">Sedan</option>
+                              <option value="Any SUV">Any SUV</option>
+                              <option value="Innova Crysta">Innova Crysta</option>
+                            </>
+                          ) : formData.service_type === 'outstation' ? (
+                            <>
+                              <option value="Sedan">Sedan</option>
+                              <option value="Any SUV">Any SUV</option>
+                              <option value="Innova Crysta">Innova Crysta</option>
+                              <option value="TT">TT</option>
+                              <option value="Mini Bus">Mini Bus</option>
+                            </>
+                          ) : null}
                         </select>
                       </div>
-                      <div className="form-group">
-                        <label>Base Fare (₹) *</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          required
-                          value={formData.base_fare || ''}
-                          onChange={(e) =>
-                            setFormData({ ...formData, base_fare: parseFloat(e.target.value) || 0 })
-                          }
-                        />
-                      </div>
-                      {formData.service_type === 'local' ? (
-                        <div className="form-group">
-                          <label>Per Hour Rate (₹) *</label>
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            required
-                            value={formData.per_hour_rate || ''}
-                            onChange={(e) =>
-                              setFormData({ ...formData, per_hour_rate: parseFloat(e.target.value) || 0 })
-                            }
-                          />
-                        </div>
-                      ) : (
+                      {formData.service_type === 'local' && (
+                        <>
+                          <div className="form-group">
+                            <label>Hours</label>
+                            <select
+                              value={formData.hours || ''}
+                              onChange={(e) =>
+                                setFormData({ ...formData, hours: parseInt(e.target.value) })
+                              }
+                            >
+                              <option value="">Select hours</option>
+                              <option value="4">4 hours</option>
+                              <option value="8">8 hours</option>
+                              <option value="12">12 hours</option>
+                            </select>
+                          </div>
+                          <div className="form-group">
+                            <label>Base Fare (₹)</label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={formData.base_fare || ''}
+                              onChange={(e) =>
+                                setFormData({ ...formData, base_fare: parseFloat(e.target.value) || 0 })
+                              }
+                              placeholder="Base fare for selected hours package"
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label>Extra Hour Rate (₹)</label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={formData.extra_hour_rate || ''}
+                              onChange={(e) =>
+                                setFormData({ ...formData, extra_hour_rate: parseFloat(e.target.value) || 0 })
+                              }
+                              placeholder="Rate per extra hour beyond package"
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label>Extra KM Rate (₹)</label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={formData.extra_km_rate || ''}
+                              onChange={(e) =>
+                                setFormData({ ...formData, extra_km_rate: parseFloat(e.target.value) || 0 })
+                              }
+                              placeholder="Rate per extra kilometer"
+                            />
+                          </div>
+                        </>
+                      )}
+                      {formData.service_type === 'airport' && (
                         <>
                           <div className="form-group">
                             <label>Per KM Rate (₹)</label>
@@ -5772,25 +5997,57 @@ const AdminDashboard = () => {
                               min="0"
                               value={formData.per_km_rate || ''}
                               onChange={(e) =>
-                                setFormData({ ...formData, per_km_rate: e.target.value === '' ? '' : parseFloat(e.target.value) || 0 })
+                                setFormData({ ...formData, per_km_rate: parseFloat(e.target.value) || 0 })
+                              }
+                              placeholder="Rate per kilometer (fare will be doubled)"
+                            />
+                          </div>
+                          <div style={{ padding: '10px', backgroundColor: '#fef3c7', borderRadius: '6px', marginBottom: '15px', fontSize: '13px' }}>
+                            <strong>Note:</strong> Airport bookings are drop-only, so the fare will be automatically doubled (round trip calculation).
+                          </div>
+                        </>
+                      )}
+                      {formData.service_type === 'outstation' && (
+                        <>
+                          <div className="form-group">
+                            <label>Trip Type</label>
+                            <select
+                              value={formData.trip_type || ''}
+                              onChange={(e) =>
+                                setFormData({ ...formData, trip_type: e.target.value })
+                              }
+                            >
+                              <option value="">Select trip type</option>
+                              <option value="one_way">One Way</option>
+                              <option value="round_trip">Round Trip</option>
+                              <option value="multiple_way">Multiple Way</option>
+                            </select>
+                          </div>
+                          <div className="form-group">
+                            <label>Base Fare (₹)</label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={formData.base_fare || ''}
+                              onChange={(e) =>
+                                setFormData({ ...formData, base_fare: parseFloat(e.target.value) || 0 })
+                              }
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label>Per KM Rate (₹)</label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={formData.per_km_rate || ''}
+                              onChange={(e) =>
+                                setFormData({ ...formData, per_km_rate: parseFloat(e.target.value) || 0 })
                               }
                             />
                           </div>
                         </>
-                      )}
-                      {formData.service_type !== 'local' && (
-                        <div className="form-group">
-                          <label>Per Hour Rate (₹) (Optional, for local override)</label>
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            value={formData.per_hour_rate || ''}
-                            onChange={(e) =>
-                              setFormData({ ...formData, per_hour_rate: parseFloat(e.target.value) || 0 })
-                            }
-                          />
-                        </div>
                       )}
                       <div className="form-group">
                         <label>
