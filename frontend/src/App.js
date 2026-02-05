@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import BookingPage from './pages/BookingPage';
+import HomePage from './pages/HomePage';
 import CarOptions from './pages/CarOptions';
 import CheckBooking from './pages/CheckBooking';
 import AdminLogin from './pages/AdminLogin';
@@ -35,7 +35,7 @@ function App() {
       <AuthProvider>
         <Router>
           <Routes>
-            <Route path="/" element={<BookingPage />} />
+            <Route path="/" element={<HomePage />} />
             <Route path="/car-options" element={<CarOptions />} />
             <Route path="/check-booking" element={<CheckBooking />} />
             <Route path="/about" element={<AboutPage />} />
@@ -43,16 +43,9 @@ function App() {
             <Route path="/corporate" element={<CorporateBookingPage />} />
             <Route path="/events" element={<EventsPage />} />
             <Route path="/admin/login" element={<AdminLogin />} />
+            <Route path="/admin" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
             <Route path="/login" element={<UserAuth />} />
             <Route path="/account" element={<AccountPage />} />
-            <Route
-              path="/admin"
-              element={
-                <ProtectedRoute>
-                  <AdminDashboard />
-                </ProtectedRoute>
-              }
-            />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Router>

@@ -2,9 +2,20 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import LocationInput from '../components/LocationInput';
+import TimePicker from '../components/TimePicker';
 import AnimatedMapBackground from '../components/AnimatedMapBackground';
 import MainNavbar from '../components/MainNavbar';
 import './CorporateBookingPage.css';
+
+// Helper function to open calendar picker when clicking anywhere on date/time inputs
+const handleDateInputClick = (e) => {
+  // Ensure calendar opens when clicking anywhere on the input
+  if (e.target.showPicker) {
+    e.target.showPicker();
+  } else {
+    e.target.focus();
+  }
+};
 
 const CorporateBookingPage = () => {
   const navigate = useNavigate();
@@ -150,15 +161,20 @@ const CorporateBookingPage = () => {
 
     setLoading(true);
     try {
-      // Include lat/lng in the request and format time with AM/PM
-      const formattedTime = formData.travel_time ? `${formData.travel_time} ${formData.time_period}` : '';
+      const formatTimeForAPI = (hhmm) => {
+        if (!hhmm) return '';
+        const [h, m] = hhmm.split(':').map(Number);
+        const h12 = h % 12 || 12;
+        const ampm = h < 12 ? 'AM' : 'PM';
+        return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+      };
+      const formattedTime = formatTimeForAPI(formData.travel_time);
       const payload = {
         ...formData,
         pickup_lat: pickupLocation ? pickupLocation.lat : null,
         pickup_lng: pickupLocation ? pickupLocation.lng : null,
         travel_time: formattedTime,
       };
-      // Remove time_period from payload as it's now included in travel_time
       delete payload.time_period;
       
       const response = await api.post('/corporate/bookings', payload);
@@ -308,32 +324,23 @@ const CorporateBookingPage = () => {
 
                 <div className="form-group">
                   <label>Date and Time *</label>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                  <div className="corporate-datetime-row">
                     <input
                       type="date"
                       name="travel_date"
                       value={formData.travel_date}
                       onChange={handleChange}
+                      onClick={handleDateInputClick}
                       min={new Date().toISOString().split('T')[0]}
                       className={errors.travel_date ? 'error' : ''}
                       placeholder="Date"
                     />
-                    <input
-                      type="time"
-                      name="travel_time"
+                    <TimePicker
                       value={formData.travel_time}
-                      onChange={handleChange}
+                      onChange={(v) => handleChange({ target: { name: 'travel_time', value: v } })}
+                      placeholder="Pick time"
                       className={errors.travel_time ? 'error' : ''}
-                      placeholder="Time"
                     />
-                    <select
-                      name="time_period"
-                      value={formData.time_period}
-                      onChange={handleChange}
-                    >
-                      <option value="AM">AM</option>
-                      <option value="PM">PM</option>
-                    </select>
                   </div>
                   {(errors.travel_date || errors.travel_time) && (
                     <span className="error-message">{errors.travel_date || errors.travel_time}</span>

@@ -245,3 +245,32 @@ textarea {
   -ms-user-select: text;
   user-select: text;
 }
+
+/* Date/datetime inputs – consistent box so they don’t break layout */
+input[type="date"],
+input[type="datetime-local"] {
+  box-sizing: border-box;
+  min-height: 42px;
+  cursor: pointer;
+}
+
+/* Utility: compact address display used across admin pages */
+.compact-address {
+  white-space: normal;
+  word-break: break-word;
+  display: inline-block;
+  max-width: 100%;
+}
+
+/* Utility: responsive grid for forms/details */
+.responsive-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+/* Hide site-wide nav hamburger toggle when not wanted (minimal, non-layout change)
+   Keeps all markup and JS intact; simply hides the visual button. */
+.nav-toggle {
+  display: none !important;
+}

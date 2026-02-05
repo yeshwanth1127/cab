@@ -115,7 +115,7 @@ const AccountPage = () => {
                   {bookings.map((b) => (
                     <div key={b.id} className="detail-item full-width">
                       <div className="detail-label">
-                        #{b.id} &mdash; {b.from_location} → {b.to_location}
+                        #{b.id} &mdash; <span className="compact-address">{b.from_location}</span> → <span className="compact-address">{b.to_location}</span>
                       </div>
                       <div className="detail-value">
                         ₹{b.fare_amount} &nbsp;|&nbsp; {b.cab_type_name || 'Cab'} &nbsp;|&nbsp;

@@ -14,7 +14,7 @@
   left: -30%;
   /* Light/white map background */
   filter: brightness(1.1) contrast(0.9);
-  opacity: 0.9;
+  opacity: 1;
   transition: transform 0.2s ease-out;
   /* Optimize for mobile performance */
   will-change: transform;
@@ -31,7 +31,7 @@
     height: 140%;
     top: -20%;
     left: -20%;
-    opacity: 0.85;
+    opacity: 1;
     /* Reduce filter complexity on mobile */
     filter: brightness(1.05) contrast(0.95);
   }
@@ -43,7 +43,7 @@
     height: 130%;
     top: -15%;
     left: -15%;
-    opacity: 0.8;
+    opacity: 1;
   }
 }
 

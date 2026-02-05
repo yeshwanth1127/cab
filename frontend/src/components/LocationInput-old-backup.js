@@ -1,48 +1,30 @@
-/**
- * Production-grade LocationInput Component
- * 
- * Features:
- * - Session tokens for cost optimization
- * - 250ms debounce for instant feel
- * - Frontend LRU cache
- * - Uses new /places/autocomplete and /places/details endpoints
- */
-
 import { useEffect, useRef, useState } from "react";
-import { v4 as uuidv4 } from 'uuid';
 import './LocationInput.css';
 import MapPicker from './MapPicker';
 import api from '../services/api';
+import { loadGoogleMaps } from '../utils/googleMapsLoader';
 
-// Frontend LRU cache (5 minute TTL)
+// Local cache for instant results (increased to 100 queries)
 const localCache = new Map();
 const MAX_CACHE_SIZE = 100;
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-// Normalize query for cache key
+// Normalize query for better cache hits
 function normalizeQuery(query) {
   if (!query) return '';
   return query
     .toLowerCase()
     .trim()
-    .replace(/\s+/g, ' ')
-    .replace(/[^\w\s]/g, '')
+    .replace(/\s+/g, ' ') // Multiple spaces to single space
+    .replace(/[^\w\s]/g, '') // Remove special characters except spaces
     .trim();
 }
 
-// Generate cache key (normalizes query internally)
+// Helper to get cache key (normalized)
 function getCacheKey(query, userLocation) {
   const normalizedQuery = normalizeQuery(query);
   const roundedLat = userLocation?.lat ? Math.round(userLocation.lat * 100) / 100 : 0;
   const roundedLng = userLocation?.lng ? Math.round(userLocation.lng * 100) / 100 : 0;
-  return `ac|${normalizedQuery}|${roundedLat}|${roundedLng}`;
-}
-
-// Don't use local cache for KIA / 560300 so backend always returns KIA airport, not Karnataka 560300
-function isKIAQuery(query) {
-  if (!query || typeof query !== 'string') return false;
-  const q = query.toLowerCase().trim().replace(/\s+/g, ' ');
-  return q === 'kia' || q.startsWith('kia ') || q.endsWith(' kia') || q === '560300' || q.replace(/\s/g, '') === '560300';
+  return `${normalizedQuery}|${roundedLat}|${roundedLng}`;
 }
 
 export default function LocationInput({
@@ -60,20 +42,6 @@ export default function LocationInput({
   const [isRequestingLocation, setIsRequestingLocation] = useState(false);
   const [showMapPicker, setShowMapPicker] = useState(false);
   const selectedAddressRef = useRef(null);
-  const sessionTokenRef = useRef(null); // Session token for cost optimization
-
-  // Generate new session token when user starts typing
-  const getOrCreateSessionToken = () => {
-    if (!sessionTokenRef.current) {
-      sessionTokenRef.current = uuidv4();
-    }
-    return sessionTokenRef.current;
-  };
-
-  // Reset session token after selection
-  const resetSessionToken = () => {
-    sessionTokenRef.current = null;
-  };
 
   // Initialize query from value prop
   useEffect(() => {
@@ -86,23 +54,19 @@ export default function LocationInput({
     }
   }, [value]);
 
-  // Autocomplete with session tokens
+  // Backend-first autocomplete
   useEffect(() => {
-    // Clear results immediately on query change (better UX)
-    if (query.length < 2) {
-      setResults([]);
-      selectedAddressRef.current = null;
-      return;
-    }
-
-    // Don't trigger autocomplete if query matches selected address
+    // Don't trigger autocomplete if query matches the selected address exactly
     if (selectedAddressRef.current && query === selectedAddressRef.current) {
       setResults([]);
       return;
     }
 
-    // Clear results immediately to avoid showing stale suggestions
-    setResults([]);
+    if (!query || query.length < 2) {
+      setResults([]);
+      selectedAddressRef.current = null;
+      return;
+    }
 
     // Cancel previous request
     if (abortControllerRef.current) {
@@ -112,33 +76,24 @@ export default function LocationInput({
     clearTimeout(timeoutRef.current);
 
     timeoutRef.current = setTimeout(async () => {
-      // Generate cache key (normalizes query internally)
-      const cacheKey = getCacheKey(query, userLocation);
+      const normalizedQuery = normalizeQuery(query);
+      const cacheKey = getCacheKey(normalizedQuery, userLocation);
       
-      // Don't use local cache for "kia" / "560300" – always get KIA airport from backend, not Karnataka 560300
-      const skipCache = isKIAQuery(query);
-      if (!skipCache) {
-        const cached = localCache.get(cacheKey);
-        if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
-          localCache.delete(cacheKey);
-          localCache.set(cacheKey, cached);
-          setResults(cached.data);
-          return;
-        }
+      // Check local cache first (including similar queries)
+      if (localCache.has(cacheKey)) {
+        const cachedResults = localCache.get(cacheKey);
+        setResults(cachedResults);
+        return;
       }
 
-      // Create new AbortController
+      // Create new AbortController for this request
       abortControllerRef.current = new AbortController();
       const signal = abortControllerRef.current.signal;
 
       try {
-        // Get or create session token
-        const sessionToken = getOrCreateSessionToken();
-
-        // Build request params - send raw query (don't normalize)
+        // Single backend call with normalized query
         const params = {
-          q: query.trim(), // Send raw query, let Google handle it
-          sessionToken,
+          q: normalizedQuery,
         };
 
         if (userLocation && userLocation.lat && userLocation.lng) {
@@ -146,35 +101,31 @@ export default function LocationInput({
           params.lng = userLocation.lng;
         }
 
-        // Call new autocomplete endpoint
-        const response = await api.get('/places/autocomplete', {
+        const response = await api.get('/places/search', {
           params,
-          signal,
-          timeout: 1500, // 1.5 seconds max for autocomplete
+          signal, // Attach abort signal
+          timeout: 10000, // 10 second timeout (backend handles sequential calls)
         });
 
-        // Check if aborted
+        // Check if request was aborted
         if (signal.aborted) {
           return;
         }
 
-        const predictions = response.data || [];
+        const suggestions = response.data || [];
 
         // Update local cache with LRU eviction
         if (localCache.size >= MAX_CACHE_SIZE) {
-          // Remove oldest 20%
+          // Remove oldest 20% of entries
           const entriesToDelete = Math.floor(MAX_CACHE_SIZE * 0.2);
           const keys = Array.from(localCache.keys());
           for (let i = 0; i < entriesToDelete; i++) {
             localCache.delete(keys[i]);
           }
         }
-        localCache.set(cacheKey, {
-          data: predictions,
-          timestamp: Date.now(),
-        });
+        localCache.set(cacheKey, suggestions);
 
-        setResults(predictions);
+        setResults(suggestions);
       } catch (error) {
         // Ignore abort errors
         if (error.name === 'AbortError' || error.name === 'CanceledError' || error.code === 'ERR_CANCELED') {
@@ -184,7 +135,7 @@ export default function LocationInput({
         console.warn('[LocationInput] Search failed:', error.message);
         setResults([]);
       }
-    }, 250); // 250ms debounce for instant feel
+    }, 300); // Reduced to 300ms debounce for faster response
 
     return () => {
       clearTimeout(timeoutRef.current);
@@ -194,69 +145,94 @@ export default function LocationInput({
     };
   }, [query, userLocation]);
 
-  // Handle place selection
   const handleSelect = async (place) => {
-    // Get session token before resetting
-    const sessionToken = sessionTokenRef.current;
+    let location;
 
-    // Fetch place details from backend
-    try {
-      const response = await api.post('/places/details', {
-        placeId: place.place_id,
-        sessionToken, // Use same session token for cost optimization
-      });
-
-      const details = response.data;
-      
-      // Validate that we have coordinates (critical for downstream logic)
-      if (!details.lat || !details.lng) {
-        throw new Error('Place details missing coordinates');
+    // Normalize backend response format
+    if (place.source === 'google_autocomplete') {
+      // For Google Autocomplete, we need to fetch place details to get lat/lng
+      if (place.lat && place.lng) {
+        location = {
+          address: place.formatted || place.address,
+          lat: place.lat,
+          lng: place.lng
+        };
+      } else if (place.place_id) {
+        // Fetch place details using Google Maps API
+        const googleKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY_NEW;
+        if (googleKey && window.google && window.google.maps && window.google.maps.places) {
+          try {
+            await loadGoogleMaps(googleKey);
+            const placesService = new window.google.maps.places.PlacesService(document.createElement('div'));
+            const placeDetails = await new Promise((resolve) => {
+              placesService.getDetails(
+                {
+                  placeId: place.place_id,
+                  fields: ['geometry', 'formatted_address']
+                },
+                (placeData, status) => {
+                  if (status === window.google.maps.places.PlacesServiceStatus.OK && placeData?.geometry) {
+                    resolve({
+                      address: placeData.formatted_address || place.formatted || place.address,
+                      lat: placeData.geometry.location.lat(),
+                      lng: placeData.geometry.location.lng()
+                    });
+                  } else {
+                    resolve({
+                      address: place.formatted || place.address,
+                      lat: null,
+                      lng: null
+                    });
+                  }
+                }
+              );
+            });
+            location = placeDetails;
+          } catch (error) {
+            location = {
+              address: place.formatted || place.address,
+              lat: null,
+              lng: null
+            };
+          }
+        } else {
+          location = {
+            address: place.formatted || place.address,
+            lat: null,
+            lng: null
+          };
+        }
+      } else {
+        location = {
+          address: place.formatted || place.address,
+          lat: null,
+          lng: null
+        };
       }
-
-      const location = {
-        address: details.formatted || details.address,
-        lat: details.lat,
-        lng: details.lng,
+    } else {
+      // Google or MapmyIndia - already have lat/lng
+      location = {
+        address: place.formatted || place.address || place.name,
+        lat: place.lat,
+        lng: place.lng
       };
+    }
 
-      // Clear pending requests
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
+    // Clear any pending autocomplete requests
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
 
-      // Reset session token after selection
-      resetSessionToken();
+    // Set the selected address to prevent autocomplete from re-triggering
+    selectedAddressRef.current = location.address;
+    setQuery(location.address);
+    setResults([]);
 
-      // Update UI
-      selectedAddressRef.current = location.address;
-      setQuery(location.address);
-      setResults([]);
-
-      if (onSelect) {
-        onSelect(location);
-      }
-    } catch (error) {
-      console.error('[LocationInput] Failed to fetch place details:', error);
-      
-      // Clear pending requests
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-
-      // Reset session token
-      resetSessionToken();
-      
-      // Show error to user - don't silently accept broken location
-      alert('Failed to get location details. Please try selecting the location again or use the map picker.');
-      
-      // Don't update UI with invalid data
-      // User can try again or use map picker
+    if (onSelect) {
+      onSelect(location);
     }
   };
 
@@ -279,9 +255,9 @@ export default function LocationInput({
       const lat = position.coords.latitude;
       const lng = position.coords.longitude;
 
-      // Google only: use /places/reverse (MapmyIndia /address/reverse commented out below)
+      // Use backend reverse geocode
       try {
-        const response = await api.post('/places/reverse', {
+        const response = await api.post('/address/reverse', {
           lat: lat.toString(),
           lng: lng.toString(),
         });
@@ -300,7 +276,6 @@ export default function LocationInput({
             abortControllerRef.current.abort();
           }
 
-          resetSessionToken();
           selectedAddressRef.current = location.address;
           setQuery(location.address);
           setResults([]);
@@ -314,7 +289,7 @@ export default function LocationInput({
         console.error('Error reverse geocoding:', error);
       }
 
-      // Fallback: use coordinates
+      // Fallback: use coordinates as address
       const location = {
         address: `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
         lat,
@@ -328,7 +303,6 @@ export default function LocationInput({
         abortControllerRef.current.abort();
       }
 
-      resetSessionToken();
       selectedAddressRef.current = location.address;
       setQuery(location.address);
       setResults([]);
@@ -357,10 +331,9 @@ export default function LocationInput({
           placeholder={placeholder || 'Enter location'}
           onChange={(e) => {
             const newValue = e.target.value;
-            // Clear selected address ref if user manually changes input
+            // Clear selected address ref if user manually changes the input
             if (selectedAddressRef.current && newValue !== selectedAddressRef.current) {
               selectedAddressRef.current = null;
-              resetSessionToken(); // Reset session on manual edit
             }
             setQuery(newValue);
           }}
@@ -368,25 +341,24 @@ export default function LocationInput({
           className="location-input"
         />
         <div className="location-buttons">
-          {showCurrentLocation && (
-            <button
-              type="button"
-              onClick={handleUseCurrentLocation}
-              disabled={isRequestingLocation}
-              className="location-button"
-              title="Use current location"
-            >
-              {isRequestingLocation ? '⏳' : '📍'}
-            </button>
-          )}
+        {showCurrentLocation && (
+          <button
+            type="button"
+            onClick={handleUseCurrentLocation}
+            disabled={isRequestingLocation}
+            className="location-button"
+            title="Use current location"
+          >
+            {isRequestingLocation ? '⏳' : '📍'}
+          </button>
+        )}
         </div>
         {results.length > 0 && (
           <ul className="location-dropdown">
             {results.map((place, index) => {
               const placeId = place.place_id || `place-${index}`;
-              // Use Google's structured formatting
-              const mainText = place.main_text || place.description || 'Unknown location';
-              const secondaryText = place.secondary_text || '';
+              const displayName = place.formatted || place.address || place.name || 'Unknown location';
+              const secondaryInfo = place.locality || place.city || '';
 
               return (
                 <li
@@ -394,9 +366,9 @@ export default function LocationInput({
                   onClick={() => handleSelect(place)}
                   className="suggestion-item"
                 >
-                  <div className="suggestion-name">{mainText}</div>
-                  {secondaryText && secondaryText !== mainText && (
-                    <div className="suggestion-type">📍 {secondaryText}</div>
+                  <div className="suggestion-name">{displayName}</div>
+                  {secondaryInfo && secondaryInfo !== displayName && (
+                    <div className="suggestion-type">📍 {secondaryInfo}</div>
                   )}
                 </li>
               );
@@ -414,14 +386,14 @@ export default function LocationInput({
             lat: location.lat,
             lng: location.lng
           };
-          // Clear pending requests
+          // Clear any pending autocomplete requests
           if (timeoutRef.current) {
             clearTimeout(timeoutRef.current);
           }
           if (abortControllerRef.current) {
             abortControllerRef.current.abort();
           }
-          resetSessionToken();
+          // Set the selected address to prevent autocomplete from re-triggering
           selectedAddressRef.current = locationData.address;
           setQuery(locationData.address);
           setResults([]);

@@ -2,9 +2,20 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import LocationInput from '../components/LocationInput';
+import TimePicker from '../components/TimePicker';
 import AnimatedMapBackground from '../components/AnimatedMapBackground';
 import MainNavbar from '../components/MainNavbar';
 import './EventsPage.css';
+
+// Helper function to open calendar picker when clicking anywhere on date/time inputs
+const handleDateInputClick = (e) => {
+  // Ensure calendar opens when clicking anywhere on the input
+  if (e.target.showPicker) {
+    e.target.showPicker();
+  } else {
+    e.target.focus();
+  }
+};
 
 const EventsPage = () => {
   const navigate = useNavigate();
@@ -377,6 +388,7 @@ const EventsPage = () => {
                       name="pickup_date"
                       value={formData.pickup_date}
                       onChange={handleChange}
+                      onClick={handleDateInputClick}
                       min={new Date().toISOString().split('T')[0]}
                       className={errors.pickup_date ? 'error' : ''}
                     />
@@ -385,11 +397,10 @@ const EventsPage = () => {
 
                   <div className="form-group">
                     <label>Pickup Time *</label>
-                    <input
-                      type="time"
-                      name="pickup_time"
+                    <TimePicker
                       value={formData.pickup_time}
-                      onChange={handleChange}
+                      onChange={(v) => handleChange({ target: { name: 'pickup_time', value: v } })}
+                      placeholder="Pick time"
                       className={errors.pickup_time ? 'error' : ''}
                     />
                     {errors.pickup_time && <span className="error-message">{errors.pickup_time}</span>}

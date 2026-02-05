@@ -17,7 +17,9 @@
     "react-dom": "^18.2.0",
     "react-map-gl": "^8.1.0",
     "react-router-dom": "^6.20.0",
-    "react-scripts": "5.0.1"
+    "react-scripts": "5.0.1",
+    "react-time-picker": "^8.0.2",
+    "uuid": "^9.0.1"
   },
   "scripts": {
     "start": "react-scripts start",

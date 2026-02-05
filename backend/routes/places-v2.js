@@ -10,60 +10,15 @@
 
 const express = require('express');
 const axios = require('axios');
+const { v4: uuidv4 } = require('uuid');
 const redis = require('../utils/redis');
 
 const router = express.Router();
 
-// Use single-underscore name (matches .env: GOOGLE_MAPS_BACKEND_KEY_NEW); double-underscore was typo
-const GOOGLE_API_KEY = process.env.GOOGLE_MAPS_BACKEND_KEY_NEW || process.env.GOOGLE_MAPS_BACKEND_KEY;
+const GOOGLE_API_KEY = process.env.GOOGLE__MAPS_BACKEND_KEY_NEW || process.env.GOOGLE_MAPS_BACKEND_KEY;
 
 if (!GOOGLE_API_KEY) {
   console.warn('[Places API] WARNING: Google Maps API key not configured');
-}
-
-// KIA (Kempegowda International Airport) - inject when user searches "kia" so we show airport, not pincode 560300
-const KIA_PLACE_ID = 'KIA_BANGALORE';
-const KIA_AUTOCOMPLETE = {
-  place_id: KIA_PLACE_ID,
-  description: 'Kempegowda International Airport (KIA), Bangalore',
-  main_text: 'Kempegowda International Airport (KIA)',
-  secondary_text: 'Bangalore',
-  types: ['airport'],
-};
-const KIA_DETAILS = {
-  place_id: KIA_PLACE_ID,
-  name: 'Kempegowda International Airport',
-  address: 'Kempegowda International Airport Bangalore',
-  formatted: 'Kempegowda International Airport Bangalore',
-  locality: 'Devanahalli',
-  city: 'Bangalore',
-  state: 'Karnataka',
-  lat: 13.1986,
-  lng: 77.7066,
-};
-
-function shouldInjectKIA(query) {
-  if (!query || typeof query !== 'string') return false;
-  const q = query.toLowerCase().trim().replace(/\s+/g, ' ');
-  return q === 'kia' || q.startsWith('kia ') || q.endsWith(' kia') || q.includes('kempegowda') ||
-    (q.includes('bangalore') && q.includes('airport')) || (q.includes('airport') && q.includes('bangalore')) ||
-    q === '560300' || q.replace(/\s/g, '') === '560300';
-}
-
-// Exact "kia" – return only KIA airport, never call Google (so Karnataka 560300 never appears)
-function isExactKIAQuery(query) {
-  if (!query || typeof query !== 'string') return false;
-  const q = query.toLowerCase().trim();
-  return q === 'kia' || q.replace(/\s/g, '') === 'kia';
-}
-
-// Filter out "Karnataka 560300, India" pincode – any suggestion containing 560300 when user meant KIA
-function isPincode560300Result(pred) {
-  if (!pred) return false;
-  const d = (pred.description || '').toLowerCase();
-  const main = (pred.main_text || '').toLowerCase();
-  const sec = (pred.secondary_text || '').toLowerCase();
-  return d.includes('560300') || main.includes('560300') || sec.includes('560300');
 }
 
 // Cache TTL: 10 minutes (short for freshness)
@@ -131,32 +86,20 @@ router.get('/autocomplete', async (req, res) => {
     const userLat = lat ? parseFloat(lat) : null;
     const userLng = lng ? parseFloat(lng) : null;
 
+    // Check cache
     const cacheKey = getCacheKey(query, userLat, userLng);
-    const isKIAQuery = shouldInjectKIA(query);
-    const exactKIA = isExactKIAQuery(query);
-
-    // Exact "kia" – return ONLY KIA airport, do not call Google (Karnataka 560300 can never appear)
-    if (exactKIA) {
-      const kiaOnly = [{ ...KIA_AUTOCOMPLETE }];
-      await redis.set(cacheKey, kiaOnly, CACHE_TTL);
-      return res.json(kiaOnly);
-    }
-
-    // Don't use cache for other "kia-like" / "560300" so we always return KIA airport first
-    if (!isKIAQuery) {
-      const cached = await redis.get(cacheKey);
-      if (cached) {
-        return res.json(cached);
-      }
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+      return res.json(cached);
     }
 
     // Build Google Autocomplete request
-    // Note: types=geocode|establishment is INVALID (Google rejects: geocode and establishment cannot be combined)
     const url = 'https://maps.googleapis.com/maps/api/place/autocomplete/json';
     const params = {
       input: query,
       key: GOOGLE_API_KEY,
-      components: 'country:in', // India only; omit types to get both addresses and establishments
+      components: 'country:in', // India only
+      types: 'geocode|establishment', // Addresses + establishments
     };
 
     // Add location bias if user location provided
@@ -178,27 +121,20 @@ router.get('/autocomplete', async (req, res) => {
 
     // Handle Google API response
     if (response.data.status !== 'OK' && response.data.status !== 'ZERO_RESULTS') {
-      console.warn('[Places API] Google Autocomplete:', response.data.status, response.data.error_message || '');
+      console.warn('[Places API] Google Autocomplete error:', response.data.status);
       return res.json([]);
     }
 
     const predictions = response.data.predictions || [];
 
     // Normalize predictions (minimal transformation)
-    let normalized = predictions.map((prediction) => ({
+    const normalized = predictions.map((prediction) => ({
       place_id: prediction.place_id,
       description: prediction.description,
       main_text: prediction.structured_formatting?.main_text || prediction.description,
       secondary_text: prediction.structured_formatting?.secondary_text || '',
       types: prediction.types || [],
     }));
-
-    // When user searches "kia" or "560300", show only KIA airport – remove Karnataka 560300 entirely
-    if (isKIAQuery) {
-      const kiaEntry = { ...KIA_AUTOCOMPLETE };
-      normalized = normalized.filter((p) => p.place_id !== KIA_PLACE_ID && !isPincode560300Result(p));
-      normalized = [kiaEntry, ...normalized];
-    }
 
     // Cache results
     await redis.set(cacheKey, normalized, CACHE_TTL);
@@ -231,11 +167,6 @@ router.post('/details', async (req, res) => {
 
     if (!placeId) {
       return res.status(400).json({ error: 'placeId is required' });
-    }
-
-    // KIA synthetic place: return fixed address/coords (no Google call)
-    if (placeId === KIA_PLACE_ID) {
-      return res.json(KIA_DETAILS);
     }
 
     if (!GOOGLE_API_KEY) {
@@ -309,72 +240,6 @@ router.post('/details', async (req, res) => {
       console.error('[Places API] Error:', error.message);
     }
     return res.status(500).json({ error: 'Failed to fetch place details' });
-  }
-});
-
-/**
- * POST /api/places/reverse
- *
- * Reverse geocode using Google Geocoding API (India only).
- * Body: { lat, lng }
- * Response: { address, geocode: { lat, lng } }
- */
-router.post('/reverse', async (req, res) => {
-  try {
-    const { lat, lng } = req.body;
-
-    if (lat == null || lng == null) {
-      return res.status(400).json({ error: 'lat and lng are required' });
-    }
-
-    if (!GOOGLE_API_KEY) {
-      return res.status(503).json({ error: 'Google Maps API key not configured' });
-    }
-
-    const latNum = parseFloat(lat);
-    const lngNum = parseFloat(lng);
-    if (Number.isNaN(latNum) || Number.isNaN(lngNum)) {
-      return res.status(400).json({ error: 'Invalid lat or lng' });
-    }
-
-    const url = 'https://maps.googleapis.com/maps/api/geocode/json';
-    const response = await axios.get(url, {
-      params: {
-        latlng: `${latNum},${lngNum}`,
-        key: GOOGLE_API_KEY,
-        result_type: 'street_address|premise|subpremise|establishment|point_of_interest',
-      },
-      timeout: 2000,
-    });
-
-    if (response.data.status !== 'OK' || !response.data.results?.length) {
-      return res.status(404).json({ error: 'No address found for coordinates' });
-    }
-
-    const results = response.data.results;
-    const inIndia = (r) => {
-      const comps = r.address_components || [];
-      return comps.some(
-        (c) => c.types && c.types.includes('country') && c.short_name === 'IN'
-      );
-    };
-    const result = results.find(inIndia) || results[0];
-
-    const location = result.geometry?.location || { lat: latNum, lng: lngNum };
-    const resLat = typeof location.lat === 'function' ? location.lat() : location.lat;
-    const resLng = typeof location.lng === 'function' ? location.lng() : location.lng;
-
-    return res.json({
-      address: result.formatted_address || `${latNum}, ${lngNum}`,
-      geocode: { lat: resLat, lng: resLng },
-    });
-  } catch (error) {
-    if (error.code === 'ECONNABORTED') {
-      console.warn('[Places API] Google Reverse Geocode timeout');
-    } else {
-      console.error('[Places API] Error:', error.message);
-    }
-    return res.status(500).json({ error: 'Failed to reverse geocode' });
   }
 });
 

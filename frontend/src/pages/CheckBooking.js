@@ -124,12 +124,12 @@ const CheckBooking = () => {
 
                   <div className="detail-item">
                     <span className="detail-label">From:</span>
-                    <span className="detail-value">{booking.from_location}</span>
+                    <span className="detail-value compact-address">{booking.from_location}</span>
                   </div>
 
                   <div className="detail-item">
                     <span className="detail-label">To:</span>
-                    <span className="detail-value">{booking.to_location}</span>
+                    <span className="detail-value compact-address">{booking.to_location}</span>
                   </div>
 
                   <div className="detail-item">

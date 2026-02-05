@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 const CornerLogo = () => {
   const [hidden, setHidden] = useState(false);
   const [lastScrollY, setLastScrollY] = useState(0);
+  const [showImage, setShowImage] = useState(true);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -26,10 +27,19 @@ const CornerLogo = () => {
 
   return (
     <a href="/" className={className} aria-label="Namma Cabs home">
-      <span className="logo-text">
-        <span className="logo-namma">namma</span>
-        <span className="logo-cabs">cabs</span>
-      </span>
+      {showImage ? (
+        <img
+          src="/logo.png"
+          alt="Namma Cabs"
+          className="corner-logo__img"
+          onError={() => setShowImage(false)}
+        />
+      ) : (
+        <span className="logo-text">
+          <span className="logo-namma">namma</span>
+          <span className="logo-cabs">cabs</span>
+        </span>
+      )}
     </a>
   );
 };

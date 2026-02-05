@@ -30,6 +30,457 @@
   font-size: 15px;
 }
 
+.car-options-booking-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+  padding: 12px 16px;
+  background: rgba(22, 163, 74, 0.08);
+  border: 1px solid rgba(22, 163, 74, 0.25);
+  border-radius: 12px;
+  margin-bottom: 16px;
+  font-size: 0.95rem;
+  color: #374151;
+}
+
+.car-options-booking-summary .car-options-badge {
+  font-weight: 700;
+  color: #16a34a;
+}
+
+/* Local flow: cab types with rates and cabs */
+.local-cab-types {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  margin-top: 16px;
+}
+
+.local-cab-type-card {
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 16px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.12);
+}
+
+.local-cab-type-header {
+  display: flex;
+  gap: 20px;
+  padding: 20px 24px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.local-cab-type-image-wrap {
+  width: 140px;
+  min-width: 140px;
+  height: 100px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #e5e7eb;
+}
+
+.local-cab-type-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.local-cab-type-image-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.5rem;
+  background: #f1f5f9;
+}
+
+.local-cab-type-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.local-cab-type-name {
+  margin: 0 0 6px;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.local-cab-type-desc {
+  margin: 0 0 12px;
+  font-size: 0.9rem;
+  color: #6b7280;
+  line-height: 1.4;
+}
+
+.local-cab-type-rates {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-bottom: 8px;
+}
+
+.local-rate-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #374151;
+}
+
+.local-rate-pill {
+  display: inline-block;
+  padding: 6px 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #374151;
+  background: #f3f4f6;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.local-rate-pill-selected {
+  background: rgba(22, 163, 74, 0.12);
+  border-color: #16a34a;
+  color: #15803d;
+}
+
+.local-rate-extra {
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+.local-cab-type-selected-rate {
+  font-size: 1rem;
+  color: #111827;
+}
+
+.local-cab-type-selected-rate strong {
+  color: #16a34a;
+  font-size: 1.1rem;
+}
+
+.local-cabs-list {
+  padding: 0 24px 20px;
+  border-top: 1px solid #f3f4f6;
+  padding-top: 16px;
+  margin-top: 0;
+}
+
+.local-cabs-list-title {
+  margin: 0 0 12px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #374151;
+}
+
+.local-cabs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 14px;
+}
+
+.local-cab-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.local-cab-image-wrap {
+  width: 100%;
+  height: 100px;
+  background: #f3f4f6;
+  overflow: hidden;
+}
+
+.local-cab-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.local-cab-image-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  background: #e5e7eb;
+}
+
+.local-cab-details {
+  padding: 12px 14px;
+}
+
+.local-cab-vehicle {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #111827;
+  margin-bottom: 4px;
+}
+
+.local-cab-name {
+  font-size: 0.85rem;
+  color: #6b7280;
+  margin-bottom: 4px;
+}
+
+.local-cab-driver,
+.local-cab-phone {
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.local-cab-rate {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #16a34a;
+  margin: 8px 0 10px;
+}
+
+.local-cab-book-btn {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 12px 20px;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #fff;
+  background: #ea580c;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.local-cab-book-btn:hover {
+  background: #c2410c;
+}
+
+/* Success banner */
+.car-options-success-banner {
+  position: relative;
+  text-align: center;
+  padding: 20px 48px 20px 24px;
+  background: linear-gradient(135deg, rgba(22, 163, 74, 0.15) 0%, rgba(22, 163, 74, 0.08) 100%);
+  border: 2px solid rgba(22, 163, 74, 0.35);
+  border-radius: 12px;
+  margin-bottom: 24px;
+}
+
+.car-options-success-title {
+  margin: 0 0 8px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.car-options-success-id {
+  margin: 0 0 12px;
+  font-size: 1rem;
+  color: #374151;
+}
+
+.car-options-success-id strong {
+  color: #16a34a;
+}
+
+.car-options-success-link {
+  color: #16a34a;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.car-options-success-link:hover {
+  text-decoration: underline;
+}
+
+.car-options-success-dismiss {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.car-options-success-dismiss:hover {
+  color: #111827;
+}
+
+/* Re-confirm modal */
+.car-options-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.car-options-confirm-modal {
+  background: #fff;
+  border-radius: 16px;
+  max-width: 420px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.car-options-confirm-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.car-options-confirm-header h3 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.car-options-confirm-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.car-options-confirm-close:hover {
+  color: #111827;
+}
+
+.car-options-confirm-fare {
+  padding: 16px 20px;
+  border-bottom: 1px solid #f3f4f6;
+  background: #f9fafb;
+}
+
+.car-options-confirm-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 0.9rem;
+  color: #374151;
+}
+
+.car-options-confirm-row.car-options-confirm-total {
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: #111827;
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.car-options-confirm-form {
+  padding: 20px;
+}
+
+.car-options-confirm-field {
+  margin-bottom: 16px;
+}
+
+.car-options-confirm-field label {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 6px;
+}
+
+.car-options-confirm-field input {
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 1rem;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  box-sizing: border-box;
+}
+
+.car-options-confirm-field input:focus {
+  outline: none;
+  border-color: #16a34a;
+  box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.2);
+}
+
+.car-options-confirm-error {
+  color: #dc2626;
+  font-size: 0.9rem;
+  margin: 0 0 12px;
+}
+
+.car-options-confirm-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.car-options-confirm-cancel {
+  flex: 1;
+  padding: 12px 20px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #374151;
+  background: #f3f4f6;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.car-options-confirm-cancel:hover {
+  background: #e5e7eb;
+}
+
+.car-options-confirm-submit {
+  flex: 1;
+  padding: 12px 20px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #fff;
+  background: #16a34a;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.car-options-confirm-submit:hover:not(:disabled) {
+  background: #15803d;
+}
+
+.car-options-confirm-submit:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.local-cabs-empty {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #6b7280;
+}
+
 .car-options-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -107,6 +558,25 @@
   .subtitle {
     font-size: 14px;
     margin-bottom: 24px;
+  }
+
+  .local-cab-type-header {
+    padding: 16px 18px;
+    gap: 16px;
+  }
+
+  .local-cab-type-image-wrap {
+    width: 100%;
+    min-width: 0;
+    height: 120px;
+  }
+
+  .local-cabs-list {
+    padding: 0 18px 16px;
+  }
+
+  .local-cabs-grid {
+    grid-template-columns: 1fr;
   }
 
   .car-options-grid {

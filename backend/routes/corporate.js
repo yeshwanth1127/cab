@@ -2,8 +2,17 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const db = require('../db/database');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
+const { generateCorporateInvoicePDF } = require('../services/invoiceService');
 
 const router = express.Router();
+
+async function ensureCorporateBookingsFareColumn() {
+  try {
+    await db.runAsync('ALTER TABLE corporate_bookings ADD COLUMN fare_amount REAL');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+}
 
 // Public endpoint: Create corporate booking
 router.post('/bookings', [
@@ -80,13 +89,30 @@ router.get('/bookings', async (req, res) => {
     const bookings = await db.allAsync(
       `SELECT cb.*, c.vehicle_number, c.driver_name as cab_driver_name, c.driver_phone as cab_driver_phone, ct.name as cab_type_name
        FROM corporate_bookings cb
-       LEFT JOIN cabs c ON cb.cab_id = c.id
-       LEFT JOIN cab_types ct ON c.cab_type_id = ct.id
+       LEFT JOIN cabs c ON c.id = cb.cab_id
+       LEFT JOIN cab_types ct ON ct.id = c.cab_type_id
        ORDER BY cb.created_at DESC`
     );
     res.json(bookings);
   } catch (error) {
     console.error('Error fetching corporate bookings:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get single corporate booking invoice PDF (must be before /bookings/:id)
+router.get('/bookings/:id/invoice', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const withGst = req.query.withGst !== 'false';
+    const booking = await db.getAsync('SELECT * FROM corporate_bookings WHERE id = ?', [id]);
+    if (!booking) return res.status(404).json({ error: 'Corporate booking not found' });
+    const pdfBuffer = await generateCorporateInvoicePDF(booking, withGst);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="corporate-invoice-${id}.pdf"`);
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error('Error generating corporate invoice:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -226,6 +252,87 @@ router.delete('/bookings/:id', async (req, res) => {
   } catch (error) {
     console.error('Error deleting corporate booking:', error);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Create corporate invoice: create corporate booking + return PDF
+router.post('/invoice/create', [
+  body('company_name').notEmpty().withMessage('company_name is required'),
+  body('name').notEmpty().withMessage('name is required'),
+  body('phone_number').notEmpty().withMessage('phone_number is required'),
+  body('pickup_point').notEmpty().withMessage('pickup_point is required'),
+  body('drop_point').notEmpty().withMessage('drop_point is required'),
+  body('fare_amount').isFloat({ min: 0 }).withMessage('fare_amount must be a positive number'),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    await ensureCorporateBookingsFareColumn();
+
+    const { company_name, name, phone_number, pickup_point, drop_point, service_type, fare_amount, travel_date, travel_time, with_gst } = req.body;
+
+    const result = await db.runAsync(
+      `INSERT INTO corporate_bookings (name, phone_number, company_name, pickup_point, drop_point, service_type, travel_date, travel_time, fare_amount, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed')`,
+      [
+        name,
+        phone_number,
+        company_name,
+        pickup_point,
+        drop_point || 'N/A',
+        service_type || 'local',
+        travel_date || null,
+        travel_time || null,
+        Number(fare_amount),
+      ]
+    );
+    const booking = await db.getAsync('SELECT * FROM corporate_bookings WHERE id = ?', [result.lastID]);
+    const withGST = with_gst !== false;
+    const pdfBuffer = await generateCorporateInvoicePDF(booking, withGST);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="corporate-invoice-${booking.id}.pdf"`);
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error('Error creating corporate invoice:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Download all corporate invoices as ZIP
+router.get('/invoices/download-all', async (req, res) => {
+  try {
+    const withGst = req.query.withGst !== 'false';
+    const bookings = await db.allAsync('SELECT * FROM corporate_bookings ORDER BY id ASC');
+    if (bookings.length === 0) {
+      return res.status(404).json({ error: 'No corporate bookings to export' });
+    }
+
+    let archiver;
+    try {
+      archiver = require('archiver');
+    } catch (e) {
+      return res.status(503).json({ error: 'Download all requires archiver. Run: npm install archiver' });
+    }
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename="corporate-invoices.zip"');
+
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    archive.on('error', (err) => {
+      console.error('Archiver error:', err);
+      if (!res.headersSent) res.status(500).json({ error: 'Failed to create ZIP' });
+    });
+    archive.pipe(res);
+
+    for (const booking of bookings) {
+      const pdfBuffer = await generateCorporateInvoicePDF(booking, withGst);
+      archive.append(pdfBuffer, { name: `corporate-invoice-${booking.id}.pdf` });
+    }
+    await archive.finalize();
+  } catch (error) {
+    console.error('Error downloading all corporate invoices:', error);
+    if (!res.headersSent) res.status(500).json({ error: 'Server error' });
   }
 });
 

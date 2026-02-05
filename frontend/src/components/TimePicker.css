@@ -1,0 +1,112 @@
+/* TimePicker – react-time-picker wrapper */
+
+.time-picker-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.time-picker-wrap .time-picker-react.react-time-picker {
+  width: 100%;
+}
+
+.time-picker-wrap .react-time-picker__wrapper {
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 10px;
+  background: rgba(26, 26, 26, 0.9);
+  color: #e5e7eb;
+  padding: 10px 12px;
+  min-height: 46px;
+}
+
+.time-picker-wrap .react-time-picker__wrapper:hover {
+  border-color: #16a34a;
+}
+
+.time-picker-wrap .react-time-picker__inputGroup__input,
+.time-picker-wrap .react-time-picker__inputGroup__divider,
+.time-picker-wrap .react-time-picker__inputGroup__amPm {
+  color: #e5e7eb;
+}
+
+.time-picker-wrap .react-time-picker__inputGroup__amPm {
+  background: rgba(55, 65, 81, 0.6);
+  color: #e5e7eb;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 6px;
+}
+
+.time-picker-wrap .react-time-picker__clock-button {
+  background: transparent;
+  color: #e5e7eb;
+  border: none;
+  padding: 4px;
+}
+
+.time-picker-wrap .react-time-picker__clock-button:hover {
+  color: #16a34a;
+}
+
+.time-picker-wrap .react-time-picker--disabled .react-time-picker__wrapper {
+  opacity: 0.6;
+}
+
+.time-picker-wrap.error .react-time-picker__wrapper {
+  border-color: #ef4444;
+}
+
+.time-picker-wrap.error .react-time-picker__wrapper:hover {
+  border-color: #ef4444;
+}
+
+/* Mobile: prevent time picker from overflowing and hide empty boxes */
+@media (max-width: 768px) {
+  .time-picker-wrap {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .time-picker-wrap .time-picker-react.react-time-picker {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .time-picker-wrap .react-time-picker__wrapper {
+    min-width: 0;
+    flex-shrink: 1;
+  }
+
+  .time-picker-wrap .react-time-picker__inputGroup {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  /* Hide native time input so it doesn't show as an empty box on mobile */
+  .time-picker-wrap input[type="time"] {
+    display: none !important;
+    visibility: hidden !important;
+    position: absolute !important;
+    width: 0 !important;
+    height: 0 !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+  }
+
+  /* Hide clock dropdown container so it doesn't show as empty box when closed */
+  .time-picker-wrap .react-time-picker__clock,
+  .time-picker-wrap .react-time-picker__clock--closed {
+    display: none !important;
+    position: absolute !important;
+    left: -9999px !important;
+    width: 0 !important;
+    height: 0 !important;
+    overflow: hidden !important;
+    visibility: hidden !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .time-picker-wrap .react-time-picker__wrapper {
+    padding: 8px 10px;
+    min-height: 44px;
+  }
+}

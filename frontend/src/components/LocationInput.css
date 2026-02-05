@@ -211,6 +211,15 @@
 @media (max-width: 768px) {
   .location-input-container {
     margin-bottom: 20px;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .location-input {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
   }
 
   .location-input-container label {

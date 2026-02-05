@@ -2,6 +2,7 @@ import React from 'react';
 import MainNavbar from '../components/MainNavbar';
 import AnimatedMapBackground from '../components/AnimatedMapBackground';
 import './BookingPage.css';
+import Icon from '../components/Icon';
 
 const AboutPage = () => {
   return (
@@ -93,9 +94,13 @@ const AboutPage = () => {
               color: '#16a34a',
               marginBottom: '20px',
               textTransform: 'uppercase',
-              letterSpacing: '2px'
+              letterSpacing: '2px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px'
             }}>
-              🏢 Corporate Cab Services
+              <Icon name="office" size={36} className="about-icon" title="Corporate services" />
+              Corporate Cab Services
             </h2>
             <h3 style={{
               fontSize: '28px',
@@ -141,7 +146,8 @@ const AboutPage = () => {
                 alignItems: 'center',
                 gap: '10px'
               }}>
-                <span style={{ fontSize: '32px' }}>🚗</span> Dedicated Fleet Management
+                <Icon name="car" size={32} className="about-icon" title="Fleet management" />
+                Dedicated Fleet Management
               </h3>
               <p style={{
                 fontSize: '16px',
@@ -183,7 +189,8 @@ const AboutPage = () => {
                 alignItems: 'center',
                 gap: '10px'
               }}>
-                <span style={{ fontSize: '32px' }}>💼</span> Business-Grade Billing
+                <Icon name="billing" size={32} className="about-icon" title="Billing" />
+                Business-Grade Billing
               </h3>
               <p style={{
                 fontSize: '16px',
@@ -225,7 +232,8 @@ const AboutPage = () => {
                 alignItems: 'center',
                 gap: '10px'
               }}>
-                <span style={{ fontSize: '32px' }}>🛡️</span> Enterprise Safety Standards
+                <Icon name="shield" size={32} className="about-icon" title="Safety standards" />
+                Enterprise Safety Standards
               </h3>
               <p style={{
                 fontSize: '16px',
@@ -277,7 +285,8 @@ const AboutPage = () => {
             }}>
               <div>
                 <h4 style={{ color: '#16a34a', fontSize: '18px', marginBottom: '10px' }}>
-                  📍 Daily Employee Commutes
+                  <Icon name="pin" size={20} className="about-icon small" title="Daily commutes" />
+                  Daily Employee Commutes
                 </h4>
                 <p style={{ color: '#e5e7eb', fontSize: '15px', lineHeight: '1.6' }}>
                   Reliable pick-up and drop services for your workforce, with fixed routes 
@@ -286,7 +295,8 @@ const AboutPage = () => {
               </div>
               <div>
                 <h4 style={{ color: '#16a34a', fontSize: '18px', marginBottom: '10px' }}>
-                  ✈️ Client & Airport Transfers
+                  <Icon name="airport" size={20} className="about-icon small" title="Airport transfers" />
+                  Client & Airport Transfers
                 </h4>
                 <p style={{ color: '#e5e7eb', fontSize: '15px', lineHeight: '1.6' }}>
                   Professional transportation for visiting clients, executives, and 
@@ -295,7 +305,8 @@ const AboutPage = () => {
               </div>
               <div>
                 <h4 style={{ color: '#16a34a', fontSize: '18px', marginBottom: '10px' }}>
-                  🎯 On-Demand Business Travel
+                  <Icon name="target" size={20} className="about-icon small" title="On-demand travel" />
+                  On-Demand Business Travel
                 </h4>
                 <p style={{ color: '#e5e7eb', fontSize: '15px', lineHeight: '1.6' }}>
                   Flexible booking for meetings, site visits, and business trips with 
@@ -304,7 +315,8 @@ const AboutPage = () => {
               </div>
               <div>
                 <h4 style={{ color: '#16a34a', fontSize: '18px', marginBottom: '10px' }}>
-                  🎉 Team Events & Outings
+                  <Icon name="events" size={20} className="about-icon small" title="Team events" />
+                  Team Events & Outings
                 </h4>
                 <p style={{ color: '#e5e7eb', fontSize: '15px', lineHeight: '1.6' }}>
                   Comfortable group transportation for company events, team building 

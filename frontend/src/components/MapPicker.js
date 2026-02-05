@@ -140,8 +140,8 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, initialLocation, t
         const autocomplete = new window.google.maps.places.Autocomplete(
           searchInputRef.current,
           {
-            types: ['address', 'establishment'],
-            componentRestrictions: { country: 'in' }, // Restrict to India
+            types: ['address', 'establishment'], // Addresses + establishments, India only
+            componentRestrictions: { country: 'in' },
             fields: ['geometry', 'formatted_address', 'address_components', 'place_id', 'name'],
           }
         );

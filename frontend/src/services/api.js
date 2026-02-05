@@ -22,8 +22,18 @@ export function getImageUrl(relativePath) {
     return relativePath;
   }
   
-  // Extract base URL without /api suffix
-  const backendBaseURL = apiBaseURL.replace('/api', '');
+  // Get the backend base URL
+  let backendBaseURL;
+  if (apiBaseURL.startsWith('http://') || apiBaseURL.startsWith('https://')) {
+    // Full URL provided (e.g., http://localhost:5000/api)
+    backendBaseURL = apiBaseURL.replace('/api', '');
+  } else if (apiBaseURL.startsWith('/')) {
+    // Relative path (e.g., /api) - use current origin
+    backendBaseURL = window.location.origin;
+  } else {
+    // Fallback to current origin
+    backendBaseURL = window.location.origin;
+  }
   
   // Ensure relative path starts with /
   const path = relativePath.startsWith('/') ? relativePath : `/${relativePath}`;

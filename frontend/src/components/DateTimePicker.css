@@ -1,0 +1,54 @@
+/* DateTimePicker – single date+time input */
+
+.datetime-picker-wrap {
+  width: 100%;
+}
+
+.datetime-picker-single {
+  width: 100%;
+  padding: 12px 2.5rem 12px 14px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 10px;
+  background: rgba(26, 26, 26, 0.9);
+  color: #e5e7eb;
+  font-size: 15px;
+  cursor: pointer;
+  box-sizing: border-box;
+  min-height: 46px;
+  position: relative;
+}
+
+.datetime-picker-single::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 1;
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  padding: 4px;
+  margin: 0;
+}
+
+.datetime-picker-single:hover:not(:disabled) {
+  border-color: #16a34a;
+}
+
+.datetime-picker-single:focus {
+  outline: none;
+  border-color: #16a34a;
+  box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.25);
+}
+
+@media (max-width: 480px) {
+  .datetime-picker-wrap {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .datetime-picker-single {
+    width: 100%;
+    min-width: 0;
+  }
+}

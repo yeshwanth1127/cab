@@ -181,7 +181,17 @@ const MainNavbar = ({ logoOnly = false }) => {
           aria-label="Namma Cabs home"
           onMouseEnter={handleLogoEnter}
         >
-          <span className="logo-text" ref={logoTextRef}>
+          <img 
+            src="/nammacabs-logo.png" 
+            alt="Namma Cabs" 
+            style={{ 
+              height: '140px', 
+              width: 'auto',
+              objectFit: 'contain',
+              marginRight: '10px'
+            }}
+          />
+          <span className="logo-text" ref={logoTextRef} style={{ display: 'none' }}>
             <span className="logo-namma">namma</span>
             <span className="logo-cabs">cabs</span>
           </span>
@@ -192,7 +202,7 @@ const MainNavbar = ({ logoOnly = false }) => {
               className={`nav-toggle${menuOpen ? ' nav-toggle--open' : ''}`}
               type="button"
               onClick={() => setMenuOpen((open) => !open)}
-              aria-label="Toggle navigation"
+              aria-label="Toggle menu"
             >
               <span />
               <span />
