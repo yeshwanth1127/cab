@@ -761,6 +761,85 @@
   font-size: 0.9rem;
 }
 
+/* Entry cards: clean box per booking/entry */
+.admin-entry-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+}
+
+.admin-entry-card {
+  background: #fff;
+  border: 1px solid rgba(22, 163, 74, 0.3);
+  border-radius: 12px;
+  padding: 16px 18px;
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.08);
+  transition: box-shadow 0.2s, border-color 0.2s;
+}
+
+.admin-entry-card:hover {
+  border-color: rgba(22, 163, 74, 0.5);
+  box-shadow: 0 4px 14px rgba(22, 163, 74, 0.12);
+}
+
+.admin-entry-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.admin-entry-card-header .value {
+  font-weight: 600;
+  color: #16a34a;
+}
+
+.admin-entry-card-id {
+  font-weight: 700;
+  color: #16a34a;
+  font-size: 1rem;
+}
+
+.admin-entry-card-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.admin-entry-card-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.admin-entry-card-row .key {
+  color: #6b7280;
+  min-width: 90px;
+  flex-shrink: 0;
+}
+
+.admin-entry-card-row .value {
+  color: #111827;
+  word-break: break-word;
+}
+
+.admin-entry-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #f3f4f6;
+}
+
 .admin-bookings-table-wrap {
   background: #fff;
   border: 1px solid #16a34a;
@@ -1039,6 +1118,39 @@
 
 .admin-add-stop-btn {
   margin-top: 4px;
+}
+
+/* Others tab: two sections side by side, horizontal scroll if needed */
+.admin-others-two-col {
+  display: flex;
+  flex-direction: row;
+  gap: 24px;
+  margin-top: 24px;
+  overflow-x: auto;
+  overflow-y: visible;
+  padding-bottom: 8px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.admin-others-two-col::-webkit-scrollbar {
+  height: 8px;
+}
+
+.admin-others-two-col::-webkit-scrollbar-track {
+  background: #f0fdf4;
+  border-radius: 4px;
+}
+
+.admin-others-two-col::-webkit-scrollbar-thumb {
+  background: rgba(22, 163, 74, 0.4);
+  border-radius: 4px;
+}
+
+.admin-others-col {
+  flex: 1 1 0;
+  min-width: 320px;
+  max-width: 100%;
+  margin-bottom: 0;
 }
 
 /* Rate meters section – white & green */

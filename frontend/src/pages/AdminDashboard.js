@@ -846,39 +846,29 @@ const AdminDashboard = () => {
       <h2 className="admin-dashboard-box-heading">{title}</h2>
       <p className="admin-bookings-desc">{desc}</p>
       {loading.bookings && <p className="admin-dashboard-list-loading">Loading…</p>}
-      {!loading.bookings && (
-        <div className="admin-bookings-table-wrap">
-          <table className="admin-bookings-table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>From</th>
-                <th>To</th>
-                <th>Passenger</th>
-                <th>Status</th>
-                <th>Driver / Cab</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {list.map((b) => (
-                <tr key={b.id}>
-                  <td>{b.id}</td>
-                  <td>{b.from_location}</td>
-                  <td>{b.to_location}</td>
-                  <td>{b.passenger_name}</td>
-                  <td><span className="admin-service-badge">{b.booking_status}</span></td>
-                  <td className="admin-assignment-info">{b.driver_name ? `${b.driver_name} / ${b.vehicle_number || '—'}` : '—'}</td>
-                  <td className="actions">
-                    <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setDetailBooking(b)}>View</button>
-                    <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => { setAssignBooking(b); setAssignCabId(b.cab_id || ''); }}>Assign</button>
-                    {b.maps_link && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link)}>Copy map</button>}
-                    {(b.driver_phone || b.driver_name) && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendWhatsApp(b)}>WhatsApp</button>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {!loading.bookings && list.length === 0 && <p className="admin-dashboard-list-empty">No entries.</p>}
+      {!loading.bookings && list.length > 0 && (
+        <div className="admin-entry-cards">
+          {list.map((b) => (
+            <div key={b.id} className="admin-entry-card">
+              <div className="admin-entry-card-header">
+                <span className="admin-entry-card-id">#{b.id}</span>
+                <span className="admin-service-badge">{b.booking_status}</span>
+              </div>
+              <div className="admin-entry-card-rows">
+                <div className="admin-entry-card-row"><span className="key">From</span><span className="value">{b.from_location || '—'}</span></div>
+                <div className="admin-entry-card-row"><span className="key">To</span><span className="value">{b.to_location || '—'}</span></div>
+                <div className="admin-entry-card-row"><span className="key">Passenger</span><span className="value">{b.passenger_name || '—'}</span></div>
+                <div className="admin-entry-card-row"><span className="key">Driver / Cab</span><span className="value">{b.driver_name ? `${b.driver_name} / ${b.vehicle_number || '—'}` : '—'}</span></div>
+              </div>
+              <div className="admin-entry-card-actions">
+                <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setDetailBooking(b)}>View</button>
+                <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => { setAssignBooking(b); setAssignCabId(b.cab_id || ''); }}>Assign</button>
+                {b.maps_link && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link)}>Copy map</button>}
+                {(b.driver_phone || b.driver_name) && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendWhatsApp(b)}>WhatsApp</button>}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -1099,38 +1089,27 @@ const AdminDashboard = () => {
                 {loading.dashboard && <p className="admin-dashboard-list-loading">Loading…</p>}
                 {!loading.dashboard && bookings.length === 0 && <p className="admin-dashboard-list-empty">No bookings yet.</p>}
                 {!loading.dashboard && bookings.length > 0 && (
-                  <div className="admin-bookings-table-wrap">
-                    <table className="admin-bookings-table">
-                      <thead>
-                        <tr>
-                          <th>ID</th>
-                          <th>From</th>
-                          <th>To</th>
-                          <th>Passenger</th>
-                          <th>Status</th>
-                          <th>Driver / Cab</th>
-                          <th>Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {bookings.map((b) => (
-                          <tr key={b.id}>
-                            <td>{b.id}</td>
-                            <td>{b.from_location}</td>
-                            <td>{b.to_location}</td>
-                            <td>{b.passenger_name}</td>
-                            <td><span className="admin-service-badge">{b.booking_status}</span></td>
-                            <td className="admin-assignment-info">{b.driver_name ? `${b.driver_name} / ${b.vehicle_number || '—'}` : '—'}</td>
-                            <td className="actions">
-                              <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setDetailBooking(b)}>View</button>
-                              <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => { setAssignBooking(b); setAssignCabId(b.cab_id || ''); }}>Assign</button>
-                              {b.maps_link && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link)}>Copy map</button>}
-                              {(b.driver_phone || b.driver_name) && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendWhatsApp(b)}>WhatsApp</button>}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div className="admin-entry-cards">
+                    {bookings.map((b) => (
+                      <div key={b.id} className="admin-entry-card">
+                        <div className="admin-entry-card-header">
+                          <span className="admin-entry-card-id">#{b.id}</span>
+                          <span className="admin-service-badge">{b.booking_status}</span>
+                        </div>
+                        <div className="admin-entry-card-rows">
+                          <div className="admin-entry-card-row"><span className="key">From</span><span className="value">{b.from_location || '—'}</span></div>
+                          <div className="admin-entry-card-row"><span className="key">To</span><span className="value">{b.to_location || '—'}</span></div>
+                          <div className="admin-entry-card-row"><span className="key">Passenger</span><span className="value">{b.passenger_name || '—'}</span></div>
+                          <div className="admin-entry-card-row"><span className="key">Driver / Cab</span><span className="value">{b.driver_name ? `${b.driver_name} / ${b.vehicle_number || '—'}` : '—'}</span></div>
+                        </div>
+                        <div className="admin-entry-card-actions">
+                          <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setDetailBooking(b)}>View</button>
+                          <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => { setAssignBooking(b); setAssignCabId(b.cab_id || ''); }}>Assign</button>
+                          {b.maps_link && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link)}>Copy map</button>}
+                          {(b.driver_phone || b.driver_name) && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendWhatsApp(b)}>WhatsApp</button>}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -1517,7 +1496,7 @@ const AdminDashboard = () => {
               </div>
 
               {/* Section 2: Add cabs */}
-              <div className="admin-rate-meters-block open" style={{ marginTop: 24 }}>
+              <div className="admin-rate-meters-block admin-others-col open">
                 <button type="button" className="admin-rate-meters-block-btn" style={{ pointerEvents: 'none' }}>
                   <span>Add cabs</span>
                   <span className="admin-rate-meters-block-meta">Add and manage cabs; assign driver and cab type</span>
@@ -1823,39 +1802,26 @@ const AdminDashboard = () => {
               {corporateBookingsLoading && <p className="admin-dashboard-list-loading">Loading…</p>}
               {!corporateBookingsLoading && corporateBookings.length === 0 && <p className="admin-dashboard-list-empty">No corporate bookings yet.</p>}
               {!corporateBookingsLoading && corporateBookings.length > 0 && (
-                <div className="admin-bookings-table-wrap">
-                  <table className="admin-bookings-table">
-                    <thead>
-                      <tr>
-                        <th>ID</th>
-                        <th>Company</th>
-                        <th>Name</th>
-                        <th>Phone</th>
-                        <th>Pickup</th>
-                        <th>Drop</th>
-                        <th>Service</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {corporateBookings.map((b) => (
-                        <tr key={b.id}>
-                          <td>{b.id}</td>
-                          <td>{b.company_name}</td>
-                          <td>{b.name}</td>
-                          <td>{b.phone_number}</td>
-                          <td>{b.pickup_point}</td>
-                          <td>{b.drop_point}</td>
-                          <td><span className="admin-service-badge">{b.service_type || '—'}</span></td>
-                          <td><span className="admin-service-badge">{b.status}</span></td>
-                          <td className="actions">
-                            <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCorporateInvoiceDownload(b.id)}>Download invoice</button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="admin-entry-cards">
+                  {corporateBookings.map((b) => (
+                    <div key={b.id} className="admin-entry-card">
+                      <div className="admin-entry-card-header">
+                        <span className="admin-entry-card-id">#{b.id}</span>
+                        <span className="admin-service-badge">{b.service_type || '—'}</span>
+                        <span className="admin-service-badge">{b.status}</span>
+                      </div>
+                      <div className="admin-entry-card-rows">
+                        <div className="admin-entry-card-row"><span className="key">Company</span><span className="value">{b.company_name || '—'}</span></div>
+                        <div className="admin-entry-card-row"><span className="key">Name</span><span className="value">{b.name || '—'}</span></div>
+                        <div className="admin-entry-card-row"><span className="key">Phone</span><span className="value">{b.phone_number || '—'}</span></div>
+                        <div className="admin-entry-card-row"><span className="key">Pickup</span><span className="value">{b.pickup_point || '—'}</span></div>
+                        <div className="admin-entry-card-row"><span className="key">Drop</span><span className="value">{b.drop_point || '—'}</span></div>
+                      </div>
+                      <div className="admin-entry-card-actions">
+                        <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => handleCorporateInvoiceDownload(b.id)}>Download invoice</button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -1873,33 +1839,23 @@ const AdminDashboard = () => {
               {corporateBookingsLoading && <p className="admin-dashboard-list-loading">Loading…</p>}
               {!corporateBookingsLoading && corporateBookings.length === 0 && <p className="admin-dashboard-list-empty">No corporate bookings. Create one in Create corporate invoice.</p>}
               {!corporateBookingsLoading && corporateBookings.length > 0 && (
-                <div className="admin-bookings-table-wrap">
-                  <table className="admin-bookings-table">
-                    <thead>
-                      <tr>
-                        <th>ID</th>
-                        <th>Company</th>
-                        <th>Name</th>
-                        <th>Pickup → Drop</th>
-                        <th>Fare</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {corporateBookings.map((b) => (
-                        <tr key={b.id}>
-                          <td>{b.id}</td>
-                          <td>{b.company_name}</td>
-                          <td>{b.name}</td>
-                          <td>{b.pickup_point} → {b.drop_point}</td>
-                          <td>{b.fare_amount != null ? `₹${Number(b.fare_amount).toFixed(2)}` : '—'}</td>
-                          <td className="actions">
-                            <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCorporateInvoiceDownload(b.id)}>Download</button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="admin-entry-cards">
+                  {corporateBookings.map((b) => (
+                    <div key={b.id} className="admin-entry-card">
+                      <div className="admin-entry-card-header">
+                        <span className="admin-entry-card-id">#{b.id}</span>
+                        <span className="value">{b.fare_amount != null ? `₹${Number(b.fare_amount).toFixed(2)}` : '—'}</span>
+                      </div>
+                      <div className="admin-entry-card-rows">
+                        <div className="admin-entry-card-row"><span className="key">Company</span><span className="value">{b.company_name || '—'}</span></div>
+                        <div className="admin-entry-card-row"><span className="key">Name</span><span className="value">{b.name || '—'}</span></div>
+                        <div className="admin-entry-card-row"><span className="key">Trip</span><span className="value">{b.pickup_point || '—'} → {b.drop_point || '—'}</span></div>
+                      </div>
+                      <div className="admin-entry-card-actions">
+                        <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => handleCorporateInvoiceDownload(b.id)}>Download</button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

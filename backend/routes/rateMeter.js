@@ -129,9 +129,9 @@ router.delete(
   }
 );
 
-// ----- Cabs -----
+// ----- Cabs ----- (path under /rate-meter so frontend GET /admin/rate-meter/cabs works)
 router.get(
-  '/cabs',
+  '/rate-meter/cabs',
   query('cab_type_id').isInt({ min: 1 }).withMessage('cab_type_id is required'),
   async (req, res) => {
     try {
