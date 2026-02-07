@@ -144,6 +144,73 @@
   margin: 0;
 }
 
+.home-airport-toggle {
+  display: flex;
+  gap: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.6);
+}
+
+.home-airport-toggle-btn {
+  flex: 1;
+  padding: 14px 18px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #94a3b8;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.home-airport-toggle-btn:hover {
+  color: #e2e8f0;
+  background: rgba(148, 163, 184, 0.1);
+}
+
+.home-airport-toggle-btn-selected {
+  color: #fff;
+  background: #16a34a;
+}
+
+.home-airport-toggle-btn-selected:hover {
+  color: #fff;
+  background: #15803d;
+}
+
+.home-outstation-select {
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 1rem;
+  color: #e5e7eb;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.home-outstation-select:focus {
+  outline: none;
+  border-color: #16a34a;
+}
+
+.home-outstation-days-input {
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 1rem;
+  color: #e5e7eb;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 8px;
+}
+
+.home-outstation-days-input:focus {
+  outline: none;
+  border-color: #16a34a;
+}
+
 .home-local-form {
   max-width: 420px;
   margin: 0 auto 32px;
@@ -365,6 +432,18 @@
 .home-local-cab-type-selected-rate strong {
   color: #16a34a;
   font-size: 1.1rem;
+}
+
+.home-local-cab-type-base-fare {
+  font-size: 0.9rem;
+  color: #6b7280;
+  margin-top: 4px;
+}
+
+.home-local-rate-includes-base {
+  font-size: 0.85rem;
+  color: #6b7280;
+  font-weight: normal;
 }
 
 .home-local-cabs-list {

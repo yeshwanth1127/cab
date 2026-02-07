@@ -164,6 +164,18 @@
   font-size: 1.1rem;
 }
 
+.local-cab-type-base-fare {
+  font-size: 0.9rem;
+  color: #6b7280;
+  margin-top: 4px;
+}
+
+.local-rate-includes-base {
+  font-size: 0.85rem;
+  color: #6b7280;
+  font-weight: normal;
+}
+
 .local-cabs-list {
   padding: 0 24px 20px;
   border-top: 1px solid #f3f4f6;

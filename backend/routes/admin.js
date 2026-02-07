@@ -88,14 +88,16 @@ router.get('/dashboard/stats', async (req, res) => {
   }
 });
 
-// GET /bookings - List all bookings with cab/driver info
+// GET /bookings - List all bookings with cab/driver info and cab type name
 router.get('/bookings', async (req, res) => {
   try {
     await ensureBookingsColumns();
     const bookings = await db.allAsync(
-      `SELECT b.*, c.vehicle_number, c.driver_name as driver_name, c.driver_phone as driver_phone
+      `SELECT b.*, c.vehicle_number, c.driver_name as driver_name, c.driver_phone as driver_phone,
+              ct.name as cab_type_name
        FROM bookings b
        LEFT JOIN cabs c ON b.cab_id = c.id
+       LEFT JOIN cab_types ct ON b.cab_type_id = ct.id
        ORDER BY b.id DESC`
     );
     res.json(bookings || []);
@@ -205,8 +207,8 @@ router.put('/bookings/:id', async (req, res) => {
     if (updates.length === 0) {
       // Still return current booking; may want to regenerate maps_link
       const updated = await db.getAsync(
-        `SELECT b.*, c.vehicle_number, c.driver_name as driver_name, c.driver_phone as driver_phone
-         FROM bookings b LEFT JOIN cabs c ON b.cab_id = c.id WHERE b.id = ?`,
+        `SELECT b.*, c.vehicle_number, c.driver_name as driver_name, c.driver_phone as driver_phone, ct.name as cab_type_name
+         FROM bookings b LEFT JOIN cabs c ON b.cab_id = c.id LEFT JOIN cab_types ct ON b.cab_type_id = ct.id WHERE b.id = ?`,
         [id]
       );
       return res.json(updated);
@@ -230,8 +232,8 @@ router.put('/bookings/:id', async (req, res) => {
     }
 
     const withCab = await db.getAsync(
-      `SELECT b.*, c.vehicle_number, c.driver_name as driver_name, c.driver_phone as driver_phone
-       FROM bookings b LEFT JOIN cabs c ON b.cab_id = c.id WHERE b.id = ?`,
+      `SELECT b.*, c.vehicle_number, c.driver_name as driver_name, c.driver_phone as driver_phone, ct.name as cab_type_name
+       FROM bookings b LEFT JOIN cabs c ON b.cab_id = c.id LEFT JOIN cab_types ct ON b.cab_type_id = ct.id WHERE b.id = ?`,
       [id]
     );
     res.json(withCab);
@@ -254,6 +256,7 @@ router.get('/cabs', async (req, res) => {
     const cabs = (rows || []).map((r) => ({
       id: r.id,
       vehicle_number: r.vehicle_number ?? r.VEHICLE_NUMBER ?? '',
+      driver_id: r.driver_id ?? r.DRIVER_ID ?? null,
       driver_name: r.driver_name ?? r.DRIVER_NAME ?? '',
       driver_phone: r.driver_phone ?? r.DRIVER_PHONE ?? '',
       cab_type_id: r.cab_type_id ?? r.CAB_TYPE_ID,

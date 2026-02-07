@@ -12,6 +12,13 @@ const HomePage = () => {
   const [serviceChoice, setServiceChoice] = useState(null);
   const [fromLocation, setFromLocation] = useState(null);
   const [numberOfHours, setNumberOfHours] = useState(null);
+  const [airportDirection, setAirportDirection] = useState(null);
+  const [airportLocation, setAirportLocation] = useState(null);
+  const [outstationTripType, setOutstationTripType] = useState('one_way');
+  const [outstationFrom, setOutstationFrom] = useState(null);
+  const [outstationTo, setOutstationTo] = useState(null);
+  const [outstationRoundTripDays, setOutstationRoundTripDays] = useState('');
+  const [outstationMultiStops, setOutstationMultiStops] = useState([null, null]);
   const [localOffers, setLocalOffers] = useState([]);
   const [localOffersLoading, setLocalOffersLoading] = useState(false);
   const [localOffersError, setLocalOffersError] = useState('');
@@ -28,8 +35,87 @@ const HomePage = () => {
     setServiceChoice(null);
     setFromLocation(null);
     setNumberOfHours(null);
+    setAirportDirection(null);
+    setAirportLocation(null);
+    setOutstationTripType('one_way');
+    setOutstationFrom(null);
+    setOutstationTo(null);
+    setOutstationRoundTripDays('');
+    setOutstationMultiStops([null, null]);
     setLocalOffers([]);
     setLocalOffersError('');
+  };
+
+  const airportLocationAddress = airportLocation?.address || '';
+
+  const handleContinueToOutstationCabSelection = () => {
+    if (outstationTripType === 'one_way') {
+      const fromAddr = outstationFrom?.address || '';
+      const toAddr = outstationTo?.address || '';
+      if (!fromAddr.trim() || !toAddr.trim()) return;
+      navigate('/car-options', {
+        state: {
+          service_type: 'outstation',
+          trip_type: 'one_way',
+          from_location: fromAddr,
+          to_location: toAddr,
+          from_lat: outstationFrom?.lat ?? null,
+          from_lng: outstationFrom?.lng ?? null,
+          to_lat: outstationTo?.lat ?? null,
+          to_lng: outstationTo?.lng ?? null,
+        },
+      });
+    } else if (outstationTripType === 'round_trip') {
+      const pickupAddr = outstationFrom?.address || '';
+      const days = Number(outstationRoundTripDays);
+      if (!pickupAddr.trim() || !(days >= 1)) return;
+      navigate('/car-options', {
+        state: {
+          service_type: 'outstation',
+          trip_type: 'round_trip',
+          from_location: pickupAddr,
+          to_location: pickupAddr,
+          number_of_days: days,
+        },
+      });
+    } else {
+      const stops = outstationMultiStops.map((s) => s?.address || '').filter(Boolean);
+      if (stops.length < 1) return;
+      navigate('/car-options', {
+        state: {
+          service_type: 'outstation',
+          trip_type: 'multiple_stops',
+          from_location: stops[0],
+          to_location: stops.length > 1 ? stops[stops.length - 1] : stops[0],
+          stops: stops,
+        },
+      });
+    }
+  };
+
+  const handleContinueToAirportCabSelection = () => {
+    if (!airportLocationAddress.trim()) return;
+    const isToAirport = (airportDirection || 'to_airport') === 'to_airport';
+    const fromAddress = isToAirport ? airportLocationAddress : 'Kempegowda International Airport (BLR)';
+    const toAddress = isToAirport ? 'Kempegowda International Airport (BLR)' : airportLocationAddress;
+    const KIA_LAT = 13.1989;
+    const KIA_LNG = 77.7068;
+    const fromLat = isToAirport ? (airportLocation?.lat ?? null) : KIA_LAT;
+    const fromLng = isToAirport ? (airportLocation?.lng ?? null) : KIA_LNG;
+    const toLat = isToAirport ? KIA_LAT : (airportLocation?.lat ?? null);
+    const toLng = isToAirport ? KIA_LNG : (airportLocation?.lng ?? null);
+    navigate('/car-options', {
+      state: {
+        service_type: 'airport',
+        airport_direction: airportDirection,
+        from_location: fromAddress,
+        to_location: toAddress,
+        from_lat: fromLat,
+        from_lng: fromLng,
+        to_lat: toLat,
+        to_lng: toLng,
+      },
+    });
   };
 
   const handleContinueToCabSelection = () => {
@@ -73,10 +159,11 @@ const HomePage = () => {
       setConfirmError('Please enter your name and phone number.');
       return;
     }
-    const fareAmount =
-      confirmModal.cabType.packageRates?.[numberOfHours] != null
-        ? Number(confirmModal.cabType.packageRates[numberOfHours])
-        : 0;
+    const baseFare = Number(confirmModal.cabType.baseFare) || 0;
+    const packageRate = confirmModal.cabType.packageRates?.[numberOfHours] != null
+      ? Number(confirmModal.cabType.packageRates[numberOfHours])
+      : 0;
+    const fareAmount = baseFare + packageRate;
     setConfirmSubmitting(true);
     setConfirmError('');
     try {
@@ -103,10 +190,6 @@ const HomePage = () => {
     } finally {
       setConfirmSubmitting(false);
     }
-  };
-
-  const handleAirportOrOutstation = (type) => {
-    navigate('/car-options', { state: { service_type: type } });
   };
 
   return (
@@ -137,7 +220,7 @@ const HomePage = () => {
                 <button
                   type="button"
                   className="home-service-option"
-                  onClick={() => handleAirportOrOutstation('airport')}
+                  onClick={() => setServiceChoice('airport')}
                 >
                   <span className="home-service-icon">✈️</span>
                   <span className="home-service-label">Airport</span>
@@ -146,11 +229,220 @@ const HomePage = () => {
                 <button
                   type="button"
                   className="home-service-option"
-                  onClick={() => handleAirportOrOutstation('outstation')}
+                  onClick={() => setServiceChoice('outstation')}
                 >
                   <span className="home-service-icon">🛣️</span>
                   <span className="home-service-label">Outstation</span>
                   <span className="home-service-desc">One-way & round trip</span>
+                </button>
+              </div>
+            </>
+          )}
+
+          {serviceChoice === 'airport' && (
+            <>
+              <div className="home-flow-header">
+                <button
+                  type="button"
+                  className="home-back-link"
+                  onClick={handleBackToServices}
+                >
+                  ← Back to services
+                </button>
+                <h2 className="home-flow-title">Airport cab</h2>
+                <p className="home-flow-desc">
+                  Choose direction and enter your location.
+                </p>
+              </div>
+              <div className="home-local-form">
+                <div className="home-form-group">
+                  <label className="home-form-label">Trip direction</label>
+                  <div className="home-airport-toggle">
+                    <button
+                      type="button"
+                      className={`home-airport-toggle-btn ${(airportDirection || 'to_airport') === 'to_airport' ? 'home-airport-toggle-btn-selected' : ''}`}
+                      onClick={() => setAirportDirection('to_airport')}
+                    >
+                      Going to airport
+                    </button>
+                    <button
+                      type="button"
+                      className={`home-airport-toggle-btn ${airportDirection === 'from_airport' ? 'home-airport-toggle-btn-selected' : ''}`}
+                      onClick={() => setAirportDirection('from_airport')}
+                    >
+                      Coming from airport
+                    </button>
+                  </div>
+                </div>
+                <div className="home-form-group">
+                  <label className="home-form-label">
+                    {(airportDirection || 'to_airport') === 'to_airport' ? 'Pickup location' : 'Drop location'}
+                  </label>
+                  <LocationInput
+                    placeholder={(airportDirection || 'to_airport') === 'to_airport' ? 'Enter your pickup address' : 'Enter your drop address'}
+                    value={airportLocation}
+                    onSelect={setAirportLocation}
+                    label={(airportDirection || 'to_airport') === 'to_airport' ? 'From' : 'To'}
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="home-continue-btn"
+                  disabled={!airportLocationAddress.trim()}
+                  onClick={handleContinueToAirportCabSelection}
+                >
+                  Continue
+                </button>
+              </div>
+            </>
+          )}
+
+          {serviceChoice === 'outstation' && (
+            <>
+              <div className="home-flow-header">
+                <button
+                  type="button"
+                  className="home-back-link"
+                  onClick={handleBackToServices}
+                >
+                  ← Back to services
+                </button>
+                <h2 className="home-flow-title">Outstation cab</h2>
+                <p className="home-flow-desc">
+                  Select trip type and enter your locations.
+                </p>
+              </div>
+              <div className="home-local-form">
+                <div className="home-form-group">
+                  <label className="home-form-label">Select type</label>
+                  <select
+                    className="home-outstation-select"
+                    value={outstationTripType}
+                    onChange={(e) => setOutstationTripType(e.target.value)}
+                  >
+                    <option value="one_way">One way</option>
+                    <option value="round_trip">Round trip</option>
+                    <option value="multiple_stops">Multi way</option>
+                  </select>
+                </div>
+
+                {outstationTripType === 'one_way' && (
+                  <>
+                    <div className="home-form-group">
+                      <label className="home-form-label">From</label>
+                      <LocationInput
+                        placeholder="Enter pickup location"
+                        value={outstationFrom}
+                        onSelect={setOutstationFrom}
+                        label="From"
+                      />
+                    </div>
+                    <div className="home-form-group">
+                      <label className="home-form-label">To</label>
+                      <LocationInput
+                        placeholder="Enter drop location"
+                        value={outstationTo}
+                        onSelect={setOutstationTo}
+                        label="To"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {outstationTripType === 'round_trip' && (
+                  <>
+                    <div className="home-form-group">
+                      <label className="home-form-label">Pickup point</label>
+                      <LocationInput
+                        placeholder="Enter pickup location"
+                        value={outstationFrom}
+                        onSelect={setOutstationFrom}
+                        label="Pickup"
+                      />
+                    </div>
+                    <div className="home-form-group">
+                      <label className="home-form-label">Number of days</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="30"
+                        className="home-outstation-days-input"
+                        placeholder="e.g. 2"
+                        value={outstationRoundTripDays}
+                        onChange={(e) => setOutstationRoundTripDays(e.target.value)}
+                      />
+                    </div>
+                  </>
+                )}
+
+                {outstationTripType === 'multiple_stops' && (
+                  <>
+                    <div className="home-form-group">
+                      <label className="home-form-label">Destination 1</label>
+                      <LocationInput
+                        placeholder="Enter first destination"
+                        value={outstationMultiStops[0] || null}
+                        onSelect={(loc) => setOutstationMultiStops((prev) => {
+                          const next = [...prev];
+                          next[0] = loc;
+                          return next;
+                        })}
+                        label="Stop 1"
+                      />
+                    </div>
+                    <div className="home-form-group">
+                      <label className="home-form-label">Destination 2 (optional)</label>
+                      <LocationInput
+                        placeholder="Enter second destination"
+                        value={outstationMultiStops[1] || null}
+                        onSelect={(loc) => setOutstationMultiStops((prev) => {
+                          const next = [...prev];
+                          next[1] = loc;
+                          return next;
+                        })}
+                        label="Stop 2"
+                      />
+                    </div>
+                    {outstationMultiStops.slice(2).map((stop, idx) => (
+                      <div key={idx} className="home-form-group">
+                        <label className="home-form-label">Stop {idx + 3}</label>
+                        <LocationInput
+                          placeholder="Enter destination"
+                          value={stop || null}
+                          onSelect={(loc) => setOutstationMultiStops((prev) => {
+                            const next = [...prev];
+                            next[idx + 2] = loc;
+                            return next;
+                          })}
+                          label={`Stop ${idx + 3}`}
+                        />
+                      </div>
+                    ))}
+                    <div className="home-form-group home-add-stop-wrap">
+                      <button
+                        type="button"
+                        className="home-add-stop-btn"
+                        onClick={() => setOutstationMultiStops((prev) => [...prev, null])}
+                      >
+                        + Add stop
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                <button
+                  type="button"
+                  className="home-continue-btn"
+                  disabled={
+                    outstationTripType === 'one_way'
+                      ? !(outstationFrom?.address || '').trim() || !(outstationTo?.address || '').trim()
+                      : outstationTripType === 'round_trip'
+                        ? !(outstationFrom?.address || '').trim() || !(Number(outstationRoundTripDays) >= 1)
+                        : !(outstationMultiStops[0]?.address || '').trim()
+                  }
+                  onClick={handleContinueToOutstationCabSelection}
+                >
+                  Continue
                 </button>
               </div>
             </>
@@ -243,11 +535,13 @@ const HomePage = () => {
                   </div>
                   <div className="home-local-cab-types">
                     {localOffers.map((ct) => {
-                      const rateForSelected =
-                        numberOfHours &&
-                        ct.packageRates?.[numberOfHours] != null
+                      const baseFare = Number(ct.baseFare) || 0;
+                      const packageForHours =
+                        numberOfHours && ct.packageRates?.[numberOfHours] != null
                           ? Number(ct.packageRates[numberOfHours])
                           : null;
+                      const rateForSelected =
+                        packageForHours != null ? baseFare + packageForHours : null;
                       const firstCarImage =
                         ct.cabs?.length > 0 && ct.cabs[0].image_url
                           ? getImageUrl(ct.cabs[0].image_url)
@@ -305,10 +599,16 @@ const HomePage = () => {
                                   </span>
                                 )}
                               </div>
+                              {baseFare > 0 && (
+                                <div className="home-local-cab-type-base-fare">
+                                  Base fare: ₹{baseFare}
+                                </div>
+                              )}
                               {rateForSelected != null && (
                                 <div className="home-local-cab-type-selected-rate">
                                   Your {numberOfHours}h rate:{' '}
                                   <strong>₹{rateForSelected}</strong>
+                                  {baseFare > 0 && <span className="home-local-rate-includes-base"> (incl. base fare)</span>}
                                 </div>
                               )}
                             </div>
@@ -452,6 +752,12 @@ const HomePage = () => {
                 <span>Vehicle</span>
                 <span>{confirmModal.cab.vehicle_number}</span>
               </div>
+              {(Number(confirmModal.cabType.baseFare) || 0) > 0 && (
+                <div className="home-confirm-row">
+                  <span>Base fare</span>
+                  <span>₹{confirmModal.cabType.baseFare}</span>
+                </div>
+              )}
               <div className="home-confirm-row">
                 <span>Package ({numberOfHours}h)</span>
                 <span>
@@ -471,9 +777,10 @@ const HomePage = () => {
                 <span>Total</span>
                 <span>
                   ₹
-                  {confirmModal.cabType.packageRates?.[numberOfHours] != null
-                    ? confirmModal.cabType.packageRates[numberOfHours]
-                    : '—'}
+                  {(Number(confirmModal.cabType.baseFare) || 0) +
+                    (confirmModal.cabType.packageRates?.[numberOfHours] != null
+                      ? Number(confirmModal.cabType.packageRates[numberOfHours])
+                      : 0)}
                 </span>
               </div>
             </div>

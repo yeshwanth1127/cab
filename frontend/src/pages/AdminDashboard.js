@@ -25,7 +25,7 @@ const TABS = {
 };
 
 const RATE_METER_CAB_NAMES = {
-  local: ['Innova', 'Crysta', 'SUV', 'Sedan'],
+  local: ['Innova Crysta', 'SUV', 'Sedan'],
   airport: ['Innova', 'Crysta', 'SUV', 'Sedan'],
   outstation: ['Innova', 'Crysta', 'SUV', 'Sedan', 'TT', 'Minibus'],
 };
@@ -51,6 +51,7 @@ const AdminDashboard = () => {
   const [toast, setToast] = useState(null);
   const [detailBooking, setDetailBooking] = useState(null);
   const [assignBooking, setAssignBooking] = useState(null);
+  const [assignDriverId, setAssignDriverId] = useState('');
   const [assignCabId, setAssignCabId] = useState('');
   const [assignSubmitting, setAssignSubmitting] = useState(false);
   const [driverModal, setDriverModal] = useState(null);
@@ -65,6 +66,8 @@ const AdminDashboard = () => {
     fare_amount: '',
     service_type: 'local',
     number_of_hours: '',
+    outstation_trip_type: 'one_way',
+    extra_stops: [],
   });
   const [fromLocation, setFromLocation] = useState(null);
   const [toLocation, setToLocation] = useState(null);
@@ -367,6 +370,17 @@ const AdminDashboard = () => {
     }
   }, [assignBooking]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (assignBooking && cabs.length > 0 && assignBooking.cab_id) {
+      const cab = cabs.find((c) => Number(c.id) === Number(assignBooking.cab_id));
+      if (cab && cab.driver_id != null && assignDriverId === '') {
+        setAssignDriverId(String(cab.driver_id));
+      }
+    }
+  }, [assignBooking, cabs]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const assignModalCabs = cabs || [];
+
   const handleLogout = () => {
     logout();
     navigate('/admin/login');
@@ -383,6 +397,7 @@ const AdminDashboard = () => {
       });
       showToast('Driver & cab assigned.');
       setAssignBooking(null);
+      setAssignDriverId('');
       setAssignCabId('');
       fetchBookings();
     } catch (err) {
@@ -413,10 +428,40 @@ const AdminDashboard = () => {
 
   const handleCreateSubmit = async (e) => {
     e.preventDefault();
-    const fromAddress = fromLocation?.address || createForm.from_location;
-    const toAddress = toLocation?.address || createForm.to_location;
-    if (!fromAddress || !toAddress || !createForm.passenger_name || !createForm.passenger_phone || !createForm.fare_amount) {
-      showToast('Please fill required fields.', 'error');
+    const { service_type, outstation_trip_type, extra_stops } = createForm;
+    const isOutstation = service_type === 'outstation';
+    const roundTrip = isOutstation && outstation_trip_type === 'round_trip';
+    const multipleStops = isOutstation && outstation_trip_type === 'multiple_stops';
+
+    let fromAddress = (fromLocation?.address || createForm.from_location || '').trim();
+    let toAddress = (toLocation?.address || createForm.to_location || '').trim();
+    if (roundTrip) {
+      if (!fromAddress) {
+        showToast('Please select location (from & to).', 'error');
+        return;
+      }
+      toAddress = fromAddress;
+    } else if (multipleStops) {
+      if (!fromAddress) {
+        showToast('Please select From (first stop).', 'error');
+        return;
+      }
+      const stops = (extra_stops || []).filter(Boolean).map((s) => (typeof s === 'string' ? s : s?.address || s).trim());
+      toAddress = stops.length ? stops.join(', ') : fromAddress;
+    } else if (service_type === 'local') {
+      if (!fromAddress) {
+        showToast('Please select From location.', 'error');
+        return;
+      }
+      if (!toAddress) toAddress = 'Local package';
+    } else {
+      if (!fromAddress || !toAddress) {
+        showToast('Please fill From and To locations.', 'error');
+        return;
+      }
+    }
+    if (!createForm.passenger_name?.trim() || !createForm.passenger_phone?.trim() || createForm.fare_amount === '' || Number(createForm.fare_amount) < 0) {
+      showToast('Please fill passenger name, phone, and fare amount.', 'error');
       return;
     }
     setCreateSubmitting(true);
@@ -424,18 +469,28 @@ const AdminDashboard = () => {
       await api.post('/admin/bookings', {
         from_location: fromAddress,
         to_location: toAddress,
-        passenger_name: createForm.passenger_name,
-        passenger_phone: createForm.passenger_phone,
+        passenger_name: createForm.passenger_name.trim(),
+        passenger_phone: createForm.passenger_phone.trim(),
         fare_amount: Number(createForm.fare_amount),
         service_type: createForm.service_type,
-        number_of_hours: createForm.number_of_hours ? Number(createForm.number_of_hours) : null,
+        number_of_hours: createForm.service_type === 'local' && createForm.number_of_hours ? Number(createForm.number_of_hours) : null,
         pickup_lat: fromLocation?.lat ?? null,
         pickup_lng: fromLocation?.lng ?? null,
         destination_lat: toLocation?.lat ?? null,
         destination_lng: toLocation?.lng ?? null,
       });
       showToast('Booking created.');
-      setCreateForm({ from_location: '', to_location: '', passenger_name: '', passenger_phone: '', fare_amount: '', service_type: 'local', number_of_hours: '' });
+      setCreateForm({
+        from_location: '',
+        to_location: '',
+        passenger_name: '',
+        passenger_phone: '',
+        fare_amount: '',
+        service_type: 'local',
+        number_of_hours: '',
+        outstation_trip_type: 'one_way',
+        extra_stops: [],
+      });
       setFromLocation(null);
       setToLocation(null);
       fetchBookings();
@@ -863,7 +918,7 @@ const AdminDashboard = () => {
               </div>
               <div className="admin-entry-card-actions">
                 <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setDetailBooking(b)}>View</button>
-                <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => { setAssignBooking(b); setAssignCabId(b.cab_id || ''); }}>Assign</button>
+                <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => { setAssignBooking(b); setAssignDriverId(''); setAssignCabId(b.cab_id || ''); }}>Assign</button>
                 {b.maps_link && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link)}>Copy map</button>}
                 {(b.driver_phone || b.driver_name) && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendWhatsApp(b)}>WhatsApp</button>}
               </div>
@@ -926,13 +981,6 @@ const AdminDashboard = () => {
                 <span className="admin-nav-btn-sublabel">New Booking</span>
               </span>
             </button>
-            <button type="button" className={`admin-dashboard-nav-btn ${activeTab === TABS.rateMeter ? 'active' : ''}`} onClick={() => setTab(TABS.rateMeter)}>
-              <span className="admin-nav-btn-icon">📋</span>
-              <span className="admin-nav-btn-content">
-                <span className="admin-nav-btn-label">Rate Meter</span>
-                <span className="admin-nav-btn-sublabel">Local, Airport, Outstation</span>
-              </span>
-            </button>
             <button type="button" className={`admin-dashboard-nav-btn ${activeTab === TABS.enquiries ? 'active' : ''}`} onClick={() => setTab(TABS.enquiries)}>
               <span className="admin-nav-btn-icon">📄</span>
               <span className="admin-nav-btn-content">
@@ -990,6 +1038,16 @@ const AdminDashboard = () => {
               <span className="admin-nav-btn-content">
                 <span className="admin-nav-btn-label">Create Invoice</span>
                 <span className="admin-nav-btn-sublabel">Generate invoice directly</span>
+              </span>
+            </button>
+          </div>
+          <div className="admin-sidebar-section">
+            <div className="admin-sidebar-section-title">RATE METER</div>
+            <button type="button" className={`admin-dashboard-nav-btn ${activeTab === TABS.rateMeter ? 'active' : ''}`} onClick={() => setTab(TABS.rateMeter)}>
+              <span className="admin-nav-btn-icon">📋</span>
+              <span className="admin-nav-btn-content">
+                <span className="admin-nav-btn-label">Rate Meter</span>
+                <span className="admin-nav-btn-sublabel">Local, Airport, Outstation</span>
               </span>
             </button>
           </div>
@@ -1104,7 +1162,7 @@ const AdminDashboard = () => {
                         </div>
                         <div className="admin-entry-card-actions">
                           <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setDetailBooking(b)}>View</button>
-                          <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => { setAssignBooking(b); setAssignCabId(b.cab_id || ''); }}>Assign</button>
+                          <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => { setAssignBooking(b); setAssignDriverId(''); setAssignCabId(b.cab_id || ''); }}>Assign</button>
                           {b.maps_link && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link)}>Copy map</button>}
                           {(b.driver_phone || b.driver_name) && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendWhatsApp(b)}>WhatsApp</button>}
                         </div>
@@ -1124,44 +1182,173 @@ const AdminDashboard = () => {
 
           {activeTab === TABS.bookingForm && (
             <div className="admin-tab-section">
-              <h2>Create booking</h2>
-              <form onSubmit={handleCreateSubmit}>
+              <h2>Booking Form</h2>
+              <p className="admin-bookings-desc">Create a new booking. Fields change by service type (Local / Airport / Outstation), similar to the invoice form.</p>
+              <form onSubmit={handleCreateSubmit} className="admin-dashboard-box" style={{ maxWidth: 640, marginTop: 16 }}>
                 <div className="admin-form-grid">
-                  <div className="admin-form-group full-width">
-                    <label>From location</label>
-                    <LocationInput placeholder="Pickup address" value={fromLocation} onSelect={setFromLocation} />
-                  </div>
-                  <div className="admin-form-group full-width">
-                    <label>To location</label>
-                    <LocationInput placeholder="Destination address" value={toLocation} onSelect={setToLocation} />
-                  </div>
-                  <div className="admin-form-group">
-                    <label>Passenger name</label>
-                    <input type="text" value={createForm.passenger_name} onChange={(e) => setCreateForm((f) => ({ ...f, passenger_name: e.target.value }))} required />
-                  </div>
-                  <div className="admin-form-group">
-                    <label>Passenger phone</label>
-                    <input type="tel" value={createForm.passenger_phone} onChange={(e) => setCreateForm((f) => ({ ...f, passenger_phone: e.target.value }))} required />
-                  </div>
-                  <div className="admin-form-group">
-                    <label>Fare amount (₹)</label>
-                    <input type="number" min="0" step="0.01" value={createForm.fare_amount} onChange={(e) => setCreateForm((f) => ({ ...f, fare_amount: e.target.value }))} required />
-                  </div>
                   <div className="admin-form-group">
                     <label>Service type</label>
-                    <select value={createForm.service_type} onChange={(e) => setCreateForm((f) => ({ ...f, service_type: e.target.value }))}>
+                    <select
+                      value={createForm.service_type}
+                      onChange={(e) => setCreateForm((f) => ({ ...f, service_type: e.target.value, outstation_trip_type: 'one_way', extra_stops: [] }))}
+                    >
                       <option value="local">Local</option>
                       <option value="airport">Airport</option>
                       <option value="outstation">Outstation</option>
                     </select>
                   </div>
+                  {createForm.service_type === 'outstation' && (
+                    <div className="admin-form-group">
+                      <label>Outstation trip type</label>
+                      <select
+                        value={createForm.outstation_trip_type}
+                        onChange={(e) => setCreateForm((f) => ({ ...f, outstation_trip_type: e.target.value, extra_stops: [] }))}
+                      >
+                        <option value="one_way">One Way</option>
+                        <option value="round_trip">Round Trip</option>
+                        <option value="multiple_stops">Multiple Stops</option>
+                      </select>
+                    </div>
+                  )}
+                  {createForm.service_type === 'outstation' && createForm.outstation_trip_type === 'round_trip' ? (
+                    <div className="admin-form-group full-width">
+                      <label>Location (from &amp; to) *</label>
+                      <LocationInput
+                        placeholder="Round trip start and end"
+                        value={fromLocation}
+                        onSelect={(loc) => {
+                          setFromLocation(loc);
+                          setCreateForm((f) => ({ ...f, from_location: loc.address }));
+                        }}
+                      />
+                    </div>
+                  ) : createForm.service_type === 'outstation' && createForm.outstation_trip_type === 'multiple_stops' ? (
+                    <>
+                      <div className="admin-form-group full-width">
+                        <label>From (A) *</label>
+                        <LocationInput
+                          placeholder="First stop"
+                          value={fromLocation}
+                          onSelect={(loc) => {
+                            setFromLocation(loc);
+                            setCreateForm((f) => ({ ...f, from_location: loc.address }));
+                          }}
+                        />
+                      </div>
+                      <div className="admin-form-group full-width">
+                        <label>Stop 2 (B) – optional</label>
+                        <LocationInput
+                          placeholder="Second stop"
+                          value={createForm.extra_stops?.[0] ?? ''}
+                          onSelect={(loc) => setCreateForm((f) => ({
+                            ...f,
+                            extra_stops: [loc.address, ...(f.extra_stops || []).slice(1)],
+                          }))}
+                        />
+                      </div>
+                      {(createForm.extra_stops || []).slice(1).map((stop, idx) => (
+                        <div key={idx} className="admin-form-group full-width" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          <div style={{ flex: 1 }}>
+                            <LocationInput
+                              placeholder={`Stop ${idx + 3}`}
+                              value={typeof stop === 'string' ? stop : (stop?.address ?? '')}
+                              onSelect={(loc) => setCreateForm((f) => ({
+                                ...f,
+                                extra_stops: (f.extra_stops || []).map((s, i) => (i === idx + 1 ? loc.address : s)),
+                              }))}
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            className="admin-btn admin-btn-secondary admin-btn-sm"
+                            onClick={() => setCreateForm((f) => ({ ...f, extra_stops: (f.extra_stops || []).filter((_, i) => i !== idx + 1) }))}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                      <div className="admin-form-group full-width">
+                        <button
+                          type="button"
+                          className="admin-btn admin-btn-secondary"
+                          onClick={() => setCreateForm((f) => ({ ...f, extra_stops: [...(f.extra_stops || []), ''] }))}
+                        >
+                          + Add stop
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="admin-form-group full-width">
+                        <label>From location *</label>
+                        <LocationInput
+                          placeholder="Pickup address"
+                          value={fromLocation}
+                          onSelect={(loc) => {
+                            setFromLocation(loc);
+                            setCreateForm((f) => ({ ...f, from_location: loc.address }));
+                          }}
+                        />
+                      </div>
+                      <div className="admin-form-group full-width">
+                        <label>{createForm.service_type === 'local' ? 'To (optional – defaults to Local package)' : 'To location *'}</label>
+                        <LocationInput
+                          placeholder={createForm.service_type === 'local' ? 'Leave blank for Local package' : 'Drop address'}
+                          value={toLocation}
+                          onSelect={(loc) => {
+                            setToLocation(loc);
+                            setCreateForm((f) => ({ ...f, to_location: loc.address }));
+                          }}
+                        />
+                      </div>
+                    </>
+                  )}
                   <div className="admin-form-group">
-                    <label>Hours (optional)</label>
-                    <input type="number" min="1" value={createForm.number_of_hours} onChange={(e) => setCreateForm((f) => ({ ...f, number_of_hours: e.target.value }))} placeholder="4, 8, 12" />
+                    <label>Passenger name *</label>
+                    <input
+                      type="text"
+                      value={createForm.passenger_name}
+                      onChange={(e) => setCreateForm((f) => ({ ...f, passenger_name: e.target.value }))}
+                      required
+                    />
                   </div>
+                  <div className="admin-form-group">
+                    <label>Passenger phone *</label>
+                    <input
+                      type="tel"
+                      value={createForm.passenger_phone}
+                      onChange={(e) => setCreateForm((f) => ({ ...f, passenger_phone: e.target.value }))}
+                      required
+                    />
+                  </div>
+                  <div className="admin-form-group">
+                    <label>Fare amount (₹) *</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={createForm.fare_amount}
+                      onChange={(e) => setCreateForm((f) => ({ ...f, fare_amount: e.target.value }))}
+                      required
+                    />
+                  </div>
+                  {createForm.service_type === 'local' && (
+                    <div className="admin-form-group">
+                      <label>Hours (optional)</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={createForm.number_of_hours}
+                        onChange={(e) => setCreateForm((f) => ({ ...f, number_of_hours: e.target.value }))}
+                        placeholder="4, 8, 12"
+                      />
+                    </div>
+                  )}
                 </div>
-                <div className="admin-modal-actions">
-                  <button type="submit" className="admin-btn admin-btn-primary" disabled={createSubmitting}>{createSubmitting ? 'Creating…' : 'Create booking'}</button>
+                <div className="admin-modal-actions" style={{ marginTop: 16 }}>
+                  <button type="submit" className="admin-btn admin-btn-primary" disabled={createSubmitting}>
+                    {createSubmitting ? 'Creating…' : 'Create booking'}
+                  </button>
                 </div>
               </form>
             </div>
@@ -1242,7 +1429,7 @@ const AdminDashboard = () => {
                             )}
                           </div>
                         ))}
-                        {(rateMeterCabTypes.local || []).length === 0 && <p className="admin-rate-meters-empty">Click “Create missing cab types” to add Innova, Crysta, SUV, Sedan.</p>}
+                        {(rateMeterCabTypes.local || []).length === 0 && <p className="admin-rate-meters-empty">Click “Create missing cab types” to add Innova Crysta, SUV, Sedan.</p>}
                       </div>
                     )}
                   </div>
@@ -1936,6 +2123,19 @@ const AdminDashboard = () => {
               <div className="admin-detail-row"><span className="key">From</span><span className="value">{detailBooking.from_location}</span></div>
               <div className="admin-detail-row"><span className="key">To</span><span className="value">{detailBooking.to_location}</span></div>
               <div className="admin-detail-row"><span className="key">Passenger</span><span className="value">{detailBooking.passenger_name} / {detailBooking.passenger_phone}</span></div>
+              <div className="admin-detail-row"><span className="key">Service type</span><span className="value">{detailBooking.service_type === 'local' ? 'Local' : detailBooking.service_type === 'airport' ? 'Airport' : detailBooking.service_type === 'outstation' ? 'Outstation' : detailBooking.service_type || '—'}</span></div>
+              {detailBooking.service_type === 'local' && detailBooking.number_of_hours != null && (
+                <div className="admin-detail-row"><span className="key">Hour package</span><span className="value">{detailBooking.number_of_hours} {Number(detailBooking.number_of_hours) === 1 ? 'hour' : 'hours'}</span></div>
+              )}
+              {detailBooking.service_type === 'outstation' && detailBooking.trip_type && (
+                <div className="admin-detail-row"><span className="key">Trip type</span><span className="value">{detailBooking.trip_type === 'one_way' ? 'One Way' : detailBooking.trip_type === 'round_trip' ? 'Round Trip' : detailBooking.trip_type === 'multiple_stops' ? 'Multiple Stops' : detailBooking.trip_type}</span></div>
+              )}
+              {(detailBooking.cab_type_name || detailBooking.cab_type_id) && (
+                <div className="admin-detail-row"><span className="key">Cab type</span><span className="value">{detailBooking.cab_type_name || '—'}</span></div>
+              )}
+              {detailBooking.booking_date && (
+                <div className="admin-detail-row"><span className="key">Booking date</span><span className="value">{new Date(detailBooking.booking_date).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</span></div>
+              )}
               <div className="admin-detail-row"><span className="key">Status</span><span className="value">{detailBooking.booking_status}</span></div>
               <div className="admin-detail-row"><span className="key">Fare</span><span className="value">₹{detailBooking.fare_amount}</span></div>
               <div className="admin-detail-row"><span className="key">Driver / Cab</span><span className="value">{detailBooking.driver_name || '—'} / {detailBooking.vehicle_number || '—'}</span></div>
@@ -1945,26 +2145,45 @@ const AdminDashboard = () => {
       )}
 
       {assignBooking && (
-        <div className="admin-modal-overlay" onClick={() => { setAssignBooking(null); setAssignCabId(''); }}>
+        <div className="admin-modal-overlay" onClick={() => { setAssignBooking(null); setAssignDriverId(''); setAssignCabId(''); }}>
           <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
             <div className="admin-modal-header">
               <h3>Assign driver & cab</h3>
-              <button type="button" className="admin-modal-close" onClick={() => { setAssignBooking(null); setAssignCabId(''); }} aria-label="Close">×</button>
+              <button type="button" className="admin-modal-close" onClick={() => { setAssignBooking(null); setAssignDriverId(''); setAssignCabId(''); }} aria-label="Close">×</button>
             </div>
             <form onSubmit={handleAssignSubmit} className="admin-modal-body">
               <p>Booking #{assignBooking.id}: {assignBooking.from_location} → {assignBooking.to_location}</p>
               <div className="admin-form-group">
-                <label>Cab</label>
-                <select value={assignCabId} onChange={(e) => setAssignCabId(e.target.value)} required>
-                  <option value="">Select cab</option>
-                  {cabs.map((c) => (
-                    <option key={c.id} value={c.id}>{c.vehicle_number} {c.driver_name ? `(${c.driver_name})` : ''}</option>
+                <label>Driver</label>
+                <select
+                  value={assignDriverId}
+                  onChange={(e) => setAssignDriverId(e.target.value)}
+                >
+                  <option value="">Any driver</option>
+                  {(drivers || []).map((d) => (
+                    <option key={d.id} value={d.id}>{d.name} {d.phone ? `(${d.phone})` : ''}</option>
                   ))}
                 </select>
               </div>
+              <div className="admin-form-group">
+                <label>Cab</label>
+                <select
+                  value={assignCabId}
+                  onChange={(e) => setAssignCabId(e.target.value)}
+                  required
+                >
+                  <option value="">Select cab</option>
+                  {assignModalCabs.map((c) => (
+                    <option key={c.id} value={c.id}>{c.vehicle_number} {c.driver_name ? `(${c.driver_name})` : ''}</option>
+                  ))}
+                </select>
+                {false && assignDriverId && assignModalCabs.length === 0 && (
+                  <p className="admin-dashboard-list-loading" style={{ marginTop: 6 }}>No cab assigned to this driver. Select “Any driver” or assign a cab to this driver in Others.</p>
+                )}
+              </div>
               <div className="admin-modal-actions">
-                <button type="button" className="admin-btn admin-btn-secondary" onClick={() => { setAssignBooking(null); setAssignCabId(''); }}>Cancel</button>
-                <button type="submit" className="admin-btn admin-btn-primary" disabled={assignSubmitting}>{assignSubmitting ? 'Assigning…' : 'Assign'}</button>
+                <button type="button" className="admin-btn admin-btn-secondary" onClick={() => { setAssignBooking(null); setAssignDriverId(''); setAssignCabId(''); }}>Cancel</button>
+                <button type="submit" className="admin-btn admin-btn-primary" disabled={assignSubmitting || !assignCabId}>{assignSubmitting ? 'Assigning…' : 'Assign'}</button>
               </div>
             </form>
           </div>

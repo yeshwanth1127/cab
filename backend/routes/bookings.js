@@ -8,6 +8,7 @@ async function ensureBookingsColumns() {
   const columns = [
     ['service_type', 'TEXT'],
     ['number_of_hours', 'INTEGER'],
+    ['trip_type', 'TEXT'],
     ['pickup_lat', 'REAL'],
     ['pickup_lng', 'REAL'],
     ['destination_lat', 'REAL'],
@@ -36,6 +37,7 @@ router.post('/', async (req, res) => {
       passenger_phone,
       fare_amount,
       number_of_hours,
+      trip_type,
       cab_id,
       cab_type_id,
       pickup_lat,
@@ -54,8 +56,8 @@ router.post('/', async (req, res) => {
       `INSERT INTO bookings (
         from_location, to_location, distance_km, estimated_time_minutes, fare_amount,
         passenger_name, passenger_phone, cab_id, cab_type_id,
-        service_type, number_of_hours, pickup_lat, pickup_lng, destination_lat, destination_lng
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        service_type, number_of_hours, trip_type, pickup_lat, pickup_lng, destination_lat, destination_lng
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         from_location,
         to_location,
@@ -68,6 +70,7 @@ router.post('/', async (req, res) => {
         cab_type_id || null,
         service_type || 'local',
         number_of_hours != null ? Number(number_of_hours) : null,
+        trip_type || null,
         pickup_lat != null ? Number(pickup_lat) : null,
         pickup_lng != null ? Number(pickup_lng) : null,
         destination_lat != null ? Number(destination_lat) : null,

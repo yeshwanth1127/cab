@@ -19,6 +19,9 @@ function getInt(row, key, defaultVal = null) {
   return Number.isNaN(n) ? defaultVal : n;
 }
 
+// For local service, only these cab type names are shown in admin Rate Meter (and on the homepage).
+const LOCAL_RATE_METER_CAB_NAMES = ['Innova Crysta', 'SUV', 'Sedan'];
+
 // ----- Cab types ----- (paths under /rate-meter; admin mounts this router at root)
 router.get(
   '/rate-meter/cab-types',
@@ -36,7 +39,15 @@ router.get(
          ORDER BY ct.name`,
         [service_type]
       );
-      res.json(rows || []);
+      let result = rows || [];
+      if (service_type === 'local') {
+        result = result.filter((row) =>
+          LOCAL_RATE_METER_CAB_NAMES.some(
+            (allowed) => (row.name || '').trim().toLowerCase() === allowed.trim().toLowerCase()
+          )
+        );
+      }
+      res.json(result);
     } catch (error) {
       console.error('Error fetching rate-meter cab types:', error);
       res.status(500).json({ error: 'Server error' });
