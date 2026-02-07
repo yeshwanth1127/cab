@@ -22,6 +22,7 @@ async function ensureBookingsColumns() {
     ['maps_link', 'TEXT'],
     ['assigned_at', 'DATETIME'],
     ['trip_type', 'TEXT'],
+    ['invoice_number', 'TEXT'],
   ];
   for (const [col, type] of columns) {
     try {
@@ -30,6 +31,28 @@ async function ensureBookingsColumns() {
       // Column already exists, ignore
     }
   }
+}
+
+// Generate default invoice number: YYYYMMDD0001, YYYYMMDD0002, ... (sequence per day)
+async function generateDefaultInvoiceNumber(date) {
+  const d = date ? new Date(date) : new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const prefix = `${y}${m}${day}`;
+  const rows = await db.allAsync(
+    "SELECT invoice_number FROM bookings WHERE invoice_number IS NOT NULL AND invoice_number LIKE ? ORDER BY invoice_number DESC LIMIT 1",
+    [prefix + '%']
+  );
+  let seq = 1;
+  if (rows && rows.length > 0 && rows[0].invoice_number) {
+    const last = String(rows[0].invoice_number);
+    if (last.length >= 12) {
+      const num = parseInt(last.slice(-4), 10);
+      if (!Number.isNaN(num)) seq = num + 1;
+    }
+  }
+  return `${prefix}${String(seq).padStart(4, '0')}`;
 }
 
 // Build Google Maps directions URL from booking (address or lat/lng)
@@ -137,12 +160,14 @@ router.post('/bookings', [
       destination_lng,
     } = req.body;
 
+    const invoiceNumber = await generateDefaultInvoiceNumber();
     const result = await db.runAsync(
       `INSERT INTO bookings (
         from_location, to_location, distance_km, estimated_time_minutes, fare_amount,
         passenger_name, passenger_phone, cab_id, cab_type_id,
-        service_type, number_of_hours, pickup_lat, pickup_lng, destination_lat, destination_lng
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        service_type, number_of_hours, pickup_lat, pickup_lng, destination_lat, destination_lng,
+        invoice_number
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         from_location,
         to_location,
@@ -159,6 +184,7 @@ router.post('/bookings', [
         pickup_lng != null ? Number(pickup_lng) : null,
         destination_lat != null ? Number(destination_lat) : null,
         destination_lng != null ? Number(destination_lng) : null,
+        invoiceNumber,
       ]
     );
     const newBooking = await db.getAsync('SELECT * FROM bookings WHERE id = ?', [result.lastID]);
@@ -173,7 +199,7 @@ router.post('/bookings', [
 router.put('/bookings/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { booking_status, cab_id } = req.body;
+    const { booking_status, cab_id, invoice_number } = req.body;
 
     const existing = await db.getAsync('SELECT * FROM bookings WHERE id = ?', [id]);
     if (!existing) {
@@ -202,6 +228,10 @@ router.put('/bookings/:id', async (req, res) => {
         updates.push('assigned_at = ?');
         values.push(null);
       }
+    }
+    if (invoice_number !== undefined) {
+      updates.push('invoice_number = ?');
+      values.push(invoice_number ? String(invoice_number).trim() : null);
     }
 
     if (updates.length === 0) {
@@ -440,12 +470,14 @@ router.post('/invoice/create', [
     const svcType = service_type || 'local';
     const outstationTripType = svcType === 'outstation' && trip_type && ['one_way', 'round_trip', 'multiple_stops'].includes(trip_type) ? trip_type : null;
 
+    const invoiceNumber = await generateDefaultInvoiceNumber();
     const result = await db.runAsync(
       `INSERT INTO bookings (
         from_location, to_location, distance_km, estimated_time_minutes, fare_amount,
         passenger_name, passenger_phone, cab_id, cab_type_id,
-        service_type, number_of_hours, trip_type, pickup_lat, pickup_lng, destination_lat, destination_lng
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        service_type, number_of_hours, trip_type, pickup_lat, pickup_lng, destination_lat, destination_lng,
+        invoice_number
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         from_location,
         to_location,
@@ -463,6 +495,7 @@ router.post('/invoice/create', [
         null,
         null,
         null,
+        invoiceNumber,
       ]
     );
     const newBooking = await db.getAsync('SELECT * FROM bookings WHERE id = ?', [result.lastID]);

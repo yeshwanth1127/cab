@@ -14,6 +14,7 @@ async function ensureBookingsColumns() {
     ['destination_lat', 'REAL'],
     ['destination_lng', 'REAL'],
     ['maps_link', 'TEXT'],
+    ['invoice_number', 'TEXT'],
   ];
   for (const [col, type] of columns) {
     try {
@@ -22,6 +23,24 @@ async function ensureBookingsColumns() {
       // Column already exists, ignore
     }
   }
+}
+
+async function generateDefaultInvoiceNumber() {
+  const d = new Date();
+  const prefix = d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+  const rows = await db.allAsync(
+    "SELECT invoice_number FROM bookings WHERE invoice_number IS NOT NULL AND invoice_number LIKE ? ORDER BY invoice_number DESC LIMIT 1",
+    [prefix + '%']
+  );
+  let seq = 1;
+  if (rows && rows.length > 0 && rows[0].invoice_number) {
+    const last = String(rows[0].invoice_number);
+    if (last.length >= 12) {
+      const num = parseInt(last.slice(-4), 10);
+      if (!Number.isNaN(num)) seq = num + 1;
+    }
+  }
+  return `${prefix}${String(seq).padStart(4, '0')}`;
 }
 
 // POST / - Create booking (public, used by HomePage and CarOptions)
@@ -52,12 +71,14 @@ router.post('/', async (req, res) => {
 
     const distance_km = 0;
     const estimated_time_minutes = null;
+    const invoiceNumber = await generateDefaultInvoiceNumber();
     const result = await db.runAsync(
       `INSERT INTO bookings (
         from_location, to_location, distance_km, estimated_time_minutes, fare_amount,
         passenger_name, passenger_phone, cab_id, cab_type_id,
-        service_type, number_of_hours, trip_type, pickup_lat, pickup_lng, destination_lat, destination_lng
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        service_type, number_of_hours, trip_type, pickup_lat, pickup_lng, destination_lat, destination_lng,
+        invoice_number
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         from_location,
         to_location,
@@ -75,6 +96,7 @@ router.post('/', async (req, res) => {
         pickup_lng != null ? Number(pickup_lng) : null,
         destination_lat != null ? Number(destination_lat) : null,
         destination_lng != null ? Number(destination_lng) : null,
+        invoiceNumber,
       ]
     );
 

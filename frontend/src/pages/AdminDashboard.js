@@ -16,7 +16,7 @@ const TABS = {
   tripEnd: 'tripEnd',
   cancelledBookings: 'cancelledBookings',
   driverStatus: 'driverStatus',
-  billing: 'billing',
+  billing: 'billing', // UI label: "Invoice"
   createInvoice: 'createInvoice',
   // Corporate Bookings section
   corporateBookings: 'corporateBookings',
@@ -50,6 +50,8 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState({ dashboard: false, bookings: false, drivers: false });
   const [toast, setToast] = useState(null);
   const [detailBooking, setDetailBooking] = useState(null);
+  const [editingInvoiceNumber, setEditingInvoiceNumber] = useState('');
+  const [invoiceNumberSaving, setInvoiceNumberSaving] = useState(false);
   const [assignBooking, setAssignBooking] = useState(null);
   const [assignDriverId, setAssignDriverId] = useState('');
   const [assignCabId, setAssignCabId] = useState('');
@@ -134,6 +136,16 @@ const AdminDashboard = () => {
   });
   const [corporateInvoiceSubmitting, setCorporateInvoiceSubmitting] = useState(false);
   const [corporateDownloadAllLoading, setCorporateDownloadAllLoading] = useState(false);
+  const [corporateEditingInvoiceId, setCorporateEditingInvoiceId] = useState(null);
+  const [corporateEditingInvoiceValue, setCorporateEditingInvoiceValue] = useState('');
+  const [corporateInvoiceNumberSaving, setCorporateInvoiceNumberSaving] = useState(false);
+  const [corporateEditBooking, setCorporateEditBooking] = useState(null);
+  const [corporateEditForm, setCorporateEditForm] = useState({
+    company_name: '', name: '', phone_number: '', pickup_point: '', drop_point: '',
+    service_type: 'local', travel_date: '', travel_time: '', fare_amount: '', notes: '', status: 'pending',
+  });
+  const [corporateEditSaving, setCorporateEditSaving] = useState(false);
+  const [staleBookingsWarning, setStaleBookingsWarning] = useState(null);
 
   const showToast = useCallback((message, type = 'success') => {
     setToast({ message, type });
@@ -364,6 +376,22 @@ const AdminDashboard = () => {
     }
   }, [activeTab, fetchStats, fetchBookings, fetchDrivers, fetchOthersCabTypes, fetchCorporateBookings]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Warn when admin enters dashboard if any booking has not had status changed in 24+ hours (non-completed/cancelled)
+  useEffect(() => {
+    if (activeTab !== TABS.dashboard || !bookings || bookings.length === 0) {
+      if (activeTab !== TABS.dashboard) setStaleBookingsWarning(null);
+      return;
+    }
+    const terminal = ['completed', 'cancelled'];
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+    const stale = bookings.filter((b) => {
+      if (terminal.includes(b.booking_status)) return false;
+      const t = b.booking_date ? new Date(b.booking_date).getTime() : 0;
+      return t > 0 && t < cutoff;
+    });
+    setStaleBookingsWarning(stale.length ? stale : null);
+  }, [activeTab, bookings]);
+
   useEffect(() => {
     if (assignBooking) {
       fetchDrivers();
@@ -379,7 +407,29 @@ const AdminDashboard = () => {
     }
   }, [assignBooking, cabs]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (detailBooking) {
+      setEditingInvoiceNumber(detailBooking.invoice_number || '');
+    }
+  }, [detailBooking]);
+
   const assignModalCabs = cabs || [];
+
+  const handleSaveInvoiceNumber = async () => {
+    if (!detailBooking) return;
+    const val = (editingInvoiceNumber || '').trim();
+    setInvoiceNumberSaving(true);
+    try {
+      await api.put(`/admin/bookings/${detailBooking.id}`, { invoice_number: val || null });
+      setDetailBooking((prev) => (prev ? { ...prev, invoice_number: val || null } : null));
+      setBookings((prev) => prev.map((b) => (b.id === detailBooking.id ? { ...b, invoice_number: val || null } : b)));
+      showToast('Invoice number updated.');
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to update invoice number', 'error');
+    } finally {
+      setInvoiceNumberSaving(false);
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -404,6 +454,23 @@ const AdminDashboard = () => {
       showToast(err.response?.data?.error || 'Failed to assign', 'error');
     } finally {
       setAssignSubmitting(false);
+    }
+  };
+
+  const [statusUpdatingId, setStatusUpdatingId] = useState(null);
+  const handleUpdateBookingStatus = async (bookingId, newStatus) => {
+    setStatusUpdatingId(bookingId);
+    try {
+      await api.put(`/admin/bookings/${bookingId}`, { booking_status: newStatus });
+      showToast(newStatus === 'confirmed' ? 'Booking confirmed.' : newStatus === 'completed' ? 'Trip marked completed.' : 'Booking cancelled.');
+      fetchBookings();
+      if (detailBooking && detailBooking.id === bookingId) {
+        setDetailBooking((prev) => (prev ? { ...prev, booking_status: newStatus } : null));
+      }
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to update status', 'error');
+    } finally {
+      setStatusUpdatingId(null);
     }
   };
 
@@ -589,21 +656,46 @@ const AdminDashboard = () => {
     }
   };
 
+  const parseBlobError = async (data) => {
+    if (data && typeof data.text === 'function') {
+      try {
+        const text = await data.text();
+        const parsed = JSON.parse(text);
+        return parsed?.error || text || 'Request failed';
+      } catch (_) {
+        return 'Request failed';
+      }
+    }
+    return typeof data?.error === 'string' ? data.error : 'Failed to download invoice';
+  };
+
   const handleCorporateInvoiceDownload = async (bookingId) => {
     try {
       const response = await api.get(`/corporate/bookings/${bookingId}/invoice`, { responseType: 'blob' });
-      const blob = new Blob([response.data], { type: 'application/pdf' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `corporate-invoice-${bookingId}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
-      showToast('Invoice downloaded.');
+      if (response.data instanceof Blob && response.data.size > 0 && response.data.type === 'application/pdf') {
+        const url = window.URL.createObjectURL(response.data);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `corporate-invoice-${bookingId}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        showToast('Invoice downloaded.');
+      } else {
+        const msg = await parseBlobError(response.data);
+        showToast(msg || 'Invalid response', 'error');
+      }
     } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to download invoice', 'error');
+      let msg = 'Failed to download corporate invoice';
+      if (err.response?.data instanceof Blob) {
+        msg = await parseBlobError(err.response.data);
+      } else if (err.response?.data?.error) {
+        msg = err.response.data.error;
+      } else if (err.message) {
+        msg = err.message;
+      }
+      showToast(msg, 'error');
     }
   };
 
@@ -632,21 +724,100 @@ const AdminDashboard = () => {
     setCorporateDownloadAllLoading(true);
     try {
       const response = await api.get('/corporate/invoices/download-all', { responseType: 'blob' });
-      const blob = new Blob([response.data], { type: 'application/zip' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'corporate-invoices.zip';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
-      showToast('All corporate invoices downloaded.');
+      if (response.data instanceof Blob && response.data.size > 0 && response.data.type === 'application/zip') {
+        const url = window.URL.createObjectURL(response.data);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'corporate-invoices.zip';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        showToast('All corporate invoices downloaded.');
+      } else {
+        const msg = await parseBlobError(response.data);
+        showToast(msg || 'Invalid response', 'error');
+      }
     } catch (err) {
-      const msg = err.response?.data?.error || (err.response?.status === 404 ? 'No corporate bookings to export' : 'Failed to download');
+      let msg = err.response?.status === 404 ? 'No corporate bookings to export' : 'Failed to download';
+      if (err.response?.data instanceof Blob) {
+        msg = await parseBlobError(err.response.data);
+      } else if (err.response?.data?.error) {
+        msg = err.response.data.error;
+      }
       showToast(msg, 'error');
     } finally {
       setCorporateDownloadAllLoading(false);
+    }
+  };
+
+  const handleSaveCorporateInvoiceNumber = async (b, newValue) => {
+    const val = (newValue ?? corporateEditingInvoiceValue).trim();
+    setCorporateInvoiceNumberSaving(true);
+    try {
+      await api.put(`/corporate/bookings/${b.id}`, { invoice_number: val || null });
+      setCorporateBookings((prev) => prev.map((x) => (x.id === b.id ? { ...x, invoice_number: val || null } : x)));
+      setCorporateEditingInvoiceId(null);
+      setCorporateEditingInvoiceValue('');
+      showToast('Corporate invoice number updated.');
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to update invoice number', 'error');
+    } finally {
+      setCorporateInvoiceNumberSaving(false);
+    }
+  };
+
+  const handleOpenCorporateEdit = (b) => {
+    setCorporateEditBooking(b);
+    setCorporateEditForm({
+      company_name: b.company_name || '',
+      name: b.name || '',
+      phone_number: b.phone_number || '',
+      pickup_point: b.pickup_point || '',
+      drop_point: b.drop_point || '',
+      service_type: b.service_type || 'local',
+      travel_date: b.travel_date || '',
+      travel_time: b.travel_time || '',
+      fare_amount: b.fare_amount != null && b.fare_amount !== '' ? String(b.fare_amount) : '',
+      notes: b.notes || '',
+      status: b.status || 'pending',
+    });
+  };
+
+  const handleCorporateEditFormChange = (e) => {
+    const { name, value } = e.target;
+    setCorporateEditForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleSaveCorporateEdit = async (e) => {
+    e.preventDefault();
+    if (!corporateEditBooking) return;
+    setCorporateEditSaving(true);
+    try {
+      const payload = {
+        company_name: corporateEditForm.company_name.trim() || undefined,
+        name: corporateEditForm.name.trim() || undefined,
+        phone_number: corporateEditForm.phone_number.trim() || undefined,
+        pickup_point: corporateEditForm.pickup_point.trim() || undefined,
+        drop_point: corporateEditForm.drop_point.trim() || undefined,
+        service_type: corporateEditForm.service_type || undefined,
+        travel_date: corporateEditForm.travel_date || undefined,
+        travel_time: corporateEditForm.travel_time || undefined,
+        notes: corporateEditForm.notes.trim() || undefined,
+        status: corporateEditForm.status || undefined,
+      };
+      if (corporateEditForm.fare_amount !== '') {
+        const num = parseFloat(corporateEditForm.fare_amount);
+        payload.fare_amount = Number.isNaN(num) ? undefined : num;
+      }
+      const { data: updated } = await api.put(`/corporate/bookings/${corporateEditBooking.id}`, payload);
+      setCorporateBookings((prev) => prev.map((x) => (x.id === corporateEditBooking.id ? updated : x)));
+      setCorporateEditBooking(null);
+      showToast('Corporate booking updated.');
+    } catch (err) {
+      showToast(err.response?.data?.error || err.response?.data?.errors?.[0]?.msg || 'Failed to update booking', 'error');
+    } finally {
+      setCorporateEditSaving(false);
     }
   };
 
@@ -939,7 +1110,22 @@ const AdminDashboard = () => {
               </div>
               <div className="admin-entry-card-actions">
                 <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setDetailBooking(b)}>View</button>
-                <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => { setAssignBooking(b); setAssignDriverId(''); setAssignCabId(b.cab_id || ''); }}>Assign</button>
+                {b.booking_status === 'pending' && (
+                  <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => handleUpdateBookingStatus(b.id, 'confirmed')} disabled={statusUpdatingId === b.id}>
+                    {statusUpdatingId === b.id ? '…' : 'Confirm'}
+                  </button>
+                )}
+                {b.booking_status === 'confirmed' && (
+                  <>
+                    <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => handleUpdateBookingStatus(b.id, 'completed')} disabled={statusUpdatingId === b.id}>
+                      {statusUpdatingId === b.id ? '…' : 'Trip completed'}
+                    </button>
+                    <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleUpdateBookingStatus(b.id, 'cancelled')} disabled={statusUpdatingId === b.id}>
+                      {statusUpdatingId === b.id ? '…' : 'Cancel'}
+                    </button>
+                  </>
+                )}
+                <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => { setAssignBooking(b); setAssignDriverId(''); setAssignCabId(b.cab_id || ''); }}>Assign</button>
                 {b.maps_link && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link)}>Copy map</button>}
                 {(b.driver_phone || b.driver_name) && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendWhatsApp(b)}>WhatsApp</button>}
               </div>
@@ -1046,11 +1232,11 @@ const AdminDashboard = () => {
             </button>
           </div>
           <div className="admin-sidebar-section">
-            <div className="admin-sidebar-section-title">BILLING</div>
+            <div className="admin-sidebar-section-title">INVOICE</div>
             <button type="button" className={`admin-dashboard-nav-btn ${activeTab === TABS.billing ? 'active' : ''}`} onClick={() => setTab(TABS.billing)}>
               <span className="admin-nav-btn-icon">💰</span>
               <span className="admin-nav-btn-content">
-                <span className="admin-nav-btn-label">Billing</span>
+                <span className="admin-nav-btn-label">Invoice</span>
                 <span className="admin-nav-btn-sublabel">Invoices & Reports</span>
               </span>
             </button>
@@ -1183,6 +1369,21 @@ const AdminDashboard = () => {
                         </div>
                         <div className="admin-entry-card-actions">
                           <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setDetailBooking(b)}>View</button>
+                          {b.booking_status === 'pending' && (
+                            <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => handleUpdateBookingStatus(b.id, 'confirmed')} disabled={statusUpdatingId === b.id}>
+                              {statusUpdatingId === b.id ? '…' : 'Confirm'}
+                            </button>
+                          )}
+                          {b.booking_status === 'confirmed' && (
+                            <>
+                              <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => handleUpdateBookingStatus(b.id, 'completed')} disabled={statusUpdatingId === b.id}>
+                                {statusUpdatingId === b.id ? '…' : 'Trip completed'}
+                              </button>
+                              <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleUpdateBookingStatus(b.id, 'cancelled')} disabled={statusUpdatingId === b.id}>
+                                {statusUpdatingId === b.id ? '…' : 'Cancel'}
+                              </button>
+                            </>
+                          )}
                           <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => { setAssignBooking(b); setAssignDriverId(''); setAssignCabId(b.cab_id || ''); }}>Assign</button>
                           {b.maps_link && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link)}>Copy map</button>}
                           {(b.driver_phone || b.driver_name) && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendWhatsApp(b)}>WhatsApp</button>}
@@ -1814,7 +2015,10 @@ const AdminDashboard = () => {
                   {confirmedBookingsList.map((b) => (
                     <div key={b.id} className="admin-entry-card">
                       <div className="admin-entry-card-header">
-                        <span className="admin-entry-card-id">#{b.id}</span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span className="admin-entry-card-id">#{b.id}</span>
+                          <span className="admin-entry-card-invoice">Inv: {b.invoice_number || `#${b.id}`}</span>
+                        </span>
                         <span className="admin-service-badge">{b.booking_status}</span>
                       </div>
                       <div className="admin-entry-card-rows">
@@ -1826,6 +2030,16 @@ const AdminDashboard = () => {
                       </div>
                       <div className="admin-entry-card-actions">
                         <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setDetailBooking(b)}>View</button>
+                        {b.booking_status === 'confirmed' && (
+                          <>
+                            <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => handleUpdateBookingStatus(b.id, 'completed')} disabled={statusUpdatingId === b.id}>
+                              {statusUpdatingId === b.id ? '…' : 'Trip completed'}
+                            </button>
+                            <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleUpdateBookingStatus(b.id, 'cancelled')} disabled={statusUpdatingId === b.id}>
+                              {statusUpdatingId === b.id ? '…' : 'Cancel'}
+                            </button>
+                          </>
+                        )}
                         <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => handleBookingInvoiceDownload(b.id, true)}>Download (with GST)</button>
                         <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleBookingInvoiceDownload(b.id, false)}>Download (without GST)</button>
                       </div>
@@ -2041,6 +2255,28 @@ const AdminDashboard = () => {
                     <div key={b.id} className="admin-entry-card">
                       <div className="admin-entry-card-header">
                         <span className="admin-entry-card-id">#{b.id}</span>
+                        <span className="admin-entry-card-invoice">
+                          {corporateEditingInvoiceId === b.id ? (
+                            <>
+                              <input
+                                type="text"
+                                className="admin-inline-invoice-input"
+                                value={corporateEditingInvoiceValue}
+                                onChange={(e) => setCorporateEditingInvoiceValue(e.target.value)}
+                                placeholder="crpYYYYMMDD0001"
+                              />
+                              <button type="button" className="admin-btn admin-btn-sm" onClick={() => handleSaveCorporateInvoiceNumber(b)} disabled={corporateInvoiceNumberSaving}>
+                                {corporateInvoiceNumberSaving ? 'Saving…' : 'Save'}
+                              </button>
+                              <button type="button" className="admin-btn admin-btn-sm" onClick={() => { setCorporateEditingInvoiceId(null); setCorporateEditingInvoiceValue(''); }}>Cancel</button>
+                            </>
+                          ) : (
+                            <>
+                              Inv: {b.invoice_number || `#${b.id}`}
+                              <button type="button" className="admin-btn admin-btn-ghost admin-btn-sm" style={{ marginLeft: 6 }} onClick={() => { setCorporateEditingInvoiceId(b.id); setCorporateEditingInvoiceValue(b.invoice_number || ''); }} title="Edit invoice number">Edit</button>
+                            </>
+                          )}
+                        </span>
                         <span className="admin-service-badge">{b.service_type || '—'}</span>
                         <span className="admin-service-badge">{b.status}</span>
                       </div>
@@ -2052,6 +2288,7 @@ const AdminDashboard = () => {
                         <div className="admin-entry-card-row"><span className="key">Drop</span><span className="value">{b.drop_point || '—'}</span></div>
                       </div>
                       <div className="admin-entry-card-actions">
+                        <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleOpenCorporateEdit(b)}>Edit booking</button>
                         <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => handleCorporateInvoiceDownload(b.id)}>Download invoice</button>
                       </div>
                     </div>
@@ -2078,6 +2315,28 @@ const AdminDashboard = () => {
                     <div key={b.id} className="admin-entry-card">
                       <div className="admin-entry-card-header">
                         <span className="admin-entry-card-id">#{b.id}</span>
+                        <span className="admin-entry-card-invoice">
+                          {corporateEditingInvoiceId === b.id ? (
+                            <>
+                              <input
+                                type="text"
+                                className="admin-inline-invoice-input"
+                                value={corporateEditingInvoiceValue}
+                                onChange={(e) => setCorporateEditingInvoiceValue(e.target.value)}
+                                placeholder="crpYYYYMMDD0001"
+                              />
+                              <button type="button" className="admin-btn admin-btn-sm" onClick={() => handleSaveCorporateInvoiceNumber(b)} disabled={corporateInvoiceNumberSaving}>
+                                {corporateInvoiceNumberSaving ? 'Saving…' : 'Save'}
+                              </button>
+                              <button type="button" className="admin-btn admin-btn-sm" onClick={() => { setCorporateEditingInvoiceId(null); setCorporateEditingInvoiceValue(''); }}>Cancel</button>
+                            </>
+                          ) : (
+                            <>
+                              Inv: {b.invoice_number || `#${b.id}`}
+                              <button type="button" className="admin-btn admin-btn-ghost admin-btn-sm" style={{ marginLeft: 6 }} onClick={() => { setCorporateEditingInvoiceId(b.id); setCorporateEditingInvoiceValue(b.invoice_number || ''); }} title="Edit invoice number">Edit</button>
+                            </>
+                          )}
+                        </span>
                         <span className="value">{b.fare_amount != null ? `₹${Number(b.fare_amount).toFixed(2)}` : '—'}</span>
                       </div>
                       <div className="admin-entry-card-rows">
@@ -2086,6 +2345,7 @@ const AdminDashboard = () => {
                         <div className="admin-entry-card-row"><span className="key">Trip</span><span className="value">{b.pickup_point || '—'} → {b.drop_point || '—'}</span></div>
                       </div>
                       <div className="admin-entry-card-actions">
+                        <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleOpenCorporateEdit(b)}>Edit booking</button>
                         <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => handleCorporateInvoiceDownload(b.id)}>Download</button>
                       </div>
                     </div>
@@ -2159,6 +2419,44 @@ const AdminDashboard = () => {
 
       {sidebarOpen && <div className="admin-dashboard-sidebar-overlay" onClick={() => setSidebarOpen(false)} role="presentation" />}
 
+      {staleBookingsWarning && staleBookingsWarning.length > 0 && (
+        <div className="admin-modal-overlay admin-stale-warning-overlay" onClick={() => setStaleBookingsWarning(null)}>
+          <div className="admin-modal admin-stale-warning-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
+            <div className="admin-modal-header" style={{ background: '#b91c1c', color: '#fff' }}>
+              <h3>⚠️ Booking status warning</h3>
+              <button type="button" className="admin-modal-close" onClick={() => setStaleBookingsWarning(null)} aria-label="Close" style={{ color: '#fff', opacity: 0.9 }}>×</button>
+            </div>
+            <div className="admin-modal-body" style={{ padding: 20 }}>
+              <p style={{ marginBottom: 16, fontWeight: 600, color: '#1f2937' }}>
+                {staleBookingsWarning.length} booking{staleBookingsWarning.length !== 1 ? 's have' : ' has'} not been updated in more than 24 hours. Please review and update their status.
+              </p>
+              <ul className="admin-stale-booking-list" style={{ listStyle: 'none', padding: 0, margin: 0, maxHeight: 240, overflowY: 'auto' }}>
+                {staleBookingsWarning.map((b) => (
+                  <li
+                    key={b.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => { setDetailBooking(b); setStaleBookingsWarning(null); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailBooking(b); setStaleBookingsWarning(null); } }}
+                    className="admin-stale-booking-item"
+                    style={{ padding: '10px 12px', borderBottom: '1px solid #e5e7eb', fontSize: 14, cursor: 'pointer', transition: 'background 0.15s' }}
+                  >
+                    <span style={{ fontWeight: 600 }}>#{b.id}</span>
+                    {' '}
+                    {b.from_location || '—'} → {b.to_location || '—'}
+                    {' '}
+                    <span className="admin-service-badge" style={{ marginLeft: 6 }}>{b.booking_status}</span>
+                  </li>
+                ))}
+              </ul>
+              <div className="admin-modal-actions" style={{ marginTop: 16 }}>
+                <button type="button" className="admin-btn admin-btn-primary" onClick={() => setStaleBookingsWarning(null)}>OK</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {detailBooking && (
         <div className="admin-modal-overlay admin-booking-detail-overlay" onClick={() => setDetailBooking(null)}>
           <div className="admin-modal admin-booking-detail-modal" onClick={(e) => e.stopPropagation()}>
@@ -2167,6 +2465,22 @@ const AdminDashboard = () => {
               <button type="button" className="admin-modal-close" onClick={() => setDetailBooking(null)} aria-label="Close">×</button>
             </div>
             <div className="admin-modal-body admin-booking-detail-body">
+              <div className="admin-detail-row admin-detail-row-editable">
+                <span className="key">Invoice number</span>
+                <span className="value" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <input
+                    type="text"
+                    className="admin-input admin-input-sm"
+                    value={editingInvoiceNumber}
+                    onChange={(e) => setEditingInvoiceNumber(e.target.value)}
+                    placeholder="e.g. 202602070001"
+                    style={{ width: 160 }}
+                  />
+                  <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={handleSaveInvoiceNumber} disabled={invoiceNumberSaving}>
+                    {invoiceNumberSaving ? 'Saving…' : 'Save'}
+                  </button>
+                </span>
+              </div>
               <div className="admin-detail-row"><span className="key">From</span><span className="value">{detailBooking.from_location}</span></div>
               <div className="admin-detail-row"><span className="key">To</span><span className="value">{detailBooking.to_location}</span></div>
               <div className="admin-detail-row"><span className="key">Passenger</span><span className="value">{detailBooking.passenger_name} / {detailBooking.passenger_phone}</span></div>
@@ -2186,7 +2500,108 @@ const AdminDashboard = () => {
               <div className="admin-detail-row"><span className="key">Status</span><span className="value">{detailBooking.booking_status}</span></div>
               <div className="admin-detail-row"><span className="key">Fare</span><span className="value">₹{detailBooking.fare_amount}</span></div>
               <div className="admin-detail-row"><span className="key">Driver / Cab</span><span className="value">{detailBooking.driver_name || '—'} / {detailBooking.vehicle_number || '—'}</span></div>
+              <div className="admin-detail-row admin-detail-row-actions" style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #e5e7eb', gap: 8, flexWrap: 'wrap' }}>
+                <span className="key" style={{ width: '100%', marginBottom: 4 }}>Update status</span>
+                <span className="value" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                  {detailBooking.booking_status === 'pending' && (
+                    <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => handleUpdateBookingStatus(detailBooking.id, 'confirmed')} disabled={statusUpdatingId === detailBooking.id}>
+                      {statusUpdatingId === detailBooking.id ? 'Updating…' : 'Confirm'}
+                    </button>
+                  )}
+                  {detailBooking.booking_status === 'confirmed' && (
+                    <>
+                      <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => handleUpdateBookingStatus(detailBooking.id, 'completed')} disabled={statusUpdatingId === detailBooking.id}>
+                        {statusUpdatingId === detailBooking.id ? 'Updating…' : 'Trip completed'}
+                      </button>
+                      <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleUpdateBookingStatus(detailBooking.id, 'cancelled')} disabled={statusUpdatingId === detailBooking.id}>
+                        Cancel
+                      </button>
+                    </>
+                  )}
+                  {detailBooking.booking_status === 'in_progress' && (
+                    <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => handleUpdateBookingStatus(detailBooking.id, 'completed')} disabled={statusUpdatingId === detailBooking.id}>
+                      {statusUpdatingId === detailBooking.id ? 'Updating…' : 'Trip completed'}
+                    </button>
+                  )}
+                  {!['pending', 'confirmed', 'in_progress'].includes(detailBooking.booking_status) && (
+                    <span style={{ color: '#6b7280', fontSize: 14 }}>No action (status: {detailBooking.booking_status})</span>
+                  )}
+                </span>
+              </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {corporateEditBooking && (
+        <div className="admin-modal-overlay" onClick={() => setCorporateEditBooking(null)}>
+          <div className="admin-modal admin-modal-wide" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
+            <div className="admin-modal-header">
+              <h3>Edit corporate booking #{corporateEditBooking.id}</h3>
+              <button type="button" className="admin-modal-close" onClick={() => setCorporateEditBooking(null)} aria-label="Close">×</button>
+            </div>
+            <form onSubmit={handleSaveCorporateEdit} className="admin-modal-body">
+              <div className="admin-form-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div className="admin-form-group full-width">
+                  <label>Company name</label>
+                  <input type="text" name="company_name" value={corporateEditForm.company_name} onChange={handleCorporateEditFormChange} />
+                </div>
+                <div className="admin-form-group">
+                  <label>Contact name</label>
+                  <input type="text" name="name" value={corporateEditForm.name} onChange={handleCorporateEditFormChange} />
+                </div>
+                <div className="admin-form-group">
+                  <label>Phone</label>
+                  <input type="tel" name="phone_number" value={corporateEditForm.phone_number} onChange={handleCorporateEditFormChange} />
+                </div>
+                <div className="admin-form-group full-width">
+                  <label>Pickup point</label>
+                  <input type="text" name="pickup_point" value={corporateEditForm.pickup_point} onChange={handleCorporateEditFormChange} />
+                </div>
+                <div className="admin-form-group full-width">
+                  <label>Drop point</label>
+                  <input type="text" name="drop_point" value={corporateEditForm.drop_point} onChange={handleCorporateEditFormChange} />
+                </div>
+                <div className="admin-form-group">
+                  <label>Service type</label>
+                  <select name="service_type" value={corporateEditForm.service_type} onChange={handleCorporateEditFormChange}>
+                    <option value="local">Local</option>
+                    <option value="airport">Airport</option>
+                    <option value="outstation">Outstation</option>
+                  </select>
+                </div>
+                <div className="admin-form-group">
+                  <label>Travel date</label>
+                  <input type="date" name="travel_date" value={corporateEditForm.travel_date} onChange={handleCorporateEditFormChange} />
+                </div>
+                <div className="admin-form-group">
+                  <label>Travel time</label>
+                  <input type="text" name="travel_time" value={corporateEditForm.travel_time} onChange={handleCorporateEditFormChange} placeholder="e.g. 09:00 AM" />
+                </div>
+                <div className="admin-form-group">
+                  <label>Fare amount (₹)</label>
+                  <input type="number" name="fare_amount" value={corporateEditForm.fare_amount} onChange={handleCorporateEditFormChange} min="0" step="0.01" placeholder="0" />
+                </div>
+                <div className="admin-form-group">
+                  <label>Status</label>
+                  <select name="status" value={corporateEditForm.status} onChange={handleCorporateEditFormChange}>
+                    <option value="pending">Pending</option>
+                    <option value="confirmed">Confirmed</option>
+                    <option value="in_progress">In progress</option>
+                    <option value="completed">Completed</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </div>
+                <div className="admin-form-group full-width">
+                  <label>Notes</label>
+                  <textarea name="notes" value={corporateEditForm.notes} onChange={handleCorporateEditFormChange} rows={3} placeholder="Optional notes" />
+                </div>
+              </div>
+              <div className="admin-modal-actions" style={{ marginTop: 16 }}>
+                <button type="button" className="admin-btn admin-btn-secondary" onClick={() => setCorporateEditBooking(null)}>Cancel</button>
+                <button type="submit" className="admin-btn admin-btn-primary" disabled={corporateEditSaving}>{corporateEditSaving ? 'Saving…' : 'Save'}</button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -78,6 +78,19 @@ router.get('/available/:cabTypeId', async (req, res) => {
   }
 });
 
+// Normalize image_url: backend uploads get /uploads/...; plain filenames (e.g. ciaz.jpg) are left as-is for frontend public/
+function normalizeImageUrl(url) {
+  if (url == null || String(url).trim() === '') return null;
+  const s = String(url).trim();
+  if (s.startsWith('http://') || s.startsWith('https://')) return s;
+  if (s.startsWith('/uploads/')) return s;
+  if (s.startsWith('uploads/')) return `/${s}`;
+  // Plain filename (e.g. ciaz.jpg from frontend/public) — return as-is so frontend serves from public/
+  if (!s.includes('/')) return s;
+  // Path with slash but not uploads — treat as backend path
+  return s.startsWith('/') ? `/uploads${s}` : `/uploads/${s}`;
+}
+
 // Allowed local cab type names shown to users (avoids showing legacy Crysta, Innova, duplicate Sedan, etc.).
 const LOCAL_OFFER_CAB_TYPE_NAMES = ['Innova Crysta', 'SUV', 'Sedan'];
 
@@ -110,11 +123,12 @@ router.get('/local-offers', async (req, res) => {
       );
       if (!hasConfiguredRate) continue;
 
-      const cabs = await db.allAsync(
+      const cabsRaw = await db.allAsync(
         `SELECT id, vehicle_number, name, description, image_url, driver_name, driver_phone
          FROM cabs WHERE cab_type_id = ? AND is_active = 1 AND is_available = 1 ORDER BY vehicle_number`,
         [ct.id]
       );
+      const cabs = (cabsRaw || []).map((c) => ({ ...c, image_url: normalizeImageUrl(c.image_url) || c.image_url }));
       const baseFare = ct.base_fare != null ? Number(ct.base_fare) : 0;
       const capacity = ct.capacity != null ? Number(ct.capacity) : 4;
       result.push({
@@ -130,7 +144,7 @@ router.get('/local-offers', async (req, res) => {
         includedKm: null,
         extraPerKm: null,
         gstIncluded: ct.gst_included != null ? !!ct.gst_included : true,
-        cabs: cabs || [],
+        cabs,
       });
     }
     res.json(result);
@@ -157,11 +171,12 @@ router.get('/airport-offers', async (req, res) => {
          LIMIT 1`,
         [ct.name]
       );
-      const cabs = await db.allAsync(
+      const cabsRaw = await db.allAsync(
         `SELECT id, vehicle_number, name, description, image_url, driver_name, driver_phone
          FROM cabs WHERE cab_type_id = ? AND is_active = 1 AND is_available = 1 ORDER BY vehicle_number`,
         [ct.id]
       );
+      const cabs = (cabsRaw || []).map((c) => ({ ...c, image_url: normalizeImageUrl(c.image_url) || c.image_url }));
       const capacity = ct.capacity != null ? Number(ct.capacity) : 4;
       result.push({
         id: ct.id,
@@ -177,7 +192,7 @@ router.get('/airport-offers', async (req, res) => {
         includedKm: null,
         extraPerKm: rateRow ? Number(rateRow.per_km_rate) : null,
         gstIncluded: ct.gst_included != null ? !!ct.gst_included : true,
-        cabs: cabs || [],
+        cabs,
       });
     }
     res.json(result);
@@ -266,11 +281,12 @@ router.get('/outstation-offers', async (req, res) => {
           [ct.name]
         ),
       ]);
-      const cabs = await db.allAsync(
+      const cabsRaw = await db.allAsync(
         `SELECT id, vehicle_number, name, description, image_url, driver_name, driver_phone
          FROM cabs WHERE cab_type_id = ? AND is_active = 1 AND is_available = 1 ORDER BY vehicle_number`,
         [ct.id]
       );
+      const cabs = (cabsRaw || []).map((c) => ({ ...c, image_url: normalizeImageUrl(c.image_url) || c.image_url }));
       const capacity = ct.capacity != null ? Number(ct.capacity) : 4;
       const firstRate = oneWay || roundTrip || multiStop;
       result.push({
@@ -307,7 +323,7 @@ router.get('/outstation-offers', async (req, res) => {
         nightCharges: firstRate ? getNum(firstRate, 'night_charges') : 0,
         includedKm: oneWay ? (getInt(oneWay, 'min_km') ?? 130) : (roundTrip ? getInt(roundTrip, 'base_km_per_day') ?? 300 : null),
         extraPerKm: oneWay ? getNum(oneWay, 'extra_km_rate') : (roundTrip ? getNum(roundTrip, 'extra_km_rate') : (multiStop ? getNum(multiStop, 'per_km_rate') : null)),
-        cabs: cabs || [],
+        cabs,
       });
     }
     res.json(result);

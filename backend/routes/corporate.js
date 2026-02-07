@@ -14,6 +14,32 @@ async function ensureCorporateBookingsFareColumn() {
   }
 }
 
+async function ensureCorporateBookingsInvoiceNumberColumn() {
+  try {
+    await db.runAsync('ALTER TABLE corporate_bookings ADD COLUMN invoice_number TEXT');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+}
+
+/** Generate next corporate invoice number: crpYYYYMMDD0001, crpYYYYMMDD0002, ... */
+async function generateCorporateInvoiceNumber() {
+  await ensureCorporateBookingsInvoiceNumberColumn();
+  const today = new Date();
+  const prefix = 'crp' + today.getFullYear() + String(today.getMonth() + 1).padStart(2, '0') + String(today.getDate()).padStart(2, '0');
+  const row = await db.getAsync(
+    "SELECT invoice_number FROM corporate_bookings WHERE invoice_number IS NOT NULL AND invoice_number LIKE ? ORDER BY invoice_number DESC LIMIT 1",
+    [prefix + '%']
+  );
+  let next = 1;
+  if (row && row.invoice_number) {
+    const match = row.invoice_number.slice(prefix.length);
+    const num = parseInt(match, 10);
+    if (!Number.isNaN(num)) next = num + 1;
+  }
+  return prefix + String(next).padStart(4, '0');
+}
+
 // Public endpoint: Create corporate booking
 router.post('/bookings', [
   body('name').notEmpty().withMessage('Name is required'),
@@ -105,15 +131,22 @@ router.get('/bookings/:id/invoice', async (req, res) => {
   try {
     const { id } = req.params;
     const withGst = req.query.withGst !== 'false';
-    const booking = await db.getAsync('SELECT * FROM corporate_bookings WHERE id = ?', [id]);
+    await ensureCorporateBookingsInvoiceNumberColumn();
+    await ensureCorporateBookingsFareColumn();
+    let booking = await db.getAsync('SELECT * FROM corporate_bookings WHERE id = ?', [id]);
     if (!booking) return res.status(404).json({ error: 'Corporate booking not found' });
+    if (!booking.invoice_number) {
+      const invNum = await generateCorporateInvoiceNumber();
+      await db.runAsync('UPDATE corporate_bookings SET invoice_number = ? WHERE id = ?', [invNum, id]);
+      booking = await db.getAsync('SELECT * FROM corporate_bookings WHERE id = ?', [id]);
+    }
     const pdfBuffer = await generateCorporateInvoicePDF(booking, withGst);
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="corporate-invoice-${id}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="corporate-invoice-${booking.invoice_number || id}.pdf"`);
     res.send(pdfBuffer);
   } catch (error) {
     console.error('Error generating corporate invoice:', error);
-    res.status(500).json({ error: 'Server error' });
+    if (!res.headersSent) res.status(500).json({ error: error.message || 'Server error' });
   }
 });
 
@@ -207,6 +240,10 @@ router.put('/bookings/:id', [
       updates.push('fare_amount = ?');
       values.push(req.body.fare_amount);
     }
+    if (req.body.invoice_number !== undefined) {
+      updates.push('invoice_number = ?');
+      values.push(req.body.invoice_number === '' ? null : req.body.invoice_number);
+    }
 
     if (updates.length === 0) {
       return res.status(400).json({ error: 'No fields to update' });
@@ -268,12 +305,14 @@ router.post('/invoice/create', [
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
     await ensureCorporateBookingsFareColumn();
+    await ensureCorporateBookingsInvoiceNumberColumn();
 
     const { company_name, name, phone_number, pickup_point, drop_point, service_type, fare_amount, travel_date, travel_time, with_gst } = req.body;
+    const invoice_number = await generateCorporateInvoiceNumber();
 
     const result = await db.runAsync(
-      `INSERT INTO corporate_bookings (name, phone_number, company_name, pickup_point, drop_point, service_type, travel_date, travel_time, fare_amount, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed')`,
+      `INSERT INTO corporate_bookings (name, phone_number, company_name, pickup_point, drop_point, service_type, travel_date, travel_time, fare_amount, invoice_number, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed')`,
       [
         name,
         phone_number,
@@ -284,6 +323,7 @@ router.post('/invoice/create', [
         travel_date || null,
         travel_time || null,
         Number(fare_amount),
+        invoice_number,
       ]
     );
     const booking = await db.getAsync('SELECT * FROM corporate_bookings WHERE id = ?', [result.lastID]);
@@ -291,7 +331,7 @@ router.post('/invoice/create', [
     const pdfBuffer = await generateCorporateInvoicePDF(booking, withGST);
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="corporate-invoice-${booking.id}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="corporate-invoice-${booking.invoice_number || booking.id}.pdf"`);
     res.send(pdfBuffer);
   } catch (error) {
     console.error('Error creating corporate invoice:', error);
@@ -318,6 +358,8 @@ router.get('/invoices/download-all', async (req, res) => {
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', 'attachment; filename="corporate-invoices.zip"');
 
+    await ensureCorporateBookingsInvoiceNumberColumn();
+
     const archive = archiver('zip', { zlib: { level: 9 } });
     archive.on('error', (err) => {
       console.error('Archiver error:', err);
@@ -326,8 +368,14 @@ router.get('/invoices/download-all', async (req, res) => {
     archive.pipe(res);
 
     for (const booking of bookings) {
-      const pdfBuffer = await generateCorporateInvoicePDF(booking, withGst);
-      archive.append(pdfBuffer, { name: `corporate-invoice-${booking.id}.pdf` });
+      let b = booking;
+      if (!b.invoice_number) {
+        const invNum = await generateCorporateInvoiceNumber();
+        await db.runAsync('UPDATE corporate_bookings SET invoice_number = ? WHERE id = ?', [invNum, b.id]);
+        b = await db.getAsync('SELECT * FROM corporate_bookings WHERE id = ?', [b.id]);
+      }
+      const pdfBuffer = await generateCorporateInvoicePDF(b, withGst);
+      archive.append(pdfBuffer, { name: `corporate-invoice-${b.invoice_number || b.id}.pdf` });
     }
     await archive.finalize();
   } catch (error) {

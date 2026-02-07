@@ -121,6 +121,13 @@
   align-items: stretch;
 }
 
+.corporate-datetime-row input[type="date"],
+.corporate-datetime-row input[type="time"] {
+  min-height: 48px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
 @media (max-width: 480px) {
   .corporate-datetime-row {
     grid-template-columns: 1fr;

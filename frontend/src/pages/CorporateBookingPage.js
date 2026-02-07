@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import LocationInput from '../components/LocationInput';
-import TimePicker from '../components/TimePicker';
 import AnimatedMapBackground from '../components/AnimatedMapBackground';
 import MainNavbar from '../components/MainNavbar';
 import './CorporateBookingPage.css';
@@ -24,7 +23,6 @@ const CorporateBookingPage = () => {
     phone_number: '',
     company_name: '',
     pickup_point: '',
-    service_type: '',
     travel_date: '',
     travel_time: '',
     time_period: 'AM',
@@ -138,9 +136,6 @@ const CorporateBookingPage = () => {
     if (!pickupLocation || !pickupLocation.address) {
       newErrors.pickup_point = 'Pickup point is required';
     }
-    if (!formData.service_type) {
-      newErrors.service_type = 'Service type is required';
-    }
     if (!formData.travel_date) {
       newErrors.travel_date = 'Travel date is required';
     }
@@ -171,6 +166,7 @@ const CorporateBookingPage = () => {
       const formattedTime = formatTimeForAPI(formData.travel_time);
       const payload = {
         ...formData,
+        service_type: 'local',
         pickup_lat: pickupLocation ? pickupLocation.lat : null,
         pickup_lng: pickupLocation ? pickupLocation.lng : null,
         travel_time: formattedTime,
@@ -188,7 +184,6 @@ const CorporateBookingPage = () => {
         phone_number: '',
         company_name: '',
         pickup_point: '',
-        service_type: '',
         travel_date: '',
         travel_time: '',
         time_period: 'AM',
@@ -307,22 +302,6 @@ const CorporateBookingPage = () => {
                 </div>
 
                 <div className="form-group">
-                  <label>Service Type *</label>
-                  <select
-                    name="service_type"
-                    value={formData.service_type}
-                    onChange={handleChange}
-                    className={errors.service_type ? 'error' : ''}
-                  >
-                    <option value="">Select service type</option>
-                    <option value="local">Local</option>
-                    <option value="airport">Airport</option>
-                    <option value="outstation">Outstation</option>
-                  </select>
-                  {errors.service_type && <span className="error-message">{errors.service_type}</span>}
-                </div>
-
-                <div className="form-group">
                   <label>Date and Time *</label>
                   <div className="corporate-datetime-row">
                     <input
@@ -335,10 +314,12 @@ const CorporateBookingPage = () => {
                       className={errors.travel_date ? 'error' : ''}
                       placeholder="Date"
                     />
-                    <TimePicker
+                    <input
+                      type="time"
+                      name="travel_time"
                       value={formData.travel_time}
-                      onChange={(v) => handleChange({ target: { name: 'travel_time', value: v } })}
-                      placeholder="Pick time"
+                      onChange={handleChange}
+                      onClick={handleDateInputClick}
                       className={errors.travel_time ? 'error' : ''}
                     />
                   </div>

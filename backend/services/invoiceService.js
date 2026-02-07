@@ -106,7 +106,7 @@ function generateInvoicePDF(booking, withGST = true) {
     // ----- Invoice details: Invoice no, date, GSTIN (right) -----
     y = 145;
     doc.fontSize(9);
-    doc.text(`Invoice No: ${booking.id}`, rightColX, y);
+    doc.text(`Invoice No: ${booking.invoice_number || booking.id}`, rightColX, y);
     y += 12;
     const invDate = booking.booking_date ? new Date(booking.booking_date) : new Date();
     const dateStr = invDate.toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
@@ -245,15 +245,28 @@ function generateInvoicePDF(booking, withGST = true) {
  * Generate invoice PDF for a corporate booking (same format as main invoice).
  */
 function generateCorporateInvoicePDF(booking, withGST = true) {
+  let bookingDate = null;
+  if (booking.travel_date) {
+    const d = new Date(booking.travel_date + (booking.travel_time ? `T${booking.travel_time}` : ''));
+    bookingDate = Number.isNaN(d.getTime()) ? null : d.toISOString();
+  }
+  if (!bookingDate && booking.created_at) {
+    const d = new Date(booking.created_at);
+    bookingDate = Number.isNaN(d.getTime()) ? null : d.toISOString();
+  }
+  if (!bookingDate) bookingDate = new Date().toISOString();
+
   const asBooking = {
     id: booking.id,
+    invoice_number: booking.invoice_number || null,
     passenger_name: booking.name,
     passenger_email: null,
-    from_location: booking.pickup_point,
-    to_location: booking.drop_point,
-    fare_amount: booking.fare_amount,
+    passenger_phone: booking.phone_number || null,
+    from_location: booking.pickup_point || '—',
+    to_location: booking.drop_point || '—',
+    fare_amount: Number(booking.fare_amount) || 0,
     service_type: booking.service_type || 'local',
-    booking_date: booking.travel_date ? new Date(booking.travel_date + (booking.travel_time ? `T${booking.travel_time}` : '')).toISOString() : booking.created_at,
+    booking_date: bookingDate,
     cab_type_name: 'AC',
     distance_km: 0,
     number_of_days: 1,

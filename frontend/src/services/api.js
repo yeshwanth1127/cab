@@ -11,34 +11,38 @@ const api = axios.create({
   },
 });
 
-// Helper function to convert relative image paths to full URLs
-// This is needed because the backend returns relative paths like /uploads/...
-// but the frontend needs full URLs to load images from the backend server
+// Helper function to convert relative image paths to full URLs.
+// - Paths in frontend/public/ (e.g. "ciaz.jpg", "ertiga.avif") → same-origin, e.g. /ciaz.jpg
+// - Paths for backend uploads (contain "uploads") → full backend URL, e.g. /uploads/car-options/...
 export function getImageUrl(relativePath) {
-  if (!relativePath) return null;
-  
+  if (!relativePath || typeof relativePath !== 'string') return null;
+  const trimmed = relativePath.trim();
+  if (!trimmed) return null;
+
   // If it's already a full URL, return as is
-  if (relativePath.startsWith('http://') || relativePath.startsWith('https://')) {
-    return relativePath;
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed;
   }
-  
-  // Get the backend base URL
-  let backendBaseURL;
-  if (apiBaseURL.startsWith('http://') || apiBaseURL.startsWith('https://')) {
-    // Full URL provided (e.g., http://localhost:5000/api)
-    backendBaseURL = apiBaseURL.replace('/api', '');
-  } else if (apiBaseURL.startsWith('/')) {
-    // Relative path (e.g., /api) - use current origin
-    backendBaseURL = window.location.origin;
-  } else {
-    // Fallback to current origin
-    backendBaseURL = window.location.origin;
+
+  // Backend uploads: path contains "uploads" → resolve against backend URL
+  if (trimmed.toLowerCase().includes('uploads')) {
+    let path = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+    if (!path.toLowerCase().startsWith('/uploads')) {
+      path = path.startsWith('/') ? `/uploads${path}` : `/uploads/${path}`;
+    }
+    let backendBaseURL = '';
+    if (typeof apiBaseURL === 'string' && (apiBaseURL.startsWith('http://') || apiBaseURL.startsWith('https://'))) {
+      backendBaseURL = apiBaseURL.replace(/\/api\/?$/, '');
+    } else if (typeof window !== 'undefined' && window.location) {
+      backendBaseURL = window.location.origin;
+    }
+    return `${backendBaseURL}${path}`;
   }
-  
-  // Ensure relative path starts with /
-  const path = relativePath.startsWith('/') ? relativePath : `/${relativePath}`;
-  
-  return `${backendBaseURL}${path}`;
+
+  // Frontend public folder: files in public/ are served at site root (same origin)
+  // e.g. "ciaz.jpg" or "ertiga.avif" → /ciaz.jpg, /ertiga.avif
+  const path = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  return path;
 }
 
 export default api;

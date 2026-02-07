@@ -805,6 +805,12 @@
   font-size: 1rem;
 }
 
+.admin-entry-card-invoice {
+  font-size: 0.875rem;
+  color: #6b7280;
+  margin-left: 8px;
+}
+
 .admin-entry-card-rows {
   display: flex;
   flex-direction: column;
@@ -922,6 +928,33 @@
   box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.2);
 }
 
+.admin-inline-invoice-input {
+  width: 160px;
+  max-width: 100%;
+  padding: 4px 8px;
+  font-size: 0.85rem;
+  border: 1px solid #bbf7d0;
+  border-radius: 6px;
+  background: #fff;
+  margin-right: 6px;
+}
+
+.admin-inline-invoice-input:focus {
+  outline: none;
+  border-color: #16a34a;
+}
+
+.admin-btn-ghost {
+  background: transparent;
+  color: #16a34a;
+  border: 1px solid transparent;
+}
+
+.admin-btn-ghost:hover {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
 /* Booking detail modal – white & green */
 .admin-booking-detail-overlay .admin-booking-detail-modal {
   background: #fff;
@@ -1009,6 +1042,16 @@
   font-size: 1.1rem;
   font-weight: 600;
   color: #fff;
+}
+
+/* Stale bookings warning – clickable list items */
+.admin-stale-booking-item:hover {
+  background: #fef2f2;
+}
+
+.admin-stale-booking-item:focus {
+  outline: 2px solid #b91c1c;
+  outline-offset: 2px;
 }
 
 .admin-modal-close {
