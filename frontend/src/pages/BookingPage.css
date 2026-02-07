@@ -463,6 +463,12 @@
   will-change: transform, opacity;
 }
 
+.nav-item-icon {
+  vertical-align: middle;
+  margin-right: 4px;
+  display: inline-block;
+}
+
 .nav-pill-button {
   background: transparent;
 }
@@ -1708,6 +1714,21 @@
   position: absolute;
   left: 4px;
   top: 0;
+  color: #16a34a;
+}
+
+.about-card li:has(.about-list-icon)::before {
+  content: none;
+}
+
+.about-card li:has(.about-list-icon) {
+  padding-left: 0;
+}
+
+.about-list-icon {
+  margin-right: 8px;
+  vertical-align: middle;
+  display: inline-block;
   color: #16a34a;
 }
 

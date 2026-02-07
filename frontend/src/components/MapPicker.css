@@ -159,10 +159,33 @@
   text-align: center;
 }
 
-.map-picker-instructions p {
+.map-picker-instructions p,
+.map-picker-instructions-text {
   margin: 0;
   color: #666;
   font-size: 0.9rem;
+}
+
+.map-picker-instructions-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.map-picker-instructions-icon {
+  flex-shrink: 0;
+}
+
+.map-picker-btn-icon {
+  flex-shrink: 0;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.btn-current-location,
+.btn-current-location-inline {
+  display: inline-flex;
+  align-items: center;
 }
 
 .map-picker-error {

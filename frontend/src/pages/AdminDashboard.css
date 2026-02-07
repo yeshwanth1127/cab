@@ -1044,7 +1044,67 @@
   color: #fff;
 }
 
-/* Stale bookings warning – clickable list items */
+/* Stale bookings warning – inline banner on dashboard tab */
+.admin-stale-warning-banner {
+  background: #fef2f2;
+  border: 2px solid #b91c1c;
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+}
+
+.admin-stale-warning-banner-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.admin-stale-warning-banner-icon {
+  flex-shrink: 0;
+  color: #b91c1c;
+}
+
+.admin-stale-warning-banner-title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #b91c1c;
+}
+
+.admin-stale-warning-banner-text {
+  margin: 0 0 12px 0;
+  font-size: 0.95rem;
+  color: #1f2937;
+}
+
+.admin-stale-booking-list-inline {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.admin-stale-booking-list-inline .admin-stale-booking-item {
+  padding: 10px 12px;
+  border-bottom: 1px solid #fecaca;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.admin-stale-booking-list-inline .admin-stale-booking-item:last-child {
+  border-bottom: none;
+}
+
+.admin-stale-booking-id {
+  font-weight: 600;
+}
+
 .admin-stale-booking-item:hover {
   background: #fef2f2;
 }

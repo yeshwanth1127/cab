@@ -1,5 +1,6 @@
 const express = require('express');
 const db = require('../db/database');
+const { generateGoogleMapsLink } = require('../utils/mapsLink');
 
 const router = express.Router();
 
@@ -14,6 +15,7 @@ async function ensureBookingsColumns() {
     ['destination_lat', 'REAL'],
     ['destination_lng', 'REAL'],
     ['maps_link', 'TEXT'],
+    ['maps_link_drop', 'TEXT'],
     ['invoice_number', 'TEXT'],
   ];
   for (const [col, type] of columns) {
@@ -100,7 +102,15 @@ router.post('/', async (req, res) => {
       ]
     );
 
-    const newBooking = await db.getAsync('SELECT * FROM bookings WHERE id = ?', [result.lastID]);
+    let newBooking = await db.getAsync('SELECT * FROM bookings WHERE id = ?', [result.lastID]);
+    const { pickup, drop: dropLink } = generateGoogleMapsLink(newBooking);
+    try {
+      if (pickup) await db.runAsync('UPDATE bookings SET maps_link = ? WHERE id = ?', [pickup, newBooking.id]);
+      await db.runAsync('UPDATE bookings SET maps_link_drop = ? WHERE id = ?', [dropLink || null, newBooking.id]);
+      newBooking = await db.getAsync('SELECT * FROM bookings WHERE id = ?', [newBooking.id]);
+    } catch (e) {
+      // columns might not exist
+    }
     res.status(201).json(newBooking);
   } catch (error) {
     console.error('Error creating booking:', error);

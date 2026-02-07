@@ -1,3 +1,10 @@
+.events-success-icon {
+  flex-shrink: 0;
+  margin-right: 8px;
+  color: #16a34a;
+  vertical-align: middle;
+}
+
 .events-page {
   min-height: 100vh;
   position: relative;
@@ -113,6 +120,13 @@
   cursor: pointer;
   transition: all 0.3s ease;
   text-transform: capitalize;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.event-tab-icon {
+  flex-shrink: 0;
 }
 
 .event-tab:hover {

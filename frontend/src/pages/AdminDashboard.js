@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import LocationInput from '../components/LocationInput';
+import Icon from '../components/Icon';
 import './AdminDashboard.css';
 
 const TABS = {
@@ -1126,7 +1127,8 @@ const AdminDashboard = () => {
                   </>
                 )}
                 <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => { setAssignBooking(b); setAssignDriverId(''); setAssignCabId(b.cab_id || ''); }}>Assign</button>
-                {b.maps_link && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link)}>Copy map</button>}
+                {b.maps_link && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link)}>Copy pickup map</button>}
+                {b.maps_link_drop && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link_drop)}>Copy drop map</button>}
                 {(b.driver_phone || b.driver_name) && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendWhatsApp(b)}>WhatsApp</button>}
               </div>
             </div>
@@ -1168,63 +1170,63 @@ const AdminDashboard = () => {
           <div className="admin-sidebar-section">
             <div className="admin-sidebar-section-title">DASHBOARD</div>
             <button type="button" className={`admin-dashboard-nav-btn ${activeTab === TABS.dashboard ? 'active' : ''}`} onClick={() => setTab(TABS.dashboard)}>
-              <span className="admin-nav-btn-icon">📊</span>
+              <Icon name="chart" size={20} className="admin-nav-btn-icon" />
               <span className="admin-nav-btn-content">
                 <span className="admin-nav-btn-label">Dashboard</span>
                 <span className="admin-nav-btn-sublabel">Statistics & Insights</span>
               </span>
             </button>
             <button type="button" className={`admin-dashboard-nav-btn ${activeTab === TABS.others ? 'active' : ''}`} onClick={() => setTab(TABS.others)}>
-              <span className="admin-nav-btn-icon">👤</span>
+              <Icon name="user" size={20} className="admin-nav-btn-icon" />
               <span className="admin-nav-btn-content">
                 <span className="admin-nav-btn-label">Others</span>
                 <span className="admin-nav-btn-sublabel">Drivers & Cars</span>
               </span>
             </button>
             <button type="button" className={`admin-dashboard-nav-btn ${activeTab === TABS.bookingForm ? 'active' : ''}`} onClick={() => setTab(TABS.bookingForm)}>
-              <span className="admin-nav-btn-icon">➕</span>
+              <Icon name="plus" size={20} className="admin-nav-btn-icon" />
               <span className="admin-nav-btn-content">
                 <span className="admin-nav-btn-label">Booking Form</span>
                 <span className="admin-nav-btn-sublabel">New Booking</span>
               </span>
             </button>
             <button type="button" className={`admin-dashboard-nav-btn ${activeTab === TABS.enquiries ? 'active' : ''}`} onClick={() => setTab(TABS.enquiries)}>
-              <span className="admin-nav-btn-icon">📄</span>
+              <Icon name="document" size={20} className="admin-nav-btn-icon" />
               <span className="admin-nav-btn-content">
                 <span className="admin-nav-btn-label">Enquiries</span>
                 <span className="admin-nav-btn-sublabel">Received Bookings</span>
               </span>
             </button>
             <button type="button" className={`admin-dashboard-nav-btn ${activeTab === TABS.confirmedBookings ? 'active' : ''}`} onClick={() => setTab(TABS.confirmedBookings)}>
-              <span className="admin-nav-btn-icon">✓</span>
+              <Icon name="check" size={20} className="admin-nav-btn-icon" />
               <span className="admin-nav-btn-content">
                 <span className="admin-nav-btn-label">Confirmed Bookings</span>
                 <span className="admin-nav-btn-sublabel">Confirmed Only</span>
               </span>
             </button>
             <button type="button" className={`admin-dashboard-nav-btn ${activeTab === TABS.driverAssigned ? 'active' : ''}`} onClick={() => setTab(TABS.driverAssigned)}>
-              <span className="admin-nav-btn-icon">🚗</span>
+              <Icon name="car" size={20} className="admin-nav-btn-icon" />
               <span className="admin-nav-btn-content">
                 <span className="admin-nav-btn-label">Driver Assigned</span>
                 <span className="admin-nav-btn-sublabel">With Driver Info</span>
               </span>
             </button>
             <button type="button" className={`admin-dashboard-nav-btn ${activeTab === TABS.tripEnd ? 'active' : ''}`} onClick={() => setTab(TABS.tripEnd)}>
-              <span className="admin-nav-btn-icon">★</span>
+              <Icon name="star" size={20} className="admin-nav-btn-icon" />
               <span className="admin-nav-btn-content">
                 <span className="admin-nav-btn-label">Trip End</span>
                 <span className="admin-nav-btn-sublabel">Completed Trips</span>
               </span>
             </button>
             <button type="button" className={`admin-dashboard-nav-btn ${activeTab === TABS.cancelledBookings ? 'active' : ''}`} onClick={() => setTab(TABS.cancelledBookings)}>
-              <span className="admin-nav-btn-icon">✕</span>
+              <Icon name="close" size={20} className="admin-nav-btn-icon" />
               <span className="admin-nav-btn-content">
                 <span className="admin-nav-btn-label">Cancelled Bookings</span>
                 <span className="admin-nav-btn-sublabel">Cancelled Only</span>
               </span>
             </button>
             <button type="button" className={`admin-dashboard-nav-btn ${activeTab === TABS.driverStatus ? 'active' : ''}`} onClick={() => setTab(TABS.driverStatus)}>
-              <span className="admin-nav-btn-icon">📋</span>
+              <Icon name="clipboard" size={20} className="admin-nav-btn-icon" />
               <span className="admin-nav-btn-content">
                 <span className="admin-nav-btn-label">Driver Status</span>
                 <span className="admin-nav-btn-sublabel">Availability & Rides</span>
@@ -1234,14 +1236,14 @@ const AdminDashboard = () => {
           <div className="admin-sidebar-section">
             <div className="admin-sidebar-section-title">INVOICE</div>
             <button type="button" className={`admin-dashboard-nav-btn ${activeTab === TABS.billing ? 'active' : ''}`} onClick={() => setTab(TABS.billing)}>
-              <span className="admin-nav-btn-icon">💰</span>
+              <Icon name="wallet" size={20} className="admin-nav-btn-icon" />
               <span className="admin-nav-btn-content">
                 <span className="admin-nav-btn-label">Invoice</span>
                 <span className="admin-nav-btn-sublabel">Invoices & Reports</span>
               </span>
             </button>
             <button type="button" className={`admin-dashboard-nav-btn ${activeTab === TABS.createInvoice ? 'active' : ''}`} onClick={() => setTab(TABS.createInvoice)}>
-              <span className="admin-nav-btn-icon">📄</span>
+              <Icon name="document" size={20} className="admin-nav-btn-icon" />
               <span className="admin-nav-btn-content">
                 <span className="admin-nav-btn-label">Create Invoice</span>
                 <span className="admin-nav-btn-sublabel">Generate invoice directly</span>
@@ -1251,7 +1253,7 @@ const AdminDashboard = () => {
           <div className="admin-sidebar-section">
             <div className="admin-sidebar-section-title">RATE METER</div>
             <button type="button" className={`admin-dashboard-nav-btn ${activeTab === TABS.rateMeter ? 'active' : ''}`} onClick={() => setTab(TABS.rateMeter)}>
-              <span className="admin-nav-btn-icon">📋</span>
+              <Icon name="clipboard" size={20} className="admin-nav-btn-icon" />
               <span className="admin-nav-btn-content">
                 <span className="admin-nav-btn-label">Rate Meter</span>
                 <span className="admin-nav-btn-sublabel">Local, Airport, Outstation</span>
@@ -1261,21 +1263,21 @@ const AdminDashboard = () => {
           <div className="admin-sidebar-section">
             <div className="admin-sidebar-section-title">CORPORATE BOOKINGS</div>
             <button type="button" className={`admin-dashboard-nav-btn ${activeTab === TABS.corporateBookings ? 'active' : ''}`} onClick={() => setTab(TABS.corporateBookings)}>
-              <span className="admin-nav-btn-icon">🏢</span>
+              <Icon name="building" size={20} className="admin-nav-btn-icon" />
               <span className="admin-nav-btn-content">
                 <span className="admin-nav-btn-label">All corporate bookings</span>
                 <span className="admin-nav-btn-sublabel">View and manage</span>
               </span>
             </button>
             <button type="button" className={`admin-dashboard-nav-btn ${activeTab === TABS.corporateInvoices ? 'active' : ''}`} onClick={() => setTab(TABS.corporateInvoices)}>
-              <span className="admin-nav-btn-icon">📋</span>
+              <Icon name="clipboard" size={20} className="admin-nav-btn-icon" />
               <span className="admin-nav-btn-content">
                 <span className="admin-nav-btn-label">All corporate invoices</span>
                 <span className="admin-nav-btn-sublabel">Download all</span>
               </span>
             </button>
             <button type="button" className={`admin-dashboard-nav-btn ${activeTab === TABS.createCorporateInvoice ? 'active' : ''}`} onClick={() => setTab(TABS.createCorporateInvoice)}>
-              <span className="admin-nav-btn-icon">➕</span>
+              <Icon name="plus" size={20} className="admin-nav-btn-icon" />
               <span className="admin-nav-btn-content">
                 <span className="admin-nav-btn-label">Create corporate invoice</span>
                 <span className="admin-nav-btn-sublabel">New corporate invoice</span>
@@ -1287,6 +1289,36 @@ const AdminDashboard = () => {
         <main className="admin-dashboard-main">
           {activeTab === TABS.dashboard && (
             <div className="admin-dashboard-tab">
+              {staleBookingsWarning && staleBookingsWarning.length > 0 && (
+                <div className="admin-stale-warning-banner" role="alert">
+                  <div className="admin-stale-warning-banner-header">
+                    <Icon name="warning" size={24} className="admin-stale-warning-banner-icon" />
+                    <h3 className="admin-stale-warning-banner-title">Booking status warning</h3>
+                  </div>
+                  <p className="admin-stale-warning-banner-text">
+                    {staleBookingsWarning.length} booking{staleBookingsWarning.length !== 1 ? 's have' : ' has'} not been updated in more than 24 hours. Click a booking below to update its status.
+                  </p>
+                  <ul className="admin-stale-booking-list admin-stale-booking-list-inline">
+                    {staleBookingsWarning.map((b) => (
+                      <li
+                        key={b.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setDetailBooking(b)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailBooking(b); } }}
+                        className="admin-stale-booking-item"
+                      >
+                        <span className="admin-stale-booking-id">#{b.id}</span>
+                        {' '}
+                        {b.from_location || '—'} → {b.to_location || '—'}
+                        {' '}
+                        <span className="admin-service-badge">{b.booking_status}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               <div className="admin-dashboard-box">
                 <h2 className="admin-dashboard-statistics-title">Dashboard Statistics</h2>
                 <div className="admin-dashboard-statistics-line" />
@@ -1385,7 +1417,8 @@ const AdminDashboard = () => {
                             </>
                           )}
                           <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => { setAssignBooking(b); setAssignDriverId(''); setAssignCabId(b.cab_id || ''); }}>Assign</button>
-                          {b.maps_link && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link)}>Copy map</button>}
+                          {b.maps_link && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link)}>Copy pickup map</button>}
+                          {b.maps_link_drop && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link_drop)}>Copy drop map</button>}
                           {(b.driver_phone || b.driver_name) && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendWhatsApp(b)}>WhatsApp</button>}
                         </div>
                       </div>
@@ -2418,44 +2451,6 @@ const AdminDashboard = () => {
       </div>
 
       {sidebarOpen && <div className="admin-dashboard-sidebar-overlay" onClick={() => setSidebarOpen(false)} role="presentation" />}
-
-      {staleBookingsWarning && staleBookingsWarning.length > 0 && (
-        <div className="admin-modal-overlay admin-stale-warning-overlay" onClick={() => setStaleBookingsWarning(null)}>
-          <div className="admin-modal admin-stale-warning-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
-            <div className="admin-modal-header" style={{ background: '#b91c1c', color: '#fff' }}>
-              <h3>⚠️ Booking status warning</h3>
-              <button type="button" className="admin-modal-close" onClick={() => setStaleBookingsWarning(null)} aria-label="Close" style={{ color: '#fff', opacity: 0.9 }}>×</button>
-            </div>
-            <div className="admin-modal-body" style={{ padding: 20 }}>
-              <p style={{ marginBottom: 16, fontWeight: 600, color: '#1f2937' }}>
-                {staleBookingsWarning.length} booking{staleBookingsWarning.length !== 1 ? 's have' : ' has'} not been updated in more than 24 hours. Please review and update their status.
-              </p>
-              <ul className="admin-stale-booking-list" style={{ listStyle: 'none', padding: 0, margin: 0, maxHeight: 240, overflowY: 'auto' }}>
-                {staleBookingsWarning.map((b) => (
-                  <li
-                    key={b.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => { setDetailBooking(b); setStaleBookingsWarning(null); }}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailBooking(b); setStaleBookingsWarning(null); } }}
-                    className="admin-stale-booking-item"
-                    style={{ padding: '10px 12px', borderBottom: '1px solid #e5e7eb', fontSize: 14, cursor: 'pointer', transition: 'background 0.15s' }}
-                  >
-                    <span style={{ fontWeight: 600 }}>#{b.id}</span>
-                    {' '}
-                    {b.from_location || '—'} → {b.to_location || '—'}
-                    {' '}
-                    <span className="admin-service-badge" style={{ marginLeft: 6 }}>{b.booking_status}</span>
-                  </li>
-                ))}
-              </ul>
-              <div className="admin-modal-actions" style={{ marginTop: 16 }}>
-                <button type="button" className="admin-btn admin-btn-primary" onClick={() => setStaleBookingsWarning(null)}>OK</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {detailBooking && (
         <div className="admin-modal-overlay admin-booking-detail-overlay" onClick={() => setDetailBooking(null)}>

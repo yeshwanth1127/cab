@@ -166,10 +166,10 @@ const AboutPage = () => {
                 lineHeight: '2',
                 color: '#cbd5e1'
               }}>
-                <li>✓ Fixed vehicle assignments for regular routes</li>
-                <li>✓ Professional, uniformed drivers</li>
-                <li>✓ GPS tracking and real-time updates</li>
-                <li>✓ Flexible scheduling for shifts</li>
+                <li><Icon name="check" size={18} className="about-list-icon" /> Fixed vehicle assignments for regular routes</li>
+                <li><Icon name="check" size={18} className="about-list-icon" /> Professional, uniformed drivers</li>
+                <li><Icon name="check" size={18} className="about-list-icon" /> GPS tracking and real-time updates</li>
+                <li><Icon name="check" size={18} className="about-list-icon" /> Flexible scheduling for shifts</li>
               </ul>
             </div>
 
@@ -209,10 +209,10 @@ const AboutPage = () => {
                 lineHeight: '2',
                 color: '#cbd5e1'
               }}>
-                <li>✓ Monthly consolidated billing</li>
-                <li>✓ GST invoices (with/without GST options)</li>
-                <li>✓ Detailed usage analytics</li>
-                <li>✓ Volume discounts and corporate rates</li>
+                <li><Icon name="check" size={18} className="about-list-icon" /> Monthly consolidated billing</li>
+                <li><Icon name="check" size={18} className="about-list-icon" /> GST invoices (with/without GST options)</li>
+                <li><Icon name="check" size={18} className="about-list-icon" /> Detailed usage analytics</li>
+                <li><Icon name="check" size={18} className="about-list-icon" /> Volume discounts and corporate rates</li>
               </ul>
             </div>
 
@@ -252,10 +252,10 @@ const AboutPage = () => {
                 lineHeight: '2',
                 color: '#cbd5e1'
               }}>
-                <li>✓ Verified drivers with background checks</li>
-                <li>✓ Fully insured vehicles</li>
-                <li>✓ 24/7 emergency support</li>
-                <li>✓ Safety compliance certifications</li>
+                <li><Icon name="check" size={18} className="about-list-icon" /> Verified drivers with background checks</li>
+                <li><Icon name="check" size={18} className="about-list-icon" /> Fully insured vehicles</li>
+                <li><Icon name="check" size={18} className="about-list-icon" /> 24/7 emergency support</li>
+                <li><Icon name="check" size={18} className="about-list-icon" /> Safety compliance certifications</li>
               </ul>
             </div>
           </div>

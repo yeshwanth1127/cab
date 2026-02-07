@@ -3,6 +3,7 @@ const { body, validationResult } = require('express-validator');
 const db = require('../db/database');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
 const { generateInvoicePDF } = require('../services/invoiceService');
+const { generateGoogleMapsLink } = require('../utils/mapsLink');
 
 const router = express.Router();
 
@@ -20,6 +21,7 @@ async function ensureBookingsColumns() {
     ['destination_lat', 'REAL'],
     ['destination_lng', 'REAL'],
     ['maps_link', 'TEXT'],
+    ['maps_link_drop', 'TEXT'],
     ['assigned_at', 'DATETIME'],
     ['trip_type', 'TEXT'],
     ['invoice_number', 'TEXT'],
@@ -53,28 +55,6 @@ async function generateDefaultInvoiceNumber(date) {
     }
   }
   return `${prefix}${String(seq).padStart(4, '0')}`;
-}
-
-// Build Google Maps directions URL from booking (address or lat/lng)
-function generateGoogleMapsLink(booking) {
-  let origin = null;
-  let destination = null;
-  if (booking.pickup_lat != null && booking.pickup_lng != null) {
-    origin = `${booking.pickup_lat},${booking.pickup_lng}`;
-  } else if (booking.from_location) {
-    origin = encodeURIComponent(booking.from_location);
-  }
-  if (booking.destination_lat != null && booking.destination_lng != null) {
-    destination = `${booking.destination_lat},${booking.destination_lng}`;
-  } else if (booking.to_location) {
-    destination = encodeURIComponent(booking.to_location);
-  }
-  if (!origin && !destination) return null;
-  if (origin && destination) {
-    return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}`;
-  }
-  const point = origin || destination;
-  return `https://www.google.com/maps/search/?api=1&query=${point}`;
 }
 
 // GET /dashboard/stats - Dashboard statistics (Enquiries=pending, Assigned=has cab, Completed, Cancelled)
@@ -187,7 +167,15 @@ router.post('/bookings', [
         invoiceNumber,
       ]
     );
-    const newBooking = await db.getAsync('SELECT * FROM bookings WHERE id = ?', [result.lastID]);
+    let newBooking = await db.getAsync('SELECT * FROM bookings WHERE id = ?', [result.lastID]);
+    const { pickup, drop: dropLink } = generateGoogleMapsLink(newBooking);
+    try {
+      if (pickup) await db.runAsync('UPDATE bookings SET maps_link = ? WHERE id = ?', [pickup, newBooking.id]);
+      await db.runAsync('UPDATE bookings SET maps_link_drop = ? WHERE id = ?', [dropLink || null, newBooking.id]);
+      newBooking = await db.getAsync('SELECT * FROM bookings WHERE id = ?', [newBooking.id]);
+    } catch (e) {
+      // columns might not exist on very old DBs
+    }
     res.status(201).json(newBooking);
   } catch (error) {
     console.error('Error creating admin booking:', error);
@@ -251,14 +239,16 @@ router.put('/bookings/:id', async (req, res) => {
     );
 
     const updated = await db.getAsync('SELECT * FROM bookings WHERE id = ?', [id]);
-    const mapsLink = generateGoogleMapsLink(updated);
-    if (mapsLink) {
-      try {
-        await db.runAsync('UPDATE bookings SET maps_link = ? WHERE id = ?', [mapsLink, id]);
-        updated.maps_link = mapsLink;
-      } catch (e) {
-        // maps_link column might not exist on very old DBs
+    const { pickup, drop: dropLink } = generateGoogleMapsLink(updated);
+    try {
+      if (pickup) {
+        await db.runAsync('UPDATE bookings SET maps_link = ? WHERE id = ?', [pickup, id]);
+        updated.maps_link = pickup;
       }
+      await db.runAsync('UPDATE bookings SET maps_link_drop = ? WHERE id = ?', [dropLink || null, id]);
+      updated.maps_link_drop = dropLink || null;
+    } catch (e) {
+      // columns might not exist on very old DBs
     }
 
     const withCab = await db.getAsync(
@@ -498,7 +488,14 @@ router.post('/invoice/create', [
         invoiceNumber,
       ]
     );
-    const newBooking = await db.getAsync('SELECT * FROM bookings WHERE id = ?', [result.lastID]);
+    let newBooking = await db.getAsync('SELECT * FROM bookings WHERE id = ?', [result.lastID]);
+    const { pickup, drop: dropLink } = generateGoogleMapsLink(newBooking);
+    try {
+      if (pickup) await db.runAsync('UPDATE bookings SET maps_link = ? WHERE id = ?', [pickup, newBooking.id]);
+      await db.runAsync('UPDATE bookings SET maps_link_drop = ? WHERE id = ?', [dropLink || null, newBooking.id]);
+    } catch (e) {
+      // columns might not exist
+    }
     const bookingForPdf = { ...newBooking, passenger_email: passenger_email || null, trip_type: outstationTripType || newBooking.trip_type };
     const withGST = with_gst !== false;
     const pdfBuffer = await generateInvoicePDF(bookingForPdf, withGST);

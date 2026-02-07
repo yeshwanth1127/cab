@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import api, { getImageUrl } from '../services/api';
 import MainNavbar from '../components/MainNavbar';
 import LocationInput from '../components/LocationInput';
+import Icon from '../components/Icon';
 import './HomePage.css';
 
 const HOURS_OPTIONS = [4, 8, 12];
@@ -215,7 +216,7 @@ const HomePage = () => {
                   className="home-service-option"
                   onClick={() => setServiceChoice('local')}
                 >
-                  <span className="home-service-icon">🚗</span>
+                  <Icon name="car" size={28} className="home-service-icon" />
                   <span className="home-service-label">Local</span>
                   <span className="home-service-desc">Hourly packages</span>
                 </button>
@@ -224,7 +225,7 @@ const HomePage = () => {
                   className="home-service-option"
                   onClick={() => setServiceChoice('airport')}
                 >
-                  <span className="home-service-icon">✈️</span>
+                  <Icon name="plane" size={28} className="home-service-icon" />
                   <span className="home-service-label">Airport</span>
                   <span className="home-service-desc">Pickup & drop</span>
                 </button>
@@ -233,7 +234,7 @@ const HomePage = () => {
                   className="home-service-option"
                   onClick={() => setServiceChoice('outstation')}
                 >
-                  <span className="home-service-icon">🛣️</span>
+                  <Icon name="road" size={28} className="home-service-icon" />
                   <span className="home-service-label">Outstation</span>
                   <span className="home-service-desc">One-way & round trip</span>
                 </button>
@@ -249,7 +250,7 @@ const HomePage = () => {
                   className="home-back-link"
                   onClick={handleBackToServices}
                 >
-                  ← Back to services
+                  <Icon name="arrowBack" size={18} className="home-back-link-icon" /> Back to services
                 </button>
                 <h2 className="home-flow-title">Airport cab</h2>
                 <p className="home-flow-desc">
@@ -310,7 +311,7 @@ const HomePage = () => {
                   className="home-back-link"
                   onClick={handleBackToServices}
                 >
-                  ← Back to services
+                  <Icon name="arrowBack" size={18} className="home-back-link-icon" /> Back to services
                 </button>
                 <h2 className="home-flow-title">Outstation cab</h2>
                 <p className="home-flow-desc">
@@ -461,7 +462,7 @@ const HomePage = () => {
                   className="home-back-link"
                   onClick={handleBackToServices}
                 >
-                  ← Back to services
+                  <Icon name="arrowBack" size={18} className="home-back-link-icon" /> Back to services
                 </button>
                 <h2 className="home-flow-title">Local cab</h2>
                 <p className="home-flow-desc">
@@ -526,7 +527,7 @@ const HomePage = () => {
                         setLocalOffersError('');
                       }}
                     >
-                      ← Change location or hours
+                      <Icon name="arrowBack" size={18} className="home-back-link-icon" /> Change location or hours
                     </button>
                     <h2 className="home-flow-title">Choose your cab</h2>
                     <p className="home-flow-desc">
@@ -561,7 +562,7 @@ const HomePage = () => {
                                 />
                               ) : (
                                 <div className="home-local-cab-type-image-placeholder">
-                                  🚗
+                                  <Icon name="car" size={48} />
                                 </div>
                               )}
                             </div>
@@ -642,7 +643,7 @@ const HomePage = () => {
                                           />
                                         ) : (
                                           <div className="home-local-cab-image-placeholder">
-                                            🚙
+                                            <Icon name="car" size={48} />
                                           </div>
                                         )}
                                       </div>
@@ -703,13 +704,103 @@ const HomePage = () => {
       </section>
 
       {serviceChoice === null && (
-        <div className="home-secondary-links">
-          <Link to="/about">About</Link>
-          <Link to="/contact">Contact</Link>
-          <Link to="/check-booking">Check booking</Link>
-          <Link to="/corporate">Corporate</Link>
-          <Link to="/events">Events</Link>
-        </div>
+        <>
+          <section className="home-about-section">
+            <div className="home-about-inner">
+              <h2 className="home-about-title">About Namma Cabs</h2>
+              <h3 className="home-about-subtitle">
+                Your trusted airport, local, outstation & corporate cab partner in Bangalore
+              </h3>
+              <p className="home-about-summary">
+                <strong>Namma Cabs</strong> was born in Bangalore with one simple idea:
+                give people clean, reliable cars with honest pricing and zero drama.
+                From early morning airport drops to last–minute outstation plans,
+                we&apos;ve been moving families, executives and travellers across Karnataka
+                for years.
+              </p>
+              <p className="home-about-summary">
+                We focus on the details that matter – well–maintained cars, verified
+                drivers, transparent fares and real human support on the phone when you
+                need it. No hidden surge, no confusing add–ons, just clear point–to–point
+                service.
+              </p>
+              <Link to="/about" className="home-about-link">Read more about us <Icon name="arrowForward" size={16} className="home-about-link-arrow" /></Link>
+            </div>
+          </section>
+
+          <section className="home-routes-section">
+            <div className="home-routes-inner">
+              <h2 className="home-routes-title">Common Routes</h2>
+              <p className="home-routes-desc">Popular destinations we serve. Book in one click.</p>
+              <div className="home-routes-grid">
+                <div className="home-route-card home-route-airport">
+                  <Icon name="plane" size={28} className="home-route-icon" />
+                  <span className="home-route-label">Bangalore Airport ↔ City</span>
+                  <span className="home-route-hint">Pickup or drop at KIA</span>
+                  <button type="button" className="home-route-btn" onClick={() => setServiceChoice('airport')}>
+                    Book airport cab
+                  </button>
+                </div>
+                <div className="home-route-card">
+                  <Icon name="road" size={28} className="home-route-icon" />
+                  <span className="home-route-label">Bangalore → Mysore</span>
+                  <span className="home-route-hint">One-way or round trip</span>
+                  <button
+                    type="button"
+                    className="home-route-btn"
+                    onClick={() => navigate('/car-options', { state: { service_type: 'outstation', trip_type: 'one_way', from_location: 'Bangalore', to_location: 'Mysore' } })}
+                  >
+                    Book this route
+                  </button>
+                </div>
+                <div className="home-route-card">
+                  <Icon name="road" size={28} className="home-route-icon" />
+                  <span className="home-route-label">Bangalore → Coorg</span>
+                  <span className="home-route-hint">One-way or round trip</span>
+                  <button
+                    type="button"
+                    className="home-route-btn"
+                    onClick={() => navigate('/car-options', { state: { service_type: 'outstation', trip_type: 'one_way', from_location: 'Bangalore', to_location: 'Coorg' } })}
+                  >
+                    Book this route
+                  </button>
+                </div>
+                <div className="home-route-card">
+                  <Icon name="road" size={28} className="home-route-icon" />
+                  <span className="home-route-label">Bangalore → Ooty</span>
+                  <span className="home-route-hint">One-way or round trip</span>
+                  <button
+                    type="button"
+                    className="home-route-btn"
+                    onClick={() => navigate('/car-options', { state: { service_type: 'outstation', trip_type: 'one_way', from_location: 'Bangalore', to_location: 'Ooty' } })}
+                  >
+                    Book this route
+                  </button>
+                </div>
+                <div className="home-route-card">
+                  <Icon name="road" size={28} className="home-route-icon" />
+                  <span className="home-route-label">Bangalore → Chennai</span>
+                  <span className="home-route-hint">One-way or round trip</span>
+                  <button
+                    type="button"
+                    className="home-route-btn"
+                    onClick={() => navigate('/car-options', { state: { service_type: 'outstation', trip_type: 'one_way', from_location: 'Bangalore', to_location: 'Chennai' } })}
+                  >
+                    Book this route
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <div className="home-secondary-links">
+            <Link to="/about">About</Link>
+            <Link to="/contact">Contact</Link>
+            <Link to="/check-booking">Check booking</Link>
+            <Link to="/corporate">Corporate</Link>
+            <Link to="/events">Events</Link>
+          </div>
+        </>
       )}
 
       {confirmModal?.cab && confirmModal?.cabType && (

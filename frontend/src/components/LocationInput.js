@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { v4 as uuidv4 } from 'uuid';
 import './LocationInput.css';
 import MapPicker from './MapPicker';
+import Icon from './Icon';
 import api from '../services/api';
 
 // Frontend LRU cache (5 minute TTL)
@@ -376,7 +377,7 @@ export default function LocationInput({
               className="location-button"
               title="Use current location"
             >
-              {isRequestingLocation ? '⏳' : '📍'}
+              {isRequestingLocation ? <Icon name="loading" size={20} className="location-button-icon" /> : <Icon name="pin" size={20} className="location-button-icon" />}
             </button>
           )}
         </div>
@@ -396,7 +397,7 @@ export default function LocationInput({
                 >
                   <div className="suggestion-name">{mainText}</div>
                   {secondaryText && secondaryText !== mainText && (
-                    <div className="suggestion-type">📍 {secondaryText}</div>
+                    <div className="suggestion-type"><Icon name="pin" size={14} className="suggestion-type-icon" /> {secondaryText}</div>
                   )}
                 </li>
               );

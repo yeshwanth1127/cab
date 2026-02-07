@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import LocationInput from '../components/LocationInput';
+import Icon from '../components/Icon';
 import AnimatedMapBackground from '../components/AnimatedMapBackground';
 import MainNavbar from '../components/MainNavbar';
 import './CorporateBookingPage.css';
@@ -225,7 +226,7 @@ const CorporateBookingPage = () => {
           <div className="card corporate-booking-card">
             {bookingSuccess && (
               <div className="success-banner">
-                <h3>✅ Booking Request Submitted Successfully!</h3>
+                <h3><Icon name="checkCircle" size={24} className="corporate-success-icon" /> Booking Request Submitted Successfully!</h3>
                 <p>Your booking request ID is: <strong>{bookingId}</strong></p>
                 <p>We'll contact you soon to confirm your corporate booking.</p>
                 <div className="success-actions">
@@ -294,7 +295,7 @@ const CorporateBookingPage = () => {
                         setErrors(prev => ({ ...prev, pickup_point: '' }));
                       }
                     }}
-                    placeholder="Enter pickup location or click 📍 for current location"
+                    placeholder="Enter pickup location or click the location icon for current location"
                     showCurrentLocation={true}
                     userLocation={userLocation}
                   />

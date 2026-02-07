@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import Icon from '../components/Icon';
 import './AdminLogin.css';
 
 const AdminLogin = () => {
@@ -31,7 +32,7 @@ const AdminLogin = () => {
     <div className="admin-login-page">
       <div className="login-container">
         <div className="login-card">
-          <h1>🔐 Admin Login</h1>
+          <h1><Icon name="lock" size={28} className="admin-login-title-icon" /> <span>Admin Login</span></h1>
           <p>Please login to access the admin dashboard</p>
 
           {error && <div className="error-message">{error}</div>}
@@ -69,7 +70,7 @@ const AdminLogin = () => {
           </form>
 
           <div className="login-footer">
-            <a href="/">← Back to Booking</a>
+            <a href="/"><Icon name="arrowBack" size={18} className="admin-login-back-icon" /> Back to Booking</a>
           </div>
         </div>
       </div>

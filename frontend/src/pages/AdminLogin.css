@@ -58,11 +58,33 @@
   color: #333;
   font-size: 32px;
   font-weight: 700;
+  animation: fadeIn 1s ease-out 0.2s both;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.login-card h1 span {
   background: linear-gradient(135deg, #16a34a 0%, #16a34a 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  animation: fadeIn 1s ease-out 0.2s both;
+}
+
+.admin-login-title-icon {
+  flex-shrink: 0;
+  color: #16a34a;
+}
+
+.login-footer a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.admin-login-back-icon {
+  flex-shrink: 0;
 }
 
 .login-card p {

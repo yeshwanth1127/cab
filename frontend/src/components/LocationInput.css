@@ -75,6 +75,17 @@
   box-shadow: 0 4px 12px rgba(66, 133, 244, 0.4);
 }
 
+.location-button-icon {
+  display: block;
+  color: white;
+}
+
+.suggestion-type-icon {
+  vertical-align: middle;
+  margin-right: 4px;
+  color: #16a34a;
+}
+
 .location-button:hover {
   background: linear-gradient(135deg, #16a34a 0%, #d97706 100%);
   transform: scale(1.1) rotate(5deg);

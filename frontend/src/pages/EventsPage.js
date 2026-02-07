@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import LocationInput from '../components/LocationInput';
+import Icon from '../components/Icon';
 import TimePicker from '../components/TimePicker';
 import AnimatedMapBackground from '../components/AnimatedMapBackground';
 import MainNavbar from '../components/MainNavbar';
@@ -277,26 +278,26 @@ const EventsPage = () => {
               className={`event-tab ${activeTab === 'weddings' ? 'active' : ''}`}
               onClick={() => setActiveTab('weddings')}
             >
-              💒 Weddings
+              <Icon name="events" size={20} className="event-tab-icon" /> Weddings
             </button>
             <button
               className={`event-tab ${activeTab === 'birthdays' ? 'active' : ''}`}
               onClick={() => setActiveTab('birthdays')}
             >
-              🎂 Birthdays
+              <Icon name="events" size={20} className="event-tab-icon" /> Birthdays
             </button>
             <button
               className={`event-tab ${activeTab === 'others' ? 'active' : ''}`}
               onClick={() => setActiveTab('others')}
             >
-              🎉 Others
+              <Icon name="events" size={20} className="event-tab-icon" /> Others
             </button>
           </div>
 
           <div className="card events-card">
             {bookingSuccess && (
               <div className="success-banner">
-                <h3>✅ Booking Request Submitted Successfully!</h3>
+                <h3><Icon name="checkCircle" size={24} className="events-success-icon" /> Booking Request Submitted Successfully!</h3>
                 <p>Your booking request ID is: <strong>{bookingId}</strong></p>
                 <p>We'll contact you soon to confirm your event booking.</p>
                 <div className="success-actions">
@@ -356,7 +357,7 @@ const EventsPage = () => {
                           setErrors(prev => ({ ...prev, pickup_point: '' }));
                         }
                       }}
-                      placeholder="Enter pickup location or click 📍 for current location"
+                      placeholder="Enter pickup location or click the location icon for current location"
                       showCurrentLocation={true}
                       userLocation={userLocation}
                     />

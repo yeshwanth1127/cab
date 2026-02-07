@@ -132,7 +132,7 @@ const CarOptions = () => {
           {imageUrl ? (
             <img src={imageUrl} alt={ct.name} className="unified-cab-card-image" onError={(e) => { e.target.style.display = 'none'; }} />
           ) : (
-            <div className="unified-cab-card-image-placeholder">🚗</div>
+            <div className="unified-cab-card-image-placeholder"><Icon name="car" size={48} /></div>
           )}
         </div>
         <div className="unified-cab-card-features">
@@ -203,7 +203,7 @@ const CarOptions = () => {
     try {
       if (isAirportFlow) {
         const fareAmount = airportFares[confirmModal.cabType.id] ?? (confirmModal.cabType.baseFare || 0);
-        const res = await api.post('/bookings', {
+        const payload = {
           service_type: 'airport',
           from_location: bookingState.from_location,
           to_location: bookingState.to_location,
@@ -212,12 +212,21 @@ const CarOptions = () => {
           fare_amount: fareAmount,
           cab_id: confirmModal.cab.id,
           cab_type_id: confirmModal.cabType.id,
-        });
+        };
+        if (bookingState.from_lat != null && bookingState.from_lng != null) {
+          payload.pickup_lat = bookingState.from_lat;
+          payload.pickup_lng = bookingState.from_lng;
+        }
+        if (bookingState.to_lat != null && bookingState.to_lng != null) {
+          payload.destination_lat = bookingState.to_lat;
+          payload.destination_lng = bookingState.to_lng;
+        }
+        const res = await api.post('/bookings', payload);
         setSuccessBookingId(res.data?.id);
         setConfirmModal(null);
       } else if (isOutstationFlow) {
         const fareAmount = outstationFares[confirmModal.cabType.id] ?? 0;
-        const res = await api.post('/bookings', {
+        const payload = {
           service_type: 'outstation',
           trip_type: bookingState.trip_type || 'one_way',
           from_location: bookingState.from_location,
@@ -227,7 +236,16 @@ const CarOptions = () => {
           fare_amount: fareAmount,
           cab_id: confirmModal.cab.id,
           cab_type_id: confirmModal.cabType.id,
-        });
+        };
+        if (bookingState.from_lat != null && bookingState.from_lng != null) {
+          payload.pickup_lat = bookingState.from_lat;
+          payload.pickup_lng = bookingState.from_lng;
+        }
+        if (bookingState.to_lat != null && bookingState.to_lng != null) {
+          payload.destination_lat = bookingState.to_lat;
+          payload.destination_lng = bookingState.to_lng;
+        }
+        const res = await api.post('/bookings', payload);
         setSuccessBookingId(res.data?.id);
         setConfirmModal(null);
       } else {

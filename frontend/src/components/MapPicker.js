@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import './MapPicker.css';
+import Icon from './Icon';
 import { loadGoogleMaps } from '../utils/googleMapsLoader';
 
 const MapPicker = ({ isOpen, onClose, onSelect, userLocation, initialLocation, title = "Select Location" }) => {
@@ -426,7 +427,7 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, initialLocation, t
             </div>
             <div className="map-picker-actions">
               <button onClick={handleUseCurrentLocation} className="btn-current-location" disabled={isLoading}>
-                {isLoading ? '⏳' : '📍'} Use Current Location
+                {isLoading ? <Icon name="loading" size={18} className="map-picker-btn-icon" /> : <Icon name="pin" size={18} className="map-picker-btn-icon" />} Use Current Location
               </button>
               <button onClick={handleConfirm} className="btn-confirm">
                 Confirm Location
@@ -437,9 +438,9 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, initialLocation, t
 
         {!selectedLocation && (
           <div className="map-picker-instructions">
-            <p>💡 Search for a location, click on the map, or use your current location</p>
+            <p className="map-picker-instructions-text"><Icon name="pin" size={18} className="map-picker-instructions-icon" /> Search for a location, click on the map, or use your current location</p>
             <button onClick={handleUseCurrentLocation} className="btn-current-location-inline" disabled={isLoading}>
-              {isLoading ? '⏳ Loading...' : '📍 Use Current Location'}
+              {isLoading ? <><Icon name="loading" size={18} className="map-picker-btn-icon" /> Loading...</> : <><Icon name="pin" size={18} className="map-picker-btn-icon" /> Use Current Location</>}
             </button>
           </div>
         )}

@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { gsap } from 'gsap';
+import Icon from './Icon';
 
 const MainNavbar = ({ logoOnly = false }) => {
   const { user, logout } = useAuth();
@@ -157,7 +158,8 @@ const MainNavbar = ({ logoOnly = false }) => {
   if (!logoOnly) {
     if (user) {
       navItems.push({
-        label: `👤 ${user.username}`,
+        iconName: 'user',
+        label: user.username,
         href: user.role === 'admin' ? '/admin' : '/account'
       });
       navItems.push({
@@ -240,9 +242,9 @@ const MainNavbar = ({ logoOnly = false }) => {
                               ref={el => { circleRefs.current[i] = el; }}
                             />
                             <span className="label-stack">
-                              <span className="pill-label">{item.label} ▼</span>
+                              <span className="pill-label">{item.iconName ? <><Icon name={item.iconName} size={18} className="nav-item-icon" /> {item.label}</> : item.label} ▼</span>
                               <span className="pill-label-hover" aria-hidden="true">
-                                {item.label} ▼
+                                {item.iconName ? <><Icon name={item.iconName} size={18} className="nav-item-icon" /> {item.label}</> : item.label} ▼
                               </span>
                             </span>
                           </a>
@@ -274,7 +276,7 @@ const MainNavbar = ({ logoOnly = false }) => {
                                 onMouseEnter={(e) => e.target.style.backgroundColor = '#f3f4f6'}
                                 onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
                               >
-                                💒 Weddings
+                                <Icon name="events" size={18} style={{ verticalAlign: 'middle', marginRight: '8px' }} /> Weddings
                               </a>
                               <a
                                 href="/events?type=birthdays"
@@ -289,7 +291,7 @@ const MainNavbar = ({ logoOnly = false }) => {
                                 onMouseEnter={(e) => e.target.style.backgroundColor = '#f3f4f6'}
                                 onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
                               >
-                                🎂 Birthdays
+                                <Icon name="events" size={18} style={{ verticalAlign: 'middle', marginRight: '8px' }} /> Birthdays
                               </a>
                               <a
                                 href="/events?type=others"
@@ -304,7 +306,7 @@ const MainNavbar = ({ logoOnly = false }) => {
                                 onMouseEnter={(e) => e.target.style.backgroundColor = '#f3f4f6'}
                                 onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
                               >
-                                🎉 Others
+                                <Icon name="events" size={18} style={{ verticalAlign: 'middle', marginRight: '8px' }} /> Others
                               </a>
                             </div>
                           )}
@@ -323,9 +325,9 @@ const MainNavbar = ({ logoOnly = false }) => {
                             ref={el => { circleRefs.current[i] = el; }}
                           />
                           <span className="label-stack">
-                            <span className="pill-label">{item.label}</span>
+                            <span className="pill-label">{item.iconName ? <><Icon name={item.iconName} size={18} className="nav-item-icon" /> {item.label}</> : item.label}</span>
                             <span className="pill-label-hover" aria-hidden="true">
-                              {item.label}
+                              {item.iconName ? <><Icon name={item.iconName} size={18} className="nav-item-icon" /> {item.label}</> : item.label}
                             </span>
                           </span>
                         </button>
@@ -343,9 +345,9 @@ const MainNavbar = ({ logoOnly = false }) => {
                             ref={el => { circleRefs.current[i] = el; }}
                           />
                           <span className="label-stack">
-                            <span className="pill-label">{item.label}</span>
+                            <span className="pill-label">{item.iconName ? <><Icon name={item.iconName} size={18} className="nav-item-icon" /> {item.label}</> : item.label}</span>
                             <span className="pill-label-hover" aria-hidden="true">
-                              {item.label}
+                              {item.iconName ? <><Icon name={item.iconName} size={18} className="nav-item-icon" /> {item.label}</> : item.label}
                             </span>
                           </span>
                         </a>

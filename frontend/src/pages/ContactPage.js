@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import MainNavbar from '../components/MainNavbar';
+import Icon from '../components/Icon';
 import AnimatedMapBackground from '../components/AnimatedMapBackground';
 import './ContactPage.css';
 
@@ -39,7 +40,7 @@ const ContactPage = () => {
 
   const contactInfo = {
     address: {
-      icon: '📍',
+      iconName: 'pin',
       title: 'Visit Us',
       details: [
         'No 44/B, Sri Venkateswara building',
@@ -50,14 +51,14 @@ const ContactPage = () => {
       link: 'https://www.google.com/maps?q=No+44/B,+Sri+Venkateswara+building,+Maheshwaramma+Temple+Street,+Kadirenahalli,+Banashankari+2nd+Stage,+Bangalore+560070',
     },
     phone: {
-      icon: '📞',
+      iconName: 'phone',
       title: 'Call Us',
       details: ['97312 67516', '96202 67516'],
       action: 'Call Now',
       link: 'tel:+919731267516',
     },
     email: {
-      icon: '✉️',
+      iconName: 'email',
       title: 'Email Us',
       details: ['nammacabs.2022@gmail.com'],
       action: 'Send Email',
@@ -95,7 +96,7 @@ const ContactPage = () => {
             className={`contact-card address-card ${isVisible.address ? 'visible' : ''}`}
           >
             <div className="card-icon-wrapper">
-              <div className="card-icon">{contactInfo.address.icon}</div>
+              <div className="card-icon"><Icon name={contactInfo.address.iconName} size={32} /></div>
               <div className="icon-pulse"></div>
             </div>
             <h3 className="card-title">{contactInfo.address.title}</h3>
@@ -113,7 +114,7 @@ const ContactPage = () => {
               className="card-action-btn"
             >
               {contactInfo.address.action}
-              <span className="btn-arrow">→</span>
+              <Icon name="arrowForward" size={18} className="btn-arrow" />
             </a>
             <div className="card-decoration"></div>
           </div>
@@ -124,7 +125,7 @@ const ContactPage = () => {
             className={`contact-card phone-card ${isVisible.phone ? 'visible' : ''}`}
           >
             <div className="card-icon-wrapper">
-              <div className="card-icon">{contactInfo.phone.icon}</div>
+              <div className="card-icon"><Icon name={contactInfo.phone.iconName} size={32} /></div>
               <div className="icon-pulse"></div>
             </div>
             <h3 className="card-title">{contactInfo.phone.title}</h3>
@@ -144,7 +145,7 @@ const ContactPage = () => {
               className="card-action-btn"
             >
               {contactInfo.phone.action}
-              <span className="btn-arrow">→</span>
+              <Icon name="arrowForward" size={18} className="btn-arrow" />
             </a>
             <div className="card-decoration"></div>
           </div>
@@ -155,7 +156,7 @@ const ContactPage = () => {
             className={`contact-card email-card ${isVisible.email ? 'visible' : ''}`}
           >
             <div className="card-icon-wrapper">
-              <div className="card-icon">{contactInfo.email.icon}</div>
+              <div className="card-icon"><Icon name={contactInfo.email.iconName} size={32} /></div>
               <div className="icon-pulse"></div>
             </div>
             <h3 className="card-title">{contactInfo.email.title}</h3>
@@ -172,7 +173,7 @@ const ContactPage = () => {
               className="card-action-btn"
             >
               {contactInfo.email.action}
-              <span className="btn-arrow">→</span>
+              <Icon name="arrowForward" size={18} className="btn-arrow" />
             </a>
             <div className="card-decoration"></div>
           </div>
