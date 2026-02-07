@@ -278,26 +278,190 @@
   background: #c2410c;
 }
 
-/* Success banner */
-.car-options-success-banner {
+/* Unified cab card (same layout for local, airport, outstation – data from backend) */
+.unified-cab-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 24px;
+  margin-top: 20px;
+}
+
+.unified-cab-cards-empty {
+  margin-top: 20px;
+  padding: 20px;
+  text-align: center;
+  color: #6b7280;
+  font-size: 1rem;
+}
+
+.unified-cab-card {
+  background: #fff;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  border: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+}
+
+.unified-cab-card-image-wrap {
+  width: 100%;
+  aspect-ratio: 2 / 1;
+  background: #f1f5f9;
+  overflow: hidden;
+}
+
+.unified-cab-card-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.unified-cab-card-image-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 3rem;
+  background: #e5e7eb;
+}
+
+.unified-cab-card-features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 12px 16px;
+  font-size: 0.9rem;
+  color: #374151;
+}
+
+.unified-cab-card-feature {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.unified-cab-card-fare {
+  padding: 0 16px 8px;
+}
+
+.unified-cab-card-fare-amount {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #ea580c;
+  display: block;
+}
+
+.unified-cab-card-gst {
+  margin: 4px 0 2px;
+  font-size: 0.85rem;
+  color: #374151;
+}
+
+.unified-cab-card-service-label {
+  margin: 0 0 12px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #16a34a;
+}
+
+.unified-cab-card-breakdown {
+  border-top: 1px solid #e5e7eb;
+  padding: 12px 16px;
+}
+
+.unified-cab-card-breakdown-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 0.9rem;
+  color: #374151;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.unified-cab-card-breakdown-row:last-child {
+  border-bottom: none;
+}
+
+.unified-cab-card-links {
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+}
+
+.unified-cab-card-link {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.unified-cab-card-link:hover {
+  text-decoration: underline;
+}
+
+.unified-cab-card-link-sep {
+  color: #9ca3af;
+}
+
+.unified-cab-card-extra {
+  margin: 0 16px 8px;
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+.unified-cab-card-book-btn {
+  margin: 12px 16px 16px;
+  padding: 14px 24px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #fff;
+  background: #ea580c;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.unified-cab-card-book-btn:hover {
+  background: #c2410c;
+}
+
+/* Success popup (fixed overlay, same as HomePage) */
+.car-options-success-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.car-options-success-popup {
   position: relative;
   text-align: center;
-  padding: 20px 48px 20px 24px;
+  padding: 28px 24px 24px;
   background: linear-gradient(135deg, rgba(22, 163, 74, 0.15) 0%, rgba(22, 163, 74, 0.08) 100%);
   border: 2px solid rgba(22, 163, 74, 0.35);
-  border-radius: 12px;
-  margin-bottom: 24px;
+  border-radius: 16px;
+  min-width: 280px;
+  max-width: 90vw;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
 }
 
 .car-options-success-title {
-  margin: 0 0 8px;
-  font-size: 1.1rem;
+  margin: 0 0 12px;
+  font-size: 1.25rem;
   font-weight: 700;
   color: #111827;
 }
 
 .car-options-success-id {
-  margin: 0 0 12px;
+  margin: 0 0 16px;
   font-size: 1rem;
   color: #374151;
 }
@@ -307,9 +471,11 @@
 }
 
 .car-options-success-link {
+  display: inline-block;
   color: #16a34a;
   font-weight: 600;
   text-decoration: none;
+  margin-bottom: 8px;
 }
 
 .car-options-success-link:hover {

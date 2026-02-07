@@ -106,6 +106,77 @@ const CarOptions = () => {
   const selectedHours = bookingState.number_of_hours ? Number(bookingState.number_of_hours) : null;
   const fromLocation = bookingState.from_location || '';
 
+  // Unified cab card: one card per cab, layout and data from backend (matches design spec)
+  const renderUnifiedCabCard = (cab, ct, opts) => {
+    const {
+      displayFare,
+      serviceLabel,
+      includedKm,
+      extraPerKm,
+      driverCharges,
+      nightCharges,
+    } = opts;
+    const imageUrl = cab?.image_url ? getImageUrl(cab.image_url) : (ct.cabs?.[0]?.image_url ? getImageUrl(ct.cabs[0].image_url) : null);
+    const seating = ct.seatingCapacity != null ? `${ct.seatingCapacity - 1}+1 seater` : '—';
+    const luggage = ct.luggageCapacity != null ? `${ct.luggageCapacity} bags` : '—';
+    const acText = ct.hasAc === true ? 'Ac' : ct.hasAc === false ? 'Non-Ac' : '—';
+    const gstText = ct.gstIncluded === true ? 'Includes GST' : ct.gstIncluded === false ? 'Excludes GST' : 'Includes GST';
+    const driverText = driverCharges == null || Number(driverCharges) === 0 ? 'Included' : `₹${driverCharges}`;
+    const nightText = nightCharges == null || Number(nightCharges) === 0 ? 'Included' : `₹${nightCharges}`;
+    const extraKmText = extraPerKm != null && Number(extraPerKm) >= 0 ? `₹${extraPerKm}/KM` : '—';
+    const includedKmText = includedKm != null ? `${includedKm} KM` : '—';
+
+    return (
+      <div key={cab?.id ?? ct.id} className="unified-cab-card">
+        <div className="unified-cab-card-image-wrap">
+          {imageUrl ? (
+            <img src={imageUrl} alt={ct.name} className="unified-cab-card-image" onError={(e) => { e.target.style.display = 'none'; }} />
+          ) : (
+            <div className="unified-cab-card-image-placeholder">🚗</div>
+          )}
+        </div>
+        <div className="unified-cab-card-features">
+          <span className="unified-cab-card-feature">{seating}</span>
+          <span className="unified-cab-card-feature">{luggage}</span>
+          <span className="unified-cab-card-feature">{acText}</span>
+        </div>
+        <div className="unified-cab-card-fare">
+          <span className="unified-cab-card-fare-amount">₹{displayFare != null ? displayFare : '—'}/-</span>
+          <p className="unified-cab-card-gst">{gstText}</p>
+          <p className="unified-cab-card-service-label">{serviceLabel}</p>
+        </div>
+        <div className="unified-cab-card-breakdown">
+          <div className="unified-cab-card-breakdown-row">
+            <span>Included Km</span>
+            <span>{includedKmText}</span>
+          </div>
+          <div className="unified-cab-card-breakdown-row">
+            <span>Extra fare/Km</span>
+            <span>{extraKmText}</span>
+          </div>
+          <div className="unified-cab-card-breakdown-row">
+            <span>Driver Charges</span>
+            <span>{driverText}</span>
+          </div>
+          <div className="unified-cab-card-breakdown-row">
+            <span>Night Charges</span>
+            <span>{nightText}</span>
+          </div>
+        </div>
+        <div className="unified-cab-card-links">
+          <a href="/terms" className="unified-cab-card-link">Terms &amp; Condition</a>
+          <span className="unified-cab-card-link-sep">|</span>
+          <a href="/fare-details" className="unified-cab-card-link">Fare Details</a>
+        </div>
+        <p className="unified-cab-card-extra">Toll &amp; State Tax Extra</p>
+        <p className="unified-cab-card-extra">Parking Extra, if Applicable</p>
+        <button type="button" className="unified-cab-card-book-btn" onClick={() => handleBookNow(cab, ct)}>
+          Book Now
+        </button>
+      </div>
+    );
+  };
+
   const handleBookNow = (cab, cabType) => {
     setConfirmError('');
     setConfirmPassengerName('');
@@ -235,99 +306,27 @@ const CarOptions = () => {
             {loading && <div className="loading">Loading...</div>}
             {error && !loading && <div className="error-message">{error}</div>}
 
-            {/* Local flow: cab types with rates and cabs */}
-            {!loading && !error && isLocalFlow && localOffers.length > 0 && (
-              <div className="local-cab-types">
-                {localOffers.map((ct) => {
-                  const baseFare = Number(ct.baseFare) || 0;
-                  const packageForHours = selectedHours && ct.packageRates && ct.packageRates[selectedHours] != null
-                    ? Number(ct.packageRates[selectedHours])
-                    : null;
-                  const rateForSelected = packageForHours != null ? baseFare + packageForHours : null;
-                  const firstCarImage = ct.cabs && ct.cabs.length > 0 && ct.cabs[0].image_url
-                    ? getImageUrl(ct.cabs[0].image_url)
-                    : null;
-                  return (
-                    <div key={ct.id} className="local-cab-type-card">
-                      <div className="local-cab-type-header">
-                        <div className="local-cab-type-image-wrap">
-                          {firstCarImage ? (
-                            <img src={firstCarImage} alt={ct.name} className="local-cab-type-image" onError={(e) => { e.target.style.display = 'none'; }} />
-                          ) : (
-                            <div className="local-cab-type-image-placeholder">🚗</div>
-                          )}
-                        </div>
-                        <div className="local-cab-type-info">
-                          <h3 className="local-cab-type-name">{ct.name}</h3>
-                          {ct.description && <p className="local-cab-type-desc">{ct.description}</p>}
-                          <div className="local-cab-type-rates">
-                            <span className="local-rate-label">Packages:</span>
-                            {[4, 8, 12].map((h) => (
-                              <span key={h} className={`local-rate-pill ${selectedHours === h ? 'local-rate-pill-selected' : ''}`}>
-                                {h}h: ₹{ct.packageRates && ct.packageRates[h] != null ? ct.packageRates[h] : '—'}
-                              </span>
-                            ))}
-                            {ct.extraHourRate != null && (
-                              <span className="local-rate-extra">Extra hr: ₹{ct.extraHourRate}</span>
-                            )}
-                          </div>
-                          {baseFare > 0 && (
-                            <div className="local-cab-type-base-fare">
-                              Base fare: ₹{baseFare}
-                            </div>
-                          )}
-                          {rateForSelected != null && (
-                            <div className="local-cab-type-selected-rate">
-                              Your {selectedHours}h rate: <strong>₹{rateForSelected}</strong>
-                              {baseFare > 0 && <span className="local-rate-includes-base"> (incl. base fare)</span>}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="local-cabs-list">
-                        <h4 className="local-cabs-list-title">Cabs</h4>
-                        {ct.cabs && ct.cabs.length > 0 ? (
-                          <div className="local-cabs-grid">
-                            {ct.cabs.map((cab) => {
-                              const cabImageUrl = cab.image_url ? getImageUrl(cab.image_url) : null;
-                              return (
-                                <div key={cab.id} className="local-cab-card">
-                                  <div className="local-cab-image-wrap">
-                                    {cabImageUrl ? (
-                                      <img src={cabImageUrl} alt={cab.name || cab.vehicle_number} className="local-cab-image" onError={(e) => { e.target.style.display = 'none'; }} />
-                                    ) : (
-                                      <div className="local-cab-image-placeholder">🚙</div>
-                                    )}
-                                  </div>
-                                  <div className="local-cab-details">
-                                    <div className="local-cab-vehicle">{cab.vehicle_number}</div>
-                                    {cab.name && <div className="local-cab-name">{cab.name}</div>}
-                                    {cab.driver_name && <div className="local-cab-driver">Driver: {cab.driver_name}</div>}
-                                    {cab.driver_phone && <div className="local-cab-phone">{cab.driver_phone}</div>}
-                                    {rateForSelected != null && (
-                                      <div className="local-cab-rate">₹{rateForSelected} ({selectedHours}h)</div>
-                                    )}
-                                    <button
-                                      type="button"
-                                      className="local-cab-book-btn"
-                                      onClick={() => handleBookNow(cab, ct)}
-                                    >
-                                      Book Now
-                                    </button>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <p className="local-cabs-empty">No cabs added for this type.</p>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            {/* Local flow: unified cab cards (one per cab, data from backend) */}
+            {!loading && !error && isLocalFlow && localOffers.length > 0 && (() => {
+              const localCards = localOffers.flatMap((ct) => (ct.cabs || []).map((cab) => {
+                const baseFare = Number(ct.baseFare) || 0;
+                const packageForHours = selectedHours && ct.packageRates?.[selectedHours] != null ? Number(ct.packageRates[selectedHours]) : null;
+                const rateForSelected = packageForHours != null ? baseFare + packageForHours : null;
+                return renderUnifiedCabCard(cab, ct, {
+                  displayFare: rateForSelected,
+                  serviceLabel: `${ct.name} (${selectedHours || 0} hours)`,
+                  includedKm: ct.includedKm ?? null,
+                  extraPerKm: ct.extraPerKm ?? null,
+                  driverCharges: 0,
+                  nightCharges: 0,
+                });
+              }));
+              return localCards.length > 0 ? (
+                <div className="unified-cab-cards-grid">{localCards}</div>
+              ) : (
+                <p className="unified-cab-cards-empty">No cabs added for this service yet.</p>
+              );
+            })()}
 
             {/* Airport flow: no cabs configured */}
             {!loading && !error && isAirportFlow && airportOffers.length === 0 && (
@@ -336,85 +335,22 @@ const CarOptions = () => {
               </div>
             )}
 
-            {/* Airport flow: cab types with rates and cabs */}
-            {!loading && !error && isAirportFlow && airportOffers.length > 0 && (
-              <div className="local-cab-types">
-                {airportOffers.map((ct) => {
-                  const estimatedFare = airportFares[ct.id];
-                  const firstCarImage = ct.cabs && ct.cabs.length > 0 && ct.cabs[0].image_url
-                    ? getImageUrl(ct.cabs[0].image_url)
-                    : null;
-                  return (
-                    <div key={ct.id} className="local-cab-type-card">
-                      <div className="local-cab-type-header">
-                        <div className="local-cab-type-image-wrap">
-                          {firstCarImage ? (
-                            <img src={firstCarImage} alt={ct.name} className="local-cab-type-image" onError={(e) => { e.target.style.display = 'none'; }} />
-                          ) : (
-                            <div className="local-cab-type-image-placeholder">✈️</div>
-                          )}
-                        </div>
-                        <div className="local-cab-type-info">
-                          <h3 className="local-cab-type-name">{ct.name}</h3>
-                          {ct.description && <p className="local-cab-type-desc">{ct.description}</p>}
-                          <div className="local-cab-type-rates">
-                            <span className="local-rate-label">From ₹{ct.baseFare || 0}</span>
-                            <span className="local-rate-extra">₹{ct.perKmRate || 0}/km</span>
-                            {(ct.driverCharges || ct.nightCharges) ? (
-                              <span className="local-rate-extra">+ driver/night charges</span>
-                            ) : null}
-                          </div>
-                          {estimatedFare != null && (
-                            <div className="local-cab-type-selected-rate">
-                              Est. fare: <strong>₹{estimatedFare}</strong>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="local-cabs-list">
-                        <h4 className="local-cabs-list-title">Cabs</h4>
-                        {ct.cabs && ct.cabs.length > 0 ? (
-                          <div className="local-cabs-grid">
-                            {ct.cabs.map((cab) => {
-                              const cabImageUrl = cab.image_url ? getImageUrl(cab.image_url) : null;
-                              return (
-                                <div key={cab.id} className="local-cab-card">
-                                  <div className="local-cab-image-wrap">
-                                    {cabImageUrl ? (
-                                      <img src={cabImageUrl} alt={cab.name || cab.vehicle_number} className="local-cab-image" onError={(e) => { e.target.style.display = 'none'; }} />
-                                    ) : (
-                                      <div className="local-cab-image-placeholder">🚙</div>
-                                    )}
-                                  </div>
-                                  <div className="local-cab-details">
-                                    <div className="local-cab-vehicle">{cab.vehicle_number}</div>
-                                    {cab.name && <div className="local-cab-name">{cab.name}</div>}
-                                    {cab.driver_name && <div className="local-cab-driver">Driver: {cab.driver_name}</div>}
-                                    {cab.driver_phone && <div className="local-cab-phone">{cab.driver_phone}</div>}
-                                    {estimatedFare != null && (
-                                      <div className="local-cab-rate">₹{estimatedFare}</div>
-                                    )}
-                                    <button
-                                      type="button"
-                                      className="local-cab-book-btn"
-                                      onClick={() => handleBookNow(cab, ct)}
-                                    >
-                                      Book Now
-                                    </button>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <p className="local-cabs-empty">No cabs added for this type.</p>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            {/* Airport flow: unified cab cards (one per cab, data from backend) */}
+            {!loading && !error && isAirportFlow && airportOffers.length > 0 && (() => {
+              const airportCards = airportOffers.flatMap((ct) => (ct.cabs || []).map((cab) => renderUnifiedCabCard(cab, ct, {
+                displayFare: airportFares[ct.id] ?? ct.baseFare ?? 0,
+                serviceLabel: ct.name,
+                includedKm: ct.includedKm ?? null,
+                extraPerKm: ct.perKmRate ?? null,
+                driverCharges: ct.driverCharges ?? 0,
+                nightCharges: ct.nightCharges ?? 0,
+              })));
+              return airportCards.length > 0 ? (
+                <div className="unified-cab-cards-grid">{airportCards}</div>
+              ) : (
+                <p className="unified-cab-cards-empty">No cabs added for this service yet.</p>
+              );
+            })()}
 
             {/* Outstation flow: no cabs configured */}
             {!loading && !error && isOutstationFlow && outstationOffers.length === 0 && (
@@ -423,95 +359,22 @@ const CarOptions = () => {
               </div>
             )}
 
-            {/* Outstation flow: cab types with rates and cabs */}
-            {!loading && !error && isOutstationFlow && outstationOffers.length > 0 && (
-              <div className="local-cab-types">
-                {outstationOffers.map((ct) => {
-                  const tripType = bookingState.trip_type || 'one_way';
-                  const rates = tripType === 'one_way' ? ct.oneWay : tripType === 'round_trip' ? ct.roundTrip : ct.multipleStops;
-                  const estimatedFare = outstationFares[ct.id];
-                  const firstCarImage = ct.cabs && ct.cabs.length > 0 && ct.cabs[0].image_url
-                    ? getImageUrl(ct.cabs[0].image_url)
-                    : null;
-                  let rateSummary = '';
-                  if (rates) {
-                    if (tripType === 'one_way') {
-                      rateSummary = `Base ₹${rates.baseFare || 0}, then ₹${rates.extraKmRate || 0}/km after ${rates.minKm || 0} km`;
-                    } else if (tripType === 'round_trip') {
-                      rateSummary = `${rates.baseKmPerDay || 0} km/day, ₹${rates.perKmRate || 0}/km, ₹${rates.extraKmRate || 0}/km extra`;
-                    } else {
-                      rateSummary = `Base ₹${rates.baseFare || 0}, ₹${rates.perKmRate || 0}/km`;
-                    }
-                  }
-                  return (
-                    <div key={ct.id} className="local-cab-type-card">
-                      <div className="local-cab-type-header">
-                        <div className="local-cab-type-image-wrap">
-                          {firstCarImage ? (
-                            <img src={firstCarImage} alt={ct.name} className="local-cab-type-image" onError={(e) => { e.target.style.display = 'none'; }} />
-                          ) : (
-                            <div className="local-cab-type-image-placeholder">🛣️</div>
-                          )}
-                        </div>
-                        <div className="local-cab-type-info">
-                          <h3 className="local-cab-type-name">{ct.name}</h3>
-                          {ct.description && <p className="local-cab-type-desc">{ct.description}</p>}
-                          {rateSummary && (
-                            <div className="local-cab-type-rates">
-                              <span className="local-rate-extra">{rateSummary}</span>
-                            </div>
-                          )}
-                          {estimatedFare != null && estimatedFare > 0 && (
-                            <div className="local-cab-type-selected-rate">
-                              Est. fare: <strong>₹{estimatedFare}</strong>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="local-cabs-list">
-                        <h4 className="local-cabs-list-title">Cabs</h4>
-                        {ct.cabs && ct.cabs.length > 0 ? (
-                          <div className="local-cabs-grid">
-                            {ct.cabs.map((cab) => {
-                              const cabImageUrl = cab.image_url ? getImageUrl(cab.image_url) : null;
-                              return (
-                                <div key={cab.id} className="local-cab-card">
-                                  <div className="local-cab-image-wrap">
-                                    {cabImageUrl ? (
-                                      <img src={cabImageUrl} alt={cab.name || cab.vehicle_number} className="local-cab-image" onError={(e) => { e.target.style.display = 'none'; }} />
-                                    ) : (
-                                      <div className="local-cab-image-placeholder">🚙</div>
-                                    )}
-                                  </div>
-                                  <div className="local-cab-details">
-                                    <div className="local-cab-vehicle">{cab.vehicle_number}</div>
-                                    {cab.name && <div className="local-cab-name">{cab.name}</div>}
-                                    {cab.driver_name && <div className="local-cab-driver">Driver: {cab.driver_name}</div>}
-                                    {cab.driver_phone && <div className="local-cab-phone">{cab.driver_phone}</div>}
-                                    {estimatedFare != null && (
-                                      <div className="local-cab-rate">₹{estimatedFare}</div>
-                                    )}
-                                    <button
-                                      type="button"
-                                      className="local-cab-book-btn"
-                                      onClick={() => handleBookNow(cab, ct)}
-                                    >
-                                      Book Now
-                                    </button>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <p className="local-cabs-empty">No cabs added for this type.</p>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            {/* Outstation flow: unified cab cards (one per cab, data from backend) */}
+            {!loading && !error && isOutstationFlow && outstationOffers.length > 0 && (() => {
+              const outstationCards = outstationOffers.flatMap((ct) => (ct.cabs || []).map((cab) => renderUnifiedCabCard(cab, ct, {
+                displayFare: outstationFares[ct.id] ?? ct.baseFare ?? 0,
+                serviceLabel: `${ct.name} (${(bookingState.trip_type || 'one_way').replace('_', ' ')})`,
+                includedKm: ct.includedKm ?? null,
+                extraPerKm: ct.extraPerKm ?? null,
+                driverCharges: ct.driverCharges ?? 0,
+                nightCharges: ct.nightCharges ?? 0,
+              })));
+              return outstationCards.length > 0 ? (
+                <div className="unified-cab-cards-grid">{outstationCards}</div>
+              ) : (
+                <p className="unified-cab-cards-empty">No cabs added for this service yet.</p>
+              );
+            })()}
 
             {/* Default: marketing car options */}
             {!loading && !error && !isLocalFlow && !isAirportFlow && !isOutstationFlow && options.length === 0 && localOffers.length === 0 && (
@@ -521,18 +384,33 @@ const CarOptions = () => {
             )}
 
             {successBookingId && (
-              <div className="car-options-success-banner">
-                <p className="car-options-success-title">Booking confirmed!</p>
-                <p className="car-options-success-id">Your booking ID is <strong>#{successBookingId}</strong></p>
-                <Link to="/check-booking" className="car-options-success-link">Check booking</Link>
-                <button
-                  type="button"
-                  className="car-options-success-dismiss"
-                  onClick={() => setSuccessBookingId(null)}
-                  aria-label="Dismiss"
-                >
-                  ×
-                </button>
+              <div
+                className="car-options-success-overlay"
+                onClick={() => setSuccessBookingId(null)}
+                role="dialog"
+                aria-modal="true"
+              >
+                <div className="car-options-success-popup" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    className="car-options-success-dismiss"
+                    onClick={() => setSuccessBookingId(null)}
+                    aria-label="Dismiss"
+                  >
+                    ×
+                  </button>
+                  <h3 className="car-options-success-title">Booking confirmed!</h3>
+                  <p className="car-options-success-id">
+                    Your booking ID is <strong>#{successBookingId}</strong>
+                  </p>
+                  <Link
+                    to="/check-booking"
+                    className="car-options-success-link"
+                    onClick={() => setSuccessBookingId(null)}
+                  >
+                    Check booking
+                  </Link>
+                </div>
               </div>
             )}
 

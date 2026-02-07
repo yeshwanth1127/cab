@@ -86,7 +86,7 @@ const LOCAL_OFFER_CAB_TYPE_NAMES = ['Innova Crysta', 'SUV', 'Sedan'];
 router.get('/local-offers', async (req, res) => {
   try {
     const cabTypes = await db.allAsync(
-      "SELECT id, name, description, base_fare FROM cab_types WHERE service_type = 'local' AND is_active = 1 ORDER BY name"
+      "SELECT id, name, description, base_fare, capacity FROM cab_types WHERE service_type = 'local' AND is_active = 1 ORDER BY name"
     );
     const result = [];
     for (const ct of cabTypes || []) {
@@ -116,6 +116,7 @@ router.get('/local-offers', async (req, res) => {
         [ct.id]
       );
       const baseFare = ct.base_fare != null ? Number(ct.base_fare) : 0;
+      const capacity = ct.capacity != null ? Number(ct.capacity) : 4;
       result.push({
         id: ct.id,
         name: ct.name,
@@ -123,6 +124,12 @@ router.get('/local-offers', async (req, res) => {
         baseFare,
         packageRates,
         extraHourRate,
+        seatingCapacity: capacity + 1,
+        luggageCapacity: ct.luggage_capacity != null ? Number(ct.luggage_capacity) : null,
+        hasAc: ct.has_ac != null ? !!ct.has_ac : null,
+        includedKm: null,
+        extraPerKm: null,
+        gstIncluded: ct.gst_included != null ? !!ct.gst_included : true,
         cabs: cabs || [],
       });
     }
@@ -138,7 +145,7 @@ router.get('/local-offers', async (req, res) => {
 router.get('/airport-offers', async (req, res) => {
   try {
     const cabTypes = await db.allAsync(
-      "SELECT id, name, description FROM cab_types WHERE service_type = 'airport' AND is_active = 1 ORDER BY name"
+      "SELECT id, name, description, capacity FROM cab_types WHERE service_type = 'airport' AND is_active = 1 ORDER BY name"
     );
     const result = [];
     for (const ct of cabTypes || []) {
@@ -155,6 +162,7 @@ router.get('/airport-offers', async (req, res) => {
          FROM cabs WHERE cab_type_id = ? AND is_active = 1 AND is_available = 1 ORDER BY vehicle_number`,
         [ct.id]
       );
+      const capacity = ct.capacity != null ? Number(ct.capacity) : 4;
       result.push({
         id: ct.id,
         name: ct.name,
@@ -163,6 +171,12 @@ router.get('/airport-offers', async (req, res) => {
         perKmRate: rateRow ? Number(rateRow.per_km_rate) : 0,
         driverCharges: rateRow ? Number(rateRow.driver_charges || 0) : 0,
         nightCharges: rateRow ? Number(rateRow.night_charges || 0) : 0,
+        seatingCapacity: capacity + 1,
+        luggageCapacity: ct.luggage_capacity != null ? Number(ct.luggage_capacity) : null,
+        hasAc: ct.has_ac != null ? !!ct.has_ac : null,
+        includedKm: null,
+        extraPerKm: rateRow ? Number(rateRow.per_km_rate) : null,
+        gstIncluded: ct.gst_included != null ? !!ct.gst_included : true,
         cabs: cabs || [],
       });
     }
@@ -231,7 +245,7 @@ function getInt(row, key, defaultVal = null) {
 router.get('/outstation-offers', async (req, res) => {
   try {
     const cabTypes = await db.allAsync(
-      "SELECT id, name, description FROM cab_types WHERE service_type = 'outstation' AND is_active = 1 ORDER BY name"
+      "SELECT id, name, description, capacity FROM cab_types WHERE service_type = 'outstation' AND is_active = 1 ORDER BY name"
     );
     const result = [];
     for (const ct of cabTypes || []) {
@@ -257,10 +271,16 @@ router.get('/outstation-offers', async (req, res) => {
          FROM cabs WHERE cab_type_id = ? AND is_active = 1 AND is_available = 1 ORDER BY vehicle_number`,
         [ct.id]
       );
+      const capacity = ct.capacity != null ? Number(ct.capacity) : 4;
+      const firstRate = oneWay || roundTrip || multiStop;
       result.push({
         id: ct.id,
         name: ct.name,
         description: ct.description || '',
+        seatingCapacity: capacity + 1,
+        luggageCapacity: ct.luggage_capacity != null ? Number(ct.luggage_capacity) : null,
+        hasAc: ct.has_ac != null ? !!ct.has_ac : null,
+        gstIncluded: ct.gst_included != null ? !!ct.gst_included : true,
         oneWay: oneWay ? {
           minKm: getInt(oneWay, 'min_km') ?? 130,
           baseFare: getNum(oneWay, 'base_fare'),
@@ -281,6 +301,12 @@ router.get('/outstation-offers', async (req, res) => {
           driverCharges: getNum(multiStop, 'driver_charges'),
           nightCharges: getNum(multiStop, 'night_charges'),
         } : null,
+        baseFare: firstRate ? getNum(firstRate, 'base_fare') : 0,
+        perKmRate: firstRate ? getNum(firstRate, 'per_km_rate') : 0,
+        driverCharges: firstRate ? getNum(firstRate, 'driver_charges') : 0,
+        nightCharges: firstRate ? getNum(firstRate, 'night_charges') : 0,
+        includedKm: oneWay ? (getInt(oneWay, 'min_km') ?? 130) : (roundTrip ? getInt(roundTrip, 'base_km_per_day') ?? 300 : null),
+        extraPerKm: oneWay ? getNum(oneWay, 'extra_km_rate') : (roundTrip ? getNum(roundTrip, 'extra_km_rate') : (multiStop ? getNum(multiStop, 'per_km_rate') : null)),
         cabs: cabs || [],
       });
     }

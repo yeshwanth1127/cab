@@ -607,6 +607,27 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleBookingInvoiceDownload = async (bookingId, withGst) => {
+    try {
+      const response = await api.get(`/admin/bookings/${bookingId}/invoice`, {
+        params: { with_gst: withGst },
+        responseType: 'blob',
+      });
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `invoice-${bookingId}${withGst ? '-with-gst' : ''}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      showToast('Invoice downloaded.');
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to download invoice', 'error');
+    }
+  };
+
   const handleCorporateDownloadAll = async () => {
     setCorporateDownloadAllLoading(true);
     try {
@@ -1783,9 +1804,35 @@ const AdminDashboard = () => {
       )}
 
           {activeTab === TABS.billing && (
-            <div className="admin-tab-section">
-              <h2>Billing</h2>
-              <p className="admin-bookings-desc">Invoices & reports – coming soon.</p>
+            <div className="admin-tab-section admin-dashboard-box">
+              <h2 className="admin-dashboard-box-heading">Billing – Confirmed bookings</h2>
+              <p className="admin-bookings-desc">View confirmed bookings and download invoices (with or without GST).</p>
+              {loading.bookings && <p className="admin-dashboard-list-loading">Loading…</p>}
+              {!loading.bookings && confirmedBookingsList.length === 0 && <p className="admin-dashboard-list-empty">No confirmed bookings.</p>}
+              {!loading.bookings && confirmedBookingsList.length > 0 && (
+                <div className="admin-entry-cards">
+                  {confirmedBookingsList.map((b) => (
+                    <div key={b.id} className="admin-entry-card">
+                      <div className="admin-entry-card-header">
+                        <span className="admin-entry-card-id">#{b.id}</span>
+                        <span className="admin-service-badge">{b.booking_status}</span>
+                      </div>
+                      <div className="admin-entry-card-rows">
+                        <div className="admin-entry-card-row"><span className="key">From</span><span className="value">{b.from_location || '—'}</span></div>
+                        <div className="admin-entry-card-row"><span className="key">To</span><span className="value">{b.to_location || '—'}</span></div>
+                        <div className="admin-entry-card-row"><span className="key">Passenger</span><span className="value">{b.passenger_name || '—'}</span></div>
+                        <div className="admin-entry-card-row"><span className="key">Driver / Cab</span><span className="value">{b.driver_name ? `${b.driver_name} / ${b.vehicle_number || '—'}` : '—'}</span></div>
+                        <div className="admin-entry-card-row"><span className="key">Fare</span><span className="value">₹{b.fare_amount != null ? Number(b.fare_amount).toFixed(2) : '—'}</span></div>
+                      </div>
+                      <div className="admin-entry-card-actions">
+                        <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setDetailBooking(b)}>View</button>
+                        <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => handleBookingInvoiceDownload(b.id, true)}>Download (with GST)</button>
+                        <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleBookingInvoiceDownload(b.id, false)}>Download (without GST)</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

@@ -385,6 +385,31 @@ router.delete('/drivers/:id', async (req, res) => {
   }
 });
 
+// GET /bookings/:id/invoice - Download invoice PDF for an existing booking (with_gst=true|false)
+router.get('/bookings/:id/invoice', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const withGST = req.query.with_gst !== 'false';
+    const booking = await db.getAsync(
+      `SELECT b.*, ct.name as cab_type_name
+       FROM bookings b
+       LEFT JOIN cab_types ct ON b.cab_type_id = ct.id
+       WHERE b.id = ?`,
+      [id]
+    );
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+    const pdfBuffer = await generateInvoicePDF(booking, withGST);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="invoice-${id}${withGST ? '-with-gst' : ''}.pdf"`);
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error('Error generating booking invoice:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // POST /invoice/create - Create a booking and return invoice PDF (for Billing → Create Invoice)
 router.post('/invoice/create', [
   body('from_location').notEmpty().withMessage('from_location is required'),

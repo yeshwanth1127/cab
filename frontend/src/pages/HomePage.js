@@ -93,13 +93,15 @@ const HomePage = () => {
     }
   };
 
+  const BANGALORE_AIRPORT_NAME = 'Bangalore International Airport';
+  const KIA_LAT = 13.1989;
+  const KIA_LNG = 77.7068;
+
   const handleContinueToAirportCabSelection = () => {
     if (!airportLocationAddress.trim()) return;
     const isToAirport = (airportDirection || 'to_airport') === 'to_airport';
-    const fromAddress = isToAirport ? airportLocationAddress : 'Kempegowda International Airport (BLR)';
-    const toAddress = isToAirport ? 'Kempegowda International Airport (BLR)' : airportLocationAddress;
-    const KIA_LAT = 13.1989;
-    const KIA_LNG = 77.7068;
+    const fromAddress = isToAirport ? airportLocationAddress : BANGALORE_AIRPORT_NAME;
+    const toAddress = isToAirport ? BANGALORE_AIRPORT_NAME : airportLocationAddress;
     const fromLat = isToAirport ? (airportLocation?.lat ?? null) : KIA_LAT;
     const fromLng = isToAirport ? (airportLocation?.lng ?? null) : KIA_LNG;
     const toLat = isToAirport ? KIA_LAT : (airportLocation?.lat ?? null);
@@ -285,6 +287,9 @@ const HomePage = () => {
                     label={(airportDirection || 'to_airport') === 'to_airport' ? 'From' : 'To'}
                   />
                 </div>
+                {(airportDirection || 'to_airport') === 'to_airport' && (
+                  <p className="home-airport-destination-hint">Destination: Bangalore International Airport (distance & fare will be calculated automatically)</p>
+                )}
                 <button
                   type="button"
                   className="home-continue-btn"
@@ -474,11 +479,6 @@ const HomePage = () => {
                       onSelect={setFromLocation}
                       label="From"
                     />
-                  </div>
-                  <div className="home-form-group home-add-stop-wrap">
-                    <button type="button" className="home-add-stop-btn">
-                      + Add stop
-                    </button>
                   </div>
                   <div className="home-form-group">
                     <label className="home-form-label">Package (hours)</label>
