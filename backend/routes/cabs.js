@@ -3,7 +3,6 @@ const db = require('../db/database');
 
 const router = express.Router();
 
-// KIA Bangalore (for airport transfer distance)
 const KIA_AIRPORT_LAT = 13.1989;
 const KIA_AIRPORT_LNG = 77.7068;
 
@@ -19,7 +18,6 @@ function haversineDistanceKm(lat1, lng1, lat2, lng2) {
   return parseFloat((R * c).toFixed(2));
 }
 
-// Get all active cab types (public)
 router.get('/types', async (req, res) => {
   try {
     const result = await db.allAsync(
@@ -32,8 +30,6 @@ router.get('/types', async (req, res) => {
   }
 });
 
-// Public helper: get rate meters for displaying basic package info on booking cards
-// This is read-only and safe to expose. It lets the frontend show things like base fare and per-km rate.
 router.get('/rate-meters-public', async (req, res) => {
   try {
     const { service_type } = req.query;
@@ -60,7 +56,6 @@ router.get('/rate-meters-public', async (req, res) => {
   }
 });
 
-// Get available cabs for a specific cab type
 router.get('/available/:cabTypeId', async (req, res) => {
   try {
     const { cabTypeId } = req.params;
@@ -78,24 +73,20 @@ router.get('/available/:cabTypeId', async (req, res) => {
   }
 });
 
-// Normalize image_url: backend uploads get /uploads/...; plain filenames (e.g. ciaz.jpg) are left as-is for frontend public/
 function normalizeImageUrl(url) {
   if (url == null || String(url).trim() === '') return null;
   const s = String(url).trim();
   if (s.startsWith('http://') || s.startsWith('https://')) return s;
   if (s.startsWith('/uploads/')) return s;
   if (s.startsWith('uploads/')) return `/${s}`;
-  // Plain filename (e.g. ciaz.jpg from frontend/public) — return as-is so frontend serves from public/
+
   if (!s.includes('/')) return s;
-  // Path with slash but not uploads — treat as backend path
+
   return s.startsWith('/') ? `/uploads${s}` : `/uploads/${s}`;
 }
 
-// Allowed local cab type names shown to users (avoids showing legacy Crysta, Innova, duplicate Sedan, etc.).
 const LOCAL_OFFER_CAB_TYPE_NAMES = ['Innova Crysta', 'SUV', 'Sedan'];
 
-// Public: local cab types with package rates and cabs — same data as admin dashboard (Rate meters → Local).
-// Only returns cab types that (1) have at least one configured package rate and (2) are in the allowed list (Innova Crysta, SUV, Sedan).
 router.get('/local-offers', async (req, res) => {
   try {
     const cabTypes = await db.allAsync(
@@ -154,8 +145,6 @@ router.get('/local-offers', async (req, res) => {
   }
 });
 
-// Public: airport cab types with rate_meters (base_fare, per_km_rate, driver_charges, night_charges) and cabs.
-// Frontend uses distance_km to compute fare = base_fare + (distance_km * per_km_rate) + driver_charges + night_charges.
 router.get('/airport-offers', async (req, res) => {
   try {
     const cabTypes = await db.allAsync(
@@ -202,8 +191,6 @@ router.get('/airport-offers', async (req, res) => {
   }
 });
 
-// GET /airport-fare-estimate?from_lat=&from_lng=&to_lat=&to_lng=
-// Returns distance_km and fares per airport cab type (base_fare + distance*per_km_rate + driver_charges + night_charges).
 router.get('/airport-fare-estimate', async (req, res) => {
   try {
     const fromLat = parseFloat(req.query.from_lat);
@@ -239,7 +226,6 @@ router.get('/airport-fare-estimate', async (req, res) => {
   }
 });
 
-// Helper: read number from row with any key case (SQLite may return different casing)
 function getNum(row, key, defaultVal = 0) {
   if (!row) return defaultVal;
   const val = row[key] ?? row[key.toUpperCase()] ?? row[key.toLowerCase()];
@@ -255,8 +241,6 @@ function getInt(row, key, defaultVal = null) {
   return Number.isNaN(n) ? defaultVal : n;
 }
 
-// Public: outstation cab types with rate_meters for one_way, round_trip, multiple_stops and cabs.
-// Frontend computes fare per trip_type: one_way (min_km, base_fare, extra_km_rate), round_trip (base_km_per_day, per_km_rate, extra_km_rate), multiple_stops (base_fare, per_km_rate).
 router.get('/outstation-offers', async (req, res) => {
   try {
     const cabTypes = await db.allAsync(
@@ -333,10 +317,6 @@ router.get('/outstation-offers', async (req, res) => {
   }
 });
 
-// GET /outstation-fare-estimate - returns fares per cab type for the given trip
-// one_way: from_lat, from_lng, to_lat, to_lng
-// round_trip: number_of_days (uses default km per day for estimate)
-// multiple_stops: returns base fare only
 router.get('/outstation-fare-estimate', async (req, res) => {
   try {
     const tripType = req.query.trip_type || 'one_way';

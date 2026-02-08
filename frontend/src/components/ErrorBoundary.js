@@ -1,8 +1,5 @@
 import React from 'react';
 
-/**
- * Simple error boundary to prevent the app from crashing on runtime errors.
- */
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -14,7 +11,7 @@ class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    // Log for debugging; replace with remote logging if needed
+
     console.error('ErrorBoundary caught an error:', error, errorInfo);
   }
 

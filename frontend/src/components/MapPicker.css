@@ -290,11 +290,12 @@
   opacity: 0.6;
 }
 
-/* Mobile responsive */
+
 @media (max-width: 768px) {
   .map-picker-overlay {
     padding: 0;
-    /* Better touch handling */
+    
+
     -webkit-overflow-scrolling: touch;
   }
 
@@ -330,7 +331,8 @@
 
   .map-picker-search-input {
     padding: 10px 12px;
-    font-size: 16px; /* Prevent zoom on iOS */
+    font-size: 16px; 
+
     border-radius: 6px;
   }
 
@@ -427,7 +429,7 @@
   }
 }
 
-/* Touch optimizations */
+
 @media (hover: none) and (pointer: coarse) {
   .btn-close:hover {
     background: #e0e0e0;

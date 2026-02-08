@@ -21,7 +21,7 @@
   filter: drop-shadow(0 0 12px rgba(0, 0, 0, 0.65));
 }
 
-/* Logo image when provided in public/logo.png */
+
 .corner-logo__img {
   display: block;
   width: 140px;
@@ -51,7 +51,8 @@
 }
 
 @media (max-width: 768px) {
-  /* Prevent horizontal scroll globally */
+  
+
   * {
     max-width: 100%;
     box-sizing: border-box;
@@ -90,7 +91,7 @@
   padding: 20px;
 }
 
-/* Glassmorphic Buttons */
+
 .btn {
   padding: 14px 28px;
   border: 1px solid rgba(255, 255, 255, 0.3);
@@ -183,7 +184,7 @@
   transform: none !important;
 }
 
-/* Enhanced Cards */
+
 .card {
   background: white;
   border-radius: 16px;
@@ -217,7 +218,7 @@
   transform: translateY(-4px);
 }
 
-/* Enhanced Form Elements */
+
 .form-group {
   margin-bottom: 24px;
   animation: fadeIn 0.6s ease-out;
@@ -291,7 +292,7 @@
   font-size: 16px;
 }
 
-/* Loading States */
+
 .loading {
   text-align: center;
   padding: 60px 40px;
@@ -304,12 +305,12 @@
   animation: pulse 1.5s ease-in-out infinite;
 }
 
-/* Smooth transitions for all interactive elements */
+
 a, button, input, select, textarea {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Scrollbar styling */
+
 ::-webkit-scrollbar {
   width: 10px;
 }
@@ -328,7 +329,7 @@ a, button, input, select, textarea {
   background: linear-gradient(135deg, #16a34a 0%, #d97706 100%);
 }
 
-/* Mobile responsiveness */
+
 @media (max-width: 768px) {
   .container {
     padding: 16px;
@@ -341,7 +342,8 @@ a, button, input, select, textarea {
   .btn {
     width: 100%;
     justify-content: center;
-    /* Touch-friendly */
+    
+
     min-height: 44px;
     -webkit-tap-highlight-color: rgba(22, 163, 74, 0.3);
     touch-action: manipulation;
@@ -363,7 +365,8 @@ a, button, input, select, textarea {
   .form-group input,
   .form-group select,
   .form-group textarea {
-    font-size: 16px; /* Prevent zoom on iOS */
+    font-size: 16px; 
+
     padding: 12px 14px;
     border-radius: 8px;
   }
@@ -402,7 +405,7 @@ a, button, input, select, textarea {
   }
 }
 
-/* Touch optimizations */
+
 @media (hover: none) and (pointer: coarse) {
   .btn:hover {
     transform: none;

@@ -12,7 +12,8 @@
 }
 
 .navbar h1 {
-  color: #fec5bb; /* peach tone to match brand */
+  color: #fec5bb; 
+
 }
 
 .navbar .container {
@@ -253,7 +254,7 @@
   padding: 14px 28px;
 }
 
-/* Make primary action text dark on Check Booking page */
+
 .check-booking-page .check-booking-form .btn-primary {
   color: #111827;
 }
@@ -340,7 +341,8 @@
   .booking-actions .btn {
     min-width: auto;
     padding: 12px 24px;
-    /* Touch-friendly */
+    
+
     -webkit-tap-highlight-color: rgba(22, 163, 74, 0.3);
     touch-action: manipulation;
   }
@@ -386,7 +388,7 @@
   }
 }
 
-/* Touch optimizations */
+
 @media (hover: none) and (pointer: coarse) {
   .detail-item:hover {
     transform: none;

@@ -88,7 +88,8 @@
   .auth-toggle button {
     padding: 10px 0;
     font-size: 14px;
-    /* Touch-friendly */
+    
+
     -webkit-tap-highlight-color: rgba(22, 163, 74, 0.3);
     touch-action: manipulation;
   }
@@ -98,7 +99,8 @@
   }
 
   .user-auth-form .form-group input {
-    font-size: 16px; /* Prevent zoom on iOS */
+    font-size: 16px; 
+
     padding: 12px 14px;
   }
 
@@ -108,7 +110,8 @@
   }
 
   .auth-helper button {
-    /* Touch-friendly */
+    
+
     -webkit-tap-highlight-color: rgba(79, 70, 229, 0.2);
     touch-action: manipulation;
     padding: 4px 8px;
@@ -132,7 +135,7 @@
   }
 }
 
-/* Touch optimizations */
+
 @media (hover: none) and (pointer: coarse) {
   .auth-toggle button:hover {
     background: transparent;

@@ -26,7 +26,6 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, initialLocation, t
       return;
     }
 
-    // Helper function to check if Google Maps is fully loaded
     const isGoogleMapsReady = () => {
       return window.google && 
              window.google.maps && 
@@ -34,7 +33,6 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, initialLocation, t
              typeof window.google.maps.Map === 'function';
     };
 
-    // Helper function to wait for Google Maps to be ready
     const waitForGoogleMaps = (callback, maxAttempts = 50) => {
       let attempts = 0;
       const checkReady = () => {
@@ -60,7 +58,7 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, initialLocation, t
       });
 
     return () => {
-      // Cleanup
+
       if (markerRef.current) {
         markerRef.current.setMap(null);
       }
@@ -68,7 +66,7 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, initialLocation, t
   }, [isOpen, googleKey, userLocation]);
 
   const initializeMap = () => {
-    // Verify Google Maps API is fully loaded
+
     if (!mapRef.current) {
       console.error('[MapPicker] Map container not available');
       return;
@@ -83,7 +81,7 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, initialLocation, t
     if (typeof window.google.maps.Map !== 'function') {
       console.error('[MapPicker] Google Maps Map constructor not available');
       setError('Google Maps API is not fully loaded. Please wait a moment and try again.');
-      // Retry after a short delay
+
       setTimeout(() => {
         if (typeof window.google.maps.Map === 'function') {
           initializeMap();
@@ -94,10 +92,10 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, initialLocation, t
 
     const defaultCenter = userLocation 
       ? { lat: userLocation.lat, lng: userLocation.lng }
-      : { lat: 12.9716, lng: 77.5946 }; // Default to Bangalore, India
+      : { lat: 12.9716, lng: 77.5946 };
 
     try {
-      // Initialize map
+
       const map = new window.google.maps.Map(mapRef.current, {
       center: defaultCenter,
       zoom: userLocation ? 15 : 12,
@@ -108,7 +106,6 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, initialLocation, t
 
     mapInstanceRef.current = map;
 
-    // Add marker for user location if available
     if (userLocation) {
       new window.google.maps.Marker({
         position: defaultCenter,
@@ -126,7 +123,6 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, initialLocation, t
       });
     }
 
-    // If initial location is provided, set it up after map is ready
     if (initialLocation && initialLocation.lat && initialLocation.lng) {
       setTimeout(() => {
         map.setCenter({ lat: initialLocation.lat, lng: initialLocation.lng });
@@ -135,13 +131,12 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, initialLocation, t
       }, 100);
     }
 
-    // Initialize autocomplete
     if (searchInputRef.current && window.google.maps.places) {
       try {
         const autocomplete = new window.google.maps.places.Autocomplete(
           searchInputRef.current,
           {
-            types: ['address', 'establishment'], // Addresses + establishments, India only
+            types: ['address', 'establishment'],
             componentRestrictions: { country: 'in' },
             fields: ['geometry', 'formatted_address', 'address_components', 'place_id', 'name'],
           }
@@ -149,15 +144,13 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, initialLocation, t
 
         autocompleteRef.current = autocomplete;
 
-        // Bind autocomplete to map bounds for better suggestions
         autocomplete.bindTo('bounds', map);
 
-        // When place is selected from autocomplete
         autocomplete.addListener('place_changed', () => {
           const place = autocomplete.getPlace();
           if (place.geometry && place.geometry.location) {
             const loc = place.geometry.location;
-            // Pan map to selected place
+
             map.panTo(loc);
             map.setZoom(16);
             
@@ -176,34 +169,32 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, initialLocation, t
       }
     }
 
-    // Add click listener to map - follows Google's recommended pattern
-    // Using MapMouseEvent.latLng as per Google Maps documentation
     map.addListener('click', (event) => {
-      // event.latLng is the recommended way to get coordinates from click
+
       const latLng = event.latLng;
       if (!latLng) return;
       
       const lat = latLng.lat();
       const lng = latLng.lng();
       
-      // Reverse geocode to get address (TOS-compliant: only for user-selected locations)
+
       setIsGeocoding(true);
       const geocoder = new window.google.maps.Geocoder();
       
-      // Restrict geocoding to India for better results
+
       geocoder.geocode({ 
         location: { lat, lng },
-        region: 'in' // Bias results to India
+        region: 'in'
       }, (results, status) => {
         setIsGeocoding(false);
         if (status === 'OK' && results && results[0]) {
-          // Filter to ensure result is in India (additional safety check)
+
           const result = results.find(r => {
             const components = r.address_components || [];
             return components.some(comp => 
               comp.types.includes('country') && comp.short_name === 'IN'
             );
-          }) || results[0]; // Fallback to first result if no India match
+          }) || results[0];
           
           handleLocationSelect({
             lat,
@@ -213,7 +204,7 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, initialLocation, t
             address_components: result.address_components,
           });
         } else {
-          // Fallback: use coordinates as address
+
           handleLocationSelect({
             lat,
             lng,
@@ -231,7 +222,7 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, initialLocation, t
   const handleLocationSelect = (location) => {
     setSelectedLocation(location);
     
-    // Update marker
+
     if (markerRef.current) {
       markerRef.current.setMap(null);
     }
@@ -244,11 +235,9 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, initialLocation, t
         animation: window.google.maps.Animation.DROP,
       });
 
-      // Center map on selected location
       mapInstanceRef.current.setCenter({ lat: location.lat, lng: location.lng });
       mapInstanceRef.current.setZoom(17);
 
-      // Update location when marker is dragged
       markerRef.current.addListener('dragend', (event) => {
         const latLng = event.latLng;
         if (!latLng) return;
@@ -258,14 +247,14 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, initialLocation, t
         
         setIsGeocoding(true);
         const geocoder = new window.google.maps.Geocoder();
-        // Restrict geocoding to India
+
         geocoder.geocode({ 
           location: { lat, lng },
-          region: 'in' // Bias results to India
+          region: 'in'
         }, (results, status) => {
           setIsGeocoding(false);
           if (status === 'OK' && results && results[0]) {
-            // Filter to ensure result is in India
+
             const result = results.find(r => {
               const components = r.address_components || [];
               return components.some(comp => 
@@ -289,7 +278,7 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, initialLocation, t
 
   const handleConfirm = () => {
     if (selectedLocation) {
-      // Ensure we return the location in the expected format: {address, lat, lng}
+
       const locationData = {
         address: selectedLocation.address,
         lat: selectedLocation.lat,
@@ -323,7 +312,7 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, initialLocation, t
           mapInstanceRef.current.setCenter({ lat, lng });
           mapInstanceRef.current.setZoom(17);
           
-          // Trigger reverse geocoding
+
           setIsGeocoding(true);
           const geocoder = new window.google.maps.Geocoder();
           geocoder.geocode({ location: { lat, lng } }, (results, status) => {
@@ -450,4 +439,3 @@ const MapPicker = ({ isOpen, onClose, onSelect, userLocation, initialLocation, t
 };
 
 export default MapPicker;
-

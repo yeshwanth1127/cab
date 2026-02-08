@@ -4,22 +4,19 @@ import MapPicker from './MapPicker';
 import api from '../services/api';
 import { loadGoogleMaps } from '../utils/googleMapsLoader';
 
-// Local cache for instant results (increased to 100 queries)
 const localCache = new Map();
 const MAX_CACHE_SIZE = 100;
 
-// Normalize query for better cache hits
 function normalizeQuery(query) {
   if (!query) return '';
   return query
     .toLowerCase()
     .trim()
-    .replace(/\s+/g, ' ') // Multiple spaces to single space
-    .replace(/[^\w\s]/g, '') // Remove special characters except spaces
+    .replace(/\s+/g, ' ')
+    .replace(/[^\w\s]/g, '')
     .trim();
 }
 
-// Helper to get cache key (normalized)
 function getCacheKey(query, userLocation) {
   const normalizedQuery = normalizeQuery(query);
   const roundedLat = userLocation?.lat ? Math.round(userLocation.lat * 100) / 100 : 0;
@@ -43,7 +40,6 @@ export default function LocationInput({
   const [showMapPicker, setShowMapPicker] = useState(false);
   const selectedAddressRef = useRef(null);
 
-  // Initialize query from value prop
   useEffect(() => {
     if (value && typeof value === 'object' && value.address) {
       setQuery(value.address);
@@ -54,9 +50,8 @@ export default function LocationInput({
     }
   }, [value]);
 
-  // Backend-first autocomplete
   useEffect(() => {
-    // Don't trigger autocomplete if query matches the selected address exactly
+
     if (selectedAddressRef.current && query === selectedAddressRef.current) {
       setResults([]);
       return;
@@ -68,7 +63,6 @@ export default function LocationInput({
       return;
     }
 
-    // Cancel previous request
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -79,19 +73,18 @@ export default function LocationInput({
       const normalizedQuery = normalizeQuery(query);
       const cacheKey = getCacheKey(normalizedQuery, userLocation);
       
-      // Check local cache first (including similar queries)
+
       if (localCache.has(cacheKey)) {
         const cachedResults = localCache.get(cacheKey);
         setResults(cachedResults);
         return;
       }
 
-      // Create new AbortController for this request
       abortControllerRef.current = new AbortController();
       const signal = abortControllerRef.current.signal;
 
       try {
-        // Single backend call with normalized query
+
         const params = {
           q: normalizedQuery,
         };
@@ -103,20 +96,18 @@ export default function LocationInput({
 
         const response = await api.get('/places/search', {
           params,
-          signal, // Attach abort signal
-          timeout: 10000, // 10 second timeout (backend handles sequential calls)
+          signal,
+          timeout: 10000,
         });
 
-        // Check if request was aborted
         if (signal.aborted) {
           return;
         }
 
         const suggestions = response.data || [];
 
-        // Update local cache with LRU eviction
         if (localCache.size >= MAX_CACHE_SIZE) {
-          // Remove oldest 20% of entries
+
           const entriesToDelete = Math.floor(MAX_CACHE_SIZE * 0.2);
           const keys = Array.from(localCache.keys());
           for (let i = 0; i < entriesToDelete; i++) {
@@ -127,7 +118,7 @@ export default function LocationInput({
 
         setResults(suggestions);
       } catch (error) {
-        // Ignore abort errors
+
         if (error.name === 'AbortError' || error.name === 'CanceledError' || error.code === 'ERR_CANCELED') {
           return;
         }
@@ -135,7 +126,7 @@ export default function LocationInput({
         console.warn('[LocationInput] Search failed:', error.message);
         setResults([]);
       }
-    }, 300); // Reduced to 300ms debounce for faster response
+    }, 300);
 
     return () => {
       clearTimeout(timeoutRef.current);
@@ -148,9 +139,8 @@ export default function LocationInput({
   const handleSelect = async (place) => {
     let location;
 
-    // Normalize backend response format
     if (place.source === 'google_autocomplete') {
-      // For Google Autocomplete, we need to fetch place details to get lat/lng
+
       if (place.lat && place.lng) {
         location = {
           address: place.formatted || place.address,
@@ -158,7 +148,7 @@ export default function LocationInput({
           lng: place.lng
         };
       } else if (place.place_id) {
-        // Fetch place details using Google Maps API
+
         const googleKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY_NEW;
         if (googleKey && window.google && window.google.maps && window.google.maps.places) {
           try {
@@ -210,7 +200,7 @@ export default function LocationInput({
         };
       }
     } else {
-      // Google or MapmyIndia - already have lat/lng
+
       location = {
         address: place.formatted || place.address || place.name,
         lat: place.lat,
@@ -218,7 +208,6 @@ export default function LocationInput({
       };
     }
 
-    // Clear any pending autocomplete requests
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
@@ -226,7 +215,6 @@ export default function LocationInput({
       abortControllerRef.current.abort();
     }
 
-    // Set the selected address to prevent autocomplete from re-triggering
     selectedAddressRef.current = location.address;
     setQuery(location.address);
     setResults([]);
@@ -255,7 +243,6 @@ export default function LocationInput({
       const lat = position.coords.latitude;
       const lng = position.coords.longitude;
 
-      // Use backend reverse geocode
       try {
         const response = await api.post('/address/reverse', {
           lat: lat.toString(),
@@ -289,7 +276,6 @@ export default function LocationInput({
         console.error('Error reverse geocoding:', error);
       }
 
-      // Fallback: use coordinates as address
       const location = {
         address: `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
         lat,
@@ -331,7 +317,7 @@ export default function LocationInput({
           placeholder={placeholder || 'Enter location'}
           onChange={(e) => {
             const newValue = e.target.value;
-            // Clear selected address ref if user manually changes the input
+
             if (selectedAddressRef.current && newValue !== selectedAddressRef.current) {
               selectedAddressRef.current = null;
             }
@@ -386,14 +372,14 @@ export default function LocationInput({
             lat: location.lat,
             lng: location.lng
           };
-          // Clear any pending autocomplete requests
+
           if (timeoutRef.current) {
             clearTimeout(timeoutRef.current);
           }
           if (abortControllerRef.current) {
             abortControllerRef.current.abort();
           }
-          // Set the selected address to prevent autocomplete from re-triggering
+
           selectedAddressRef.current = locationData.address;
           setQuery(locationData.address);
           setResults([]);

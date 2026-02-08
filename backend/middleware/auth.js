@@ -33,15 +33,14 @@ const requireAdmin = (req, res, next) => {
   next();
 };
 
-// Middleware to check manager permissions for a specific section
 const requireManagerPermission = (sectionKey, requireEdit = false) => {
   return async (req, res, next) => {
-    // Admins have full access
+
     if (req.user.role === 'admin') {
       return next();
     }
     
-    // Managers need permission check
+
     if (req.user.role === 'manager') {
       try {
         const db = require('../db/database');
@@ -74,4 +73,3 @@ const requireManagerPermission = (sectionKey, requireEdit = false) => {
 };
 
 module.exports = { authenticateToken, requireAdmin, requireRole, requireManagerPermission };
-

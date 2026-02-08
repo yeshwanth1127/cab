@@ -7,11 +7,9 @@ const { generateGoogleMapsLink } = require('../utils/mapsLink');
 
 const router = express.Router();
 
-// All admin routes require authentication
 router.use(authenticateToken);
 router.use(requireAdmin);
 
-// Ensure optional columns exist on bookings table (migration)
 async function ensureBookingsColumns() {
   const columns = [
     ['service_type', 'TEXT'],
@@ -30,12 +28,11 @@ async function ensureBookingsColumns() {
     try {
       await db.runAsync(`ALTER TABLE bookings ADD COLUMN ${col} ${type}`);
     } catch (e) {
-      // Column already exists, ignore
+
     }
   }
 }
 
-// Generate default invoice number: YYYYMMDD0001, YYYYMMDD0002, ... (sequence per day)
 async function generateDefaultInvoiceNumber(date) {
   const d = date ? new Date(date) : new Date();
   const y = d.getFullYear();
@@ -57,7 +54,6 @@ async function generateDefaultInvoiceNumber(date) {
   return `${prefix}${String(seq).padStart(4, '0')}`;
 }
 
-// GET /dashboard/stats - Dashboard statistics (Enquiries=pending, Assigned=has cab, Completed, Cancelled)
 router.get('/dashboard/stats', async (req, res) => {
   try {
     await ensureBookingsColumns();
@@ -91,7 +87,6 @@ router.get('/dashboard/stats', async (req, res) => {
   }
 });
 
-// GET /bookings - List all bookings with cab/driver info and cab type name
 router.get('/bookings', async (req, res) => {
   try {
     await ensureBookingsColumns();
@@ -110,7 +105,6 @@ router.get('/bookings', async (req, res) => {
   }
 });
 
-// POST /bookings - Create booking (admin)
 router.post('/bookings', [
   body('from_location').notEmpty().withMessage('from_location is required'),
   body('to_location').notEmpty().withMessage('to_location is required'),
@@ -174,7 +168,7 @@ router.post('/bookings', [
       await db.runAsync('UPDATE bookings SET maps_link_drop = ? WHERE id = ?', [dropLink || null, newBooking.id]);
       newBooking = await db.getAsync('SELECT * FROM bookings WHERE id = ?', [newBooking.id]);
     } catch (e) {
-      // columns might not exist on very old DBs
+
     }
     res.status(201).json(newBooking);
   } catch (error) {
@@ -183,7 +177,6 @@ router.post('/bookings', [
   }
 });
 
-// PUT /bookings/:id - Update booking (assign cab, status; generate maps_link)
 router.put('/bookings/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -223,7 +216,7 @@ router.put('/bookings/:id', async (req, res) => {
     }
 
     if (updates.length === 0) {
-      // Still return current booking; may want to regenerate maps_link
+
       const updated = await db.getAsync(
         `SELECT b.*, c.vehicle_number, c.driver_name as driver_name, c.driver_phone as driver_phone, ct.name as cab_type_name
          FROM bookings b LEFT JOIN cabs c ON b.cab_id = c.id LEFT JOIN cab_types ct ON b.cab_type_id = ct.id WHERE b.id = ?`,
@@ -248,7 +241,7 @@ router.put('/bookings/:id', async (req, res) => {
       await db.runAsync('UPDATE bookings SET maps_link_drop = ? WHERE id = ?', [dropLink || null, id]);
       updated.maps_link_drop = dropLink || null;
     } catch (e) {
-      // columns might not exist on very old DBs
+
     }
 
     const withCab = await db.getAsync(
@@ -263,11 +256,10 @@ router.put('/bookings/:id', async (req, res) => {
   }
 });
 
-// GET /cabs - List all cabs with driver and cab type info (for assign dropdown, rate-meter modal, Others tab)
 router.get('/cabs', async (req, res) => {
   try {
     const rows = await db.allAsync(
-      `SELECT c.id, c.vehicle_number, c.driver_id, c.driver_name, c.driver_phone, c.cab_type_id, ct.name as cab_type_name
+      `SELECT c.id, c.vehicle_number, c.name, c.driver_id, c.driver_name, c.driver_phone, c.cab_type_id, ct.name as cab_type_name
        FROM cabs c
        LEFT JOIN cab_types ct ON c.cab_type_id = ct.id
        WHERE c.is_active = 1
@@ -276,6 +268,7 @@ router.get('/cabs', async (req, res) => {
     const cabs = (rows || []).map((r) => ({
       id: r.id,
       vehicle_number: r.vehicle_number ?? r.VEHICLE_NUMBER ?? '',
+      name: r.name ?? r.NAME ?? null,
       driver_id: r.driver_id ?? r.DRIVER_ID ?? null,
       driver_name: r.driver_name ?? r.DRIVER_NAME ?? '',
       driver_phone: r.driver_phone ?? r.DRIVER_PHONE ?? '',
@@ -289,7 +282,6 @@ router.get('/cabs', async (req, res) => {
   }
 });
 
-// GET /drivers - List drivers (full row for Driver Status; rate-meter modal uses id, name, phone)
 router.get('/drivers', async (req, res) => {
   try {
     const drivers = await db.allAsync(
@@ -302,7 +294,6 @@ router.get('/drivers', async (req, res) => {
   }
 });
 
-// POST /drivers - Create driver
 router.post('/drivers', [
   body('name').notEmpty().trim().withMessage('name is required'),
   body('phone').notEmpty().trim().withMessage('phone is required'),
@@ -339,7 +330,6 @@ router.post('/drivers', [
   }
 });
 
-// PUT /drivers/:id - Update driver
 router.put('/drivers/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -389,7 +379,6 @@ router.put('/drivers/:id', async (req, res) => {
   }
 });
 
-// DELETE /drivers/:id - Soft-delete driver
 router.delete('/drivers/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -405,7 +394,6 @@ router.delete('/drivers/:id', async (req, res) => {
   }
 });
 
-// GET /bookings/:id/invoice - Download invoice PDF for an existing booking (with_gst=true|false)
 router.get('/bookings/:id/invoice', async (req, res) => {
   try {
     const { id } = req.params;
@@ -430,7 +418,6 @@ router.get('/bookings/:id/invoice', async (req, res) => {
   }
 });
 
-// POST /invoice/create - Create a booking and return invoice PDF (for Billing → Create Invoice)
 router.post('/invoice/create', [
   body('from_location').notEmpty().withMessage('from_location is required'),
   body('to_location').notEmpty().withMessage('to_location is required'),
@@ -494,7 +481,7 @@ router.post('/invoice/create', [
       if (pickup) await db.runAsync('UPDATE bookings SET maps_link = ? WHERE id = ?', [pickup, newBooking.id]);
       await db.runAsync('UPDATE bookings SET maps_link_drop = ? WHERE id = ?', [dropLink || null, newBooking.id]);
     } catch (e) {
-      // columns might not exist
+
     }
     const bookingForPdf = { ...newBooking, passenger_email: passenger_email || null, trip_type: outstationTripType || newBooking.trip_type };
     const withGST = with_gst !== false;
@@ -509,7 +496,6 @@ router.post('/invoice/create', [
   }
 });
 
-// Rate Meter (cab types, cabs, local/airport/outstation rates) – mount last so /drivers, /cabs etc. match first
 router.use(require('./rateMeter'));
 
 module.exports = router;

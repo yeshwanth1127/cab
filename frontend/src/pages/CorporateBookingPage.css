@@ -4,7 +4,7 @@
   overflow: visible;
 }
 
-/* Flowing banner animation */
+
 .flowing-banner {
   position: absolute;
   top: 170px;
@@ -47,7 +47,8 @@
 }
 
 .corporate-booking-container {
-  padding-top: 150px; /* move section further upward */
+  padding-top: 150px; 
+
   position: relative;
   z-index: 1;
   max-width: 1200px;
@@ -68,7 +69,8 @@
   font-weight: 700;
   text-align: center;
   margin-bottom: 16px;
-  color: #000000 !important; /* force pure black */
+  color: #000000 !important; 
+
   text-shadow: 2px 2px 8px rgba(255, 255, 255, 0.8);
   position: relative;
   z-index: 10;
@@ -81,7 +83,8 @@
 .corporate-booking-subtitle {
   text-align: center;
   font-size: 1.1rem;
-  color: #000000 !important; /* force pure black */
+  color: #000000 !important; 
+
   margin-bottom: 40px;
   line-height: 1.6;
   text-shadow: 1px 1px 4px rgba(255, 255, 255, 0.8);
@@ -157,7 +160,7 @@
   color: #111827;
 }
 
-/* Make date/time inputs fully clickable – room for icon, consistent box */
+
 .form-group input[type="date"],
 .form-group input[type="time"] {
   cursor: pointer;
@@ -281,7 +284,8 @@
 }
 
 @media (max-width: 768px) {
-  /* Prevent horizontal scroll globally */
+  
+
   * {
     max-width: 100%;
     box-sizing: border-box;
@@ -316,13 +320,15 @@
 
   .corporate-booking-container {
     padding: 20px 10px;
-    padding-top: 120px; /* move up further on mobile */
+    padding-top: 120px; 
+
     width: 100% !important;
     max-width: 100vw !important;
     box-sizing: border-box !important;
   }
 
-  /* Fix forms on mobile */
+  
+
   .form-group {
     width: 100% !important;
     max-width: 100% !important;
@@ -337,7 +343,8 @@
     box-sizing: border-box !important;
   }
 
-  /* Fix buttons on mobile */
+  
+
   .btn,
   .btn-primary,
   .btn-secondary {
@@ -368,7 +375,8 @@
   .form-group input[type="text"],
   .form-group input[type="tel"],
   .form-group textarea {
-    font-size: 16px; /* Prevent zoom on iOS */
+    font-size: 16px; 
+
     padding: 10px 14px;
   }
 
@@ -394,7 +402,8 @@
   }
 
   .btn {
-    /* Touch-friendly */
+    
+
     -webkit-tap-highlight-color: rgba(102, 126, 234, 0.3);
     touch-action: manipulation;
     padding: 10px 20px;
@@ -438,7 +447,7 @@
   }
 }
 
-/* Touch optimizations */
+
 @media (hover: none) and (pointer: coarse) {
   .btn-primary:hover:not(:disabled) {
     transform: none;

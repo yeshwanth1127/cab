@@ -17,9 +17,9 @@ const TABS = {
   tripEnd: 'tripEnd',
   cancelledBookings: 'cancelledBookings',
   driverStatus: 'driverStatus',
-  billing: 'billing', // UI label: "Invoice"
+  billing: 'billing',
   createInvoice: 'createInvoice',
-  // Corporate Bookings section
+
   corporateBookings: 'corporateBookings',
   corporateInvoices: 'corporateInvoices',
   createCorporateInvoice: 'createCorporateInvoice',
@@ -76,7 +76,6 @@ const AdminDashboard = () => {
   const [toLocation, setToLocation] = useState(null);
   const [createSubmitting, setCreateSubmitting] = useState(false);
 
-  // Rate Meter tab state
   const [rateMeterCabTypes, setRateMeterCabTypes] = useState({ local: [], airport: [], outstation: [] });
   const [rateMeterOpenSection, setRateMeterOpenSection] = useState('local');
   const [rateMeterExpandedId, setRateMeterExpandedId] = useState(null);
@@ -94,15 +93,13 @@ const AdminDashboard = () => {
   const [rateMeterAirportForm, setRateMeterAirportForm] = useState({});
   const [rateMeterOutstationForm, setRateMeterOutstationForm] = useState({});
 
-  // Others tab: combined cab types for Add cab dropdown
   const [othersCabTypes, setOthersCabTypes] = useState([]);
   const [othersCabTypesLoading, setOthersCabTypesLoading] = useState(false);
   const [othersAddCabModalOpen, setOthersAddCabModalOpen] = useState(false);
   const [othersEditingCabId, setOthersEditingCabId] = useState(null);
-  const [othersAddCabForm, setOthersAddCabForm] = useState({ cab_type_id: '', vehicle_number: '', driver_id: '' });
+  const [othersAddCabForm, setOthersAddCabForm] = useState({ cab_type_id: '', name: '', vehicle_number: '', driver_id: '' });
   const [othersAddCabSubmitting, setOthersAddCabSubmitting] = useState(false);
 
-  // Create Invoice tab
   const [invoiceForm, setInvoiceForm] = useState({
     from_location: '',
     to_location: '',
@@ -113,14 +110,13 @@ const AdminDashboard = () => {
     service_type: 'local',
     number_of_hours: '',
     outstation_trip_type: 'one_way',
-    extra_stops: [], // multiple_stops: [B, C, D...]; from_location = A
+    extra_stops: [],
     with_gst: true,
   });
   const [invoiceFromLocation, setInvoiceFromLocation] = useState(null);
   const [invoiceToLocation, setInvoiceToLocation] = useState(null);
   const [invoiceSubmitting, setInvoiceSubmitting] = useState(false);
 
-  // Corporate Bookings section
   const [corporateBookings, setCorporateBookings] = useState([]);
   const [corporateBookingsLoading, setCorporateBookingsLoading] = useState(false);
   const [corporateInvoiceForm, setCorporateInvoiceForm] = useState({
@@ -375,9 +371,8 @@ const AdminDashboard = () => {
       if (!driverModal) setDriverForm({ name: '', phone: '', license_number: '', emergency_contact_name: '', emergency_contact_phone: '' });
       fetchOthersCabTypes();
     }
-  }, [activeTab, fetchStats, fetchBookings, fetchDrivers, fetchOthersCabTypes, fetchCorporateBookings]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeTab, fetchStats, fetchBookings, fetchDrivers, fetchOthersCabTypes, fetchCorporateBookings]);
 
-  // Warn when admin enters dashboard if any booking has not had status changed in 24+ hours (non-completed/cancelled)
   useEffect(() => {
     if (activeTab !== TABS.dashboard || !bookings || bookings.length === 0) {
       if (activeTab !== TABS.dashboard) setStaleBookingsWarning(null);
@@ -397,7 +392,7 @@ const AdminDashboard = () => {
     if (assignBooking) {
       fetchDrivers();
     }
-  }, [assignBooking]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [assignBooking]);
 
   useEffect(() => {
     if (assignBooking && cabs.length > 0 && assignBooking.cab_id) {
@@ -406,7 +401,7 @@ const AdminDashboard = () => {
         setAssignDriverId(String(cab.driver_id));
       }
     }
-  }, [assignBooking, cabs]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [assignBooking, cabs]);
 
   useEffect(() => {
     if (detailBooking) {
@@ -892,7 +887,7 @@ const AdminDashboard = () => {
 
   const handleOthersAddCabSubmit = async (e) => {
     e.preventDefault();
-    const { cab_type_id, vehicle_number, driver_id } = othersAddCabForm;
+    const { cab_type_id, name, vehicle_number, driver_id } = othersAddCabForm;
     if (!cab_type_id || !vehicle_number?.trim()) {
       showToast('Cab type and vehicle number are required.', 'error');
       return;
@@ -908,6 +903,7 @@ const AdminDashboard = () => {
         await api.put(`/admin/rate-meter/cabs/${othersEditingCabId}`, {
           cab_type_id: Number(cab_type_id),
           vehicle_number: vehicle_number.trim(),
+          name: (name || '').trim() || null,
           driver_name: driver.name || '',
           driver_phone: driver.phone || '',
         });
@@ -916,6 +912,7 @@ const AdminDashboard = () => {
         await api.post('/admin/rate-meter/cabs', {
           cab_type_id: Number(cab_type_id),
           vehicle_number: vehicle_number.trim(),
+          name: (name || '').trim() || null,
           driver_name: driver.name || '',
           driver_phone: driver.phone || '',
         });
@@ -923,7 +920,7 @@ const AdminDashboard = () => {
       }
       setOthersAddCabModalOpen(false);
       setOthersEditingCabId(null);
-      setOthersAddCabForm({ cab_type_id: '', vehicle_number: '', driver_id: '' });
+      setOthersAddCabForm({ cab_type_id: '', name: '', vehicle_number: '', driver_id: '' });
       fetchDrivers();
     } catch (err) {
       showToast(err.response?.data?.error || 'Failed to save cab', 'error');
@@ -1002,6 +999,7 @@ const AdminDashboard = () => {
         cabsRaw.map((c) => ({
           id: c.id ?? c.ID,
           vehicle_number: c.vehicle_number ?? c.VEHICLE_NUMBER ?? '',
+          name: c.name ?? c.NAME ?? null,
           driver_name: c.driver_name ?? c.DRIVER_NAME ?? '',
         }))
       );
@@ -1063,18 +1061,22 @@ const AdminDashboard = () => {
     }
   };
 
-  /* Enquiries: all received bookings, any status, latest to oldest (API returns ORDER BY booking_date DESC) */
-  const enquiriesBookings = [...bookings];
-  const confirmedBookingsList = bookings.filter((b) => b.booking_status === 'confirmed');
-  const driverAssignedBookings = [...bookings.filter((b) => b.cab_id != null)].sort((a, b) => {
-    const ta = a.assigned_at || '';
-    const tb = b.assigned_at || '';
-    if (!ta) return 1;
-    if (!tb) return -1;
-    return tb.localeCompare(ta);
-  });
-  const tripEndBookings = bookings.filter((b) => b.booking_status === 'completed');
-  const cancelledBookingsList = bookings.filter((b) => b.booking_status === 'cancelled');
+  
+
+  const sortLatestFirst = (a, b) => (Number(b.id) || 0) - (Number(a.id) || 0);
+  const enquiriesBookings = [...bookings].sort(sortLatestFirst);
+  const confirmedBookingsList = bookings
+    .filter((b) => b.booking_status === 'confirmed')
+    .sort(sortLatestFirst);
+  const driverAssignedBookings = bookings
+    .filter((b) => b.cab_id != null)
+    .sort(sortLatestFirst);
+  const tripEndBookings = bookings
+    .filter((b) => b.booking_status === 'completed')
+    .sort(sortLatestFirst);
+  const cancelledBookingsList = bookings
+    .filter((b) => b.booking_status === 'cancelled')
+    .sort(sortLatestFirst);
 
   const pieData = stats ? [
     { label: 'Completed', value: stats.completed ?? 0, color: '#16a34a' },
@@ -1616,7 +1618,8 @@ const AdminDashboard = () => {
               {rateMeterLoading.cabTypes && <p className="admin-dashboard-list-loading">Loading cab types…</p>}
               {!rateMeterLoading.cabTypes && (
                 <>
-                  {/* Local */}
+                  {
+}
                   <div className={`admin-rate-meters-block ${rateMeterOpenSection === 'local' ? 'open' : ''}`}>
                     <button type="button" className="admin-rate-meters-block-btn" onClick={() => setRateMeterOpenSection(rateMeterOpenSection === 'local' ? null : 'local')}>
                       <span>Local (4h / 8h / 12h packages + extra hour)</span>
@@ -1689,7 +1692,8 @@ const AdminDashboard = () => {
                     )}
                   </div>
 
-                  {/* Airport */}
+                  {
+}
                   <div className={`admin-rate-meters-block ${rateMeterOpenSection === 'airport' ? 'open' : ''}`}>
                     <button type="button" className="admin-rate-meters-block-btn" onClick={() => setRateMeterOpenSection(rateMeterOpenSection === 'airport' ? null : 'airport')}>
                       <span>Airport (distance × per km + base + driver + night)</span>
@@ -1757,7 +1761,8 @@ const AdminDashboard = () => {
                     )}
                   </div>
 
-                  {/* Outstation */}
+                  {
+}
                   <div className={`admin-rate-meters-block ${rateMeterOpenSection === 'outstation' ? 'open' : ''}`}>
                     <button type="button" className="admin-rate-meters-block-btn" onClick={() => setRateMeterOpenSection(rateMeterOpenSection === 'outstation' ? null : 'outstation')}>
                       <span>Outstation (one way / round trip / multiple stops)</span>
@@ -1891,7 +1896,8 @@ const AdminDashboard = () => {
               <h2>Others – Drivers & Cabs</h2>
               <p className="admin-bookings-desc">This is the only source for drivers and cabs. Add them here; they appear in Rate Meter and booking assignment.</p>
 
-              {/* Section 1: Register drivers */}
+              {
+}
               <div className="admin-rate-meters-block open" style={{ marginTop: 24 }}>
                 <button type="button" className="admin-rate-meters-block-btn" style={{ pointerEvents: 'none' }}>
                   <span>Register drivers</span>
@@ -1937,7 +1943,8 @@ const AdminDashboard = () => {
                 </div>
               </div>
 
-              {/* Section 2: Add cabs */}
+              {
+}
               <div className="admin-rate-meters-block admin-others-col open">
                 <button type="button" className="admin-rate-meters-block-btn" style={{ pointerEvents: 'none' }}>
                   <span>Add cabs</span>
@@ -1945,7 +1952,7 @@ const AdminDashboard = () => {
                 </button>
                 <div className="admin-rate-meters-block-body">
                   <div className="admin-modal-actions" style={{ marginBottom: 16 }}>
-                    <button type="button" className="admin-btn admin-btn-primary" onClick={() => { setOthersEditingCabId(null); setOthersAddCabModalOpen(true); setOthersAddCabForm({ cab_type_id: '', vehicle_number: '', driver_id: '' }); }}>Add cab</button>
+                    <button type="button" className="admin-btn admin-btn-primary" onClick={() => { setOthersEditingCabId(null); setOthersAddCabModalOpen(true); setOthersAddCabForm({ cab_type_id: '', name: '', vehicle_number: '', driver_id: '' }); }}>Add cab</button>
                   </div>
                   {loading.drivers && <p className="admin-dashboard-list-loading">Loading cabs…</p>}
                   {!loading.drivers && (
@@ -1965,11 +1972,11 @@ const AdminDashboard = () => {
                           )}
                           {(cabs || []).map((c) => (
                             <tr key={c.id}>
-                              <td>{c.vehicle_number}</td>
+                              <td>{c.name?.trim() || c.vehicle_number}</td>
                               <td>{c.driver_name || '—'} {c.driver_phone ? `(${c.driver_phone})` : ''}</td>
                               <td>{c.cab_type_name || '—'}</td>
                               <td className="actions">
-                                <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => { setOthersEditingCabId(c.id); setOthersAddCabForm({ cab_type_id: String(c.cab_type_id || ''), vehicle_number: c.vehicle_number || '', driver_id: String((drivers || []).find((d) => d.phone === c.driver_phone || d.name === c.driver_name)?.id || '') }); setOthersAddCabModalOpen(true); }}>Edit</button>
+                                <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => { setOthersEditingCabId(c.id); setOthersAddCabForm({ cab_type_id: String(c.cab_type_id || ''), name: c.name || '', vehicle_number: c.vehicle_number || '', driver_id: String((drivers || []).find((d) => d.phone === c.driver_phone || d.name === c.driver_name)?.id || '') }); setOthersAddCabModalOpen(true); }}>Edit</button>
                                 <button type="button" className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => deleteOthersCab(c.id)}>Delete</button>
                               </td>
                             </tr>
@@ -2008,6 +2015,10 @@ const AdminDashboard = () => {
                       </option>
                     ))}
                   </select>
+                </div>
+                <div className="admin-form-group">
+                  <label>Car name</label>
+                  <input type="text" value={othersAddCabForm.name} onChange={(e) => setOthersAddCabForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Swift Dzire" />
                 </div>
                 <div className="admin-form-group">
                   <label>Vehicle number</label>
@@ -2089,7 +2100,8 @@ const AdminDashboard = () => {
               <p className="admin-bookings-desc">Generate an invoice directly. A booking record is created and the PDF is downloaded. Service type affects how the invoice is labelled (Local / Airport / Outstation).</p>
               <form onSubmit={handleCreateInvoiceSubmit} className="admin-dashboard-box" style={{ maxWidth: 640, marginTop: 16 }}>
                 <div className="admin-form-grid">
-                  {/* Location fields use Google Places API via LocationInput */}
+                  {
+}
                   {invoiceForm.service_type === 'outstation' && invoiceForm.outstation_trip_type === 'round_trip' ? (
                     <div className="admin-form-group full-width">
                       <label>Location (from & to) *</label>
@@ -2670,7 +2682,7 @@ const AdminDashboard = () => {
                     </option>
                     {rateMeterModalCabs.map((c) => (
                       <option key={String(c.id)} value={String(c.id)}>
-                        {(c.vehicle_number || '').trim() || '—'} {c.driver_name ? ` (${c.driver_name})` : ''}
+                        {(c.name || c.vehicle_number || '').trim() || '—'} {c.driver_name ? ` (${c.driver_name})` : ''}
                       </option>
                     ))}
                   </select>

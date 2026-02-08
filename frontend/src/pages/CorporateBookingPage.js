@@ -7,9 +7,8 @@ import AnimatedMapBackground from '../components/AnimatedMapBackground';
 import MainNavbar from '../components/MainNavbar';
 import './CorporateBookingPage.css';
 
-// Helper function to open calendar picker when clicking anywhere on date/time inputs
 const handleDateInputClick = (e) => {
-  // Ensure calendar opens when clicking anywhere on the input
+
   if (e.target.showPicker) {
     e.target.showPicker();
   } else {
@@ -29,14 +28,13 @@ const CorporateBookingPage = () => {
     time_period: 'AM',
     notes: '',
   });
-  const [pickupLocation, setPickupLocation] = useState(null); // {address, lat, lng}
+  const [pickupLocation, setPickupLocation] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
   const [loading, setLoading] = useState(false);
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [bookingId, setBookingId] = useState(null);
   const [errors, setErrors] = useState({});
 
-  // Request user location on mount
   React.useEffect(() => {
     const consent = localStorage.getItem('locationConsent');
     if (!consent || consent === 'granted') {
@@ -64,7 +62,7 @@ const CorporateBookingPage = () => {
       
       setUserLocation(location);
       
-      // Use Google Geocoding if available, otherwise use coordinates
+
       if (window.google && window.google.maps) {
         const geocoder = new window.google.maps.Geocoder();
         geocoder.geocode({ location: { lat, lng } }, (results, status) => {
@@ -113,7 +111,7 @@ const CorporateBookingPage = () => {
       ...prev,
       [name]: value
     }));
-    // Clear error for this field
+
     if (errors[name]) {
       setErrors(prev => ({
         ...prev,
@@ -179,7 +177,7 @@ const CorporateBookingPage = () => {
       setBookingSuccess(true);
       setBookingId(response.data.id);
       
-      // Reset form
+
       setFormData({
         name: '',
         phone_number: '',
@@ -358,5 +356,3 @@ const CorporateBookingPage = () => {
 };
 
 export default CorporateBookingPage;
-
-

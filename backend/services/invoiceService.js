@@ -1,6 +1,9 @@
+const path = require('path');
+const fs = require('fs');
 const PDFDocument = require('pdfkit');
 
-// Company details for invoice (customize via env or edit here)
+const LOGO_PATH = path.join(__dirname, '..', 'assets', 'logo_final.jpeg');
+
 const COMPANY = {
   name: process.env.INVOICE_COMPANY_NAME || 'Namma Cabs',
   nameFirst: process.env.INVOICE_COMPANY_NAME_FIRST || 'Namma',
@@ -18,7 +21,6 @@ const BLUE_HEADER = '#2563eb';
 const YELLOW_TEXT = '#ca8a04';
 const GREEN_TEXT = '#16a34a';
 
-/** Convert number to words (Indian style, for amount in words) */
 function numberToWords(n) {
   const num = Math.floor(Number(n) || 0);
   if (num === 0) return 'Zero Only';
@@ -36,12 +38,6 @@ function numberToWords(n) {
   return (toWordsLessThanThousand(Math.floor(num / 10000000)) + ' Crore ' + numberToWords(num % 10000000).replace(' Only', '')).trim() + ' Only';
 }
 
-/**
- * Generate invoice PDF for a booking in the formal format (GORO-style).
- * @param {Object} booking - Booking record (id, passenger_name, passenger_email?, from_location, to_location, fare_amount, service_type, number_of_hours?, trip_type?, booking_date?, cab_type_name?, distance_km?)
- * @param {boolean} withGST - Include GST (show GSTIN, HSN/SAC)
- * @returns {Promise<Buffer>} PDF buffer
- */
 function generateInvoicePDF(booking, withGST = true) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', margin: 40 });
@@ -54,18 +50,22 @@ function generateInvoicePDF(booking, withGST = true) {
     const margin = 50;
     const rightColX = pageWidth - margin - 180;
 
-    // ----- Header: Company left (logo spacing: Namma and Cabs with clear gap) -----
     const logoY = 50;
-    doc.fontSize(22).fillColor(YELLOW_TEXT).text(COMPANY.nameFirst, margin, logoY);
-    const nammaWidth = doc.widthOfString(COMPANY.nameFirst);
-    const logoGap = 6;
-    doc.fillColor(GREEN_TEXT).text(COMPANY.nameSecond.trim(), margin + nammaWidth + logoGap, logoY);
-    const cabsWidth = doc.widthOfString(COMPANY.nameSecond.trim());
-    const totalLogoWidth = nammaWidth + logoGap + cabsWidth;
-    doc.strokeColor('#16a34a').lineWidth(1).moveTo(margin, 78).lineTo(margin + Math.min(totalLogoWidth, 140), 78).stroke();
-    doc.fontSize(9).fillColor('#374151').text(COMPANY.tagline, margin, 86);
+    if (fs.existsSync(LOGO_PATH)) {
+      doc.image(LOGO_PATH, margin, logoY, { width: 100 });
+      doc.strokeColor('#16a34a').lineWidth(1).moveTo(margin, 92).lineTo(margin + 140, 92).stroke();
+      doc.fontSize(9).fillColor('#374151').text(COMPANY.tagline, margin, 98);
+    } else {
+      doc.fontSize(22).fillColor(YELLOW_TEXT).text(COMPANY.nameFirst, margin, logoY);
+      const nammaWidth = doc.widthOfString(COMPANY.nameFirst);
+      const logoGap = 6;
+      doc.fillColor(GREEN_TEXT).text(COMPANY.nameSecond.trim(), margin + nammaWidth + logoGap, logoY);
+      const cabsWidth = doc.widthOfString(COMPANY.nameSecond.trim());
+      const totalLogoWidth = nammaWidth + logoGap + cabsWidth;
+      doc.strokeColor('#16a34a').lineWidth(1).moveTo(margin, 78).lineTo(margin + Math.min(totalLogoWidth, 140), 78).stroke();
+      doc.fontSize(9).fillColor('#374151').text(COMPANY.tagline, margin, 86);
+    }
 
-    // ----- Header: Company right (address, support, email) - spaced for readability -----
     doc.fontSize(9).fillColor('black');
     const addrLines = COMPANY.address.split(',').map((s) => s.trim()).filter(Boolean);
     let addrY = 50;
@@ -77,13 +77,11 @@ function generateInvoicePDF(booking, withGST = true) {
     doc.text(`Phone: ${COMPANY.supportPhone}`, rightColX, addrY);
     doc.text(`Email ID: ${COMPANY.email}`, rightColX, addrY + 14);
 
-    // ----- Blue INVOICE band -----
     const bandY = 102;
     doc.rect(0, bandY, pageWidth, 28).fill(BLUE_HEADER);
     doc.fillColor('white').fontSize(18).font('Helvetica-Bold').text('INVOICE', 0, bandY + 6, { width: pageWidth, align: 'center' });
     doc.fillColor('black').font('Helvetica');
 
-    // ----- Invoice details: Customer (left) - full email and details below -----
     let y = 145;
     doc.fontSize(11).font('Helvetica-Bold').text(`M/s ${(booking.passenger_name || '—').toUpperCase()}`, margin, y);
     doc.font('Helvetica').fontSize(9);
@@ -92,18 +90,17 @@ function generateInvoicePDF(booking, withGST = true) {
     const addrStr = `Address: ${custAddr}`;
     doc.text(addrStr, margin, y, { width: 260, lineGap: 2 });
     y += doc.heightOfString(addrStr, { width: 260 }) + 8;
-    // Email: show full email (wrap if long), no truncation
+
     const emailVal = booking.passenger_email && String(booking.passenger_email).trim() ? String(booking.passenger_email).trim() : '—';
     const emailStr = `Email: ${emailVal}`;
     doc.text(emailStr, margin, y, { width: 260, lineGap: 2 });
     y += doc.heightOfString(emailStr, { width: 260 }) + 10;
-    // Details under email: State and Phone (full phone number)
+
     doc.text(`State: ${COMPANY.customerState}`, margin, y);
     y += 12;
     doc.text(`Phone: ${booking.passenger_phone || '—'}`, margin, y);
     const customerBlockBottom = y + 14;
 
-    // ----- Invoice details: Invoice no, date, GSTIN (right) -----
     y = 145;
     doc.fontSize(9);
     doc.text(`Invoice No: ${booking.invoice_number || booking.id}`, rightColX, y);
@@ -118,7 +115,6 @@ function generateInvoicePDF(booking, withGST = true) {
     }
     doc.text(`HSN/SAC - ${COMPANY.hsnSac}`, rightColX, y);
 
-    // ----- Table (start below customer block so long email/address don't get cut) -----
     const tableTop = Math.max(225, customerBlockBottom + 12);
     const tableWidth = pageWidth - 2 * margin;
     const colW = { sl: 30, desc: 209, kms: 56, days: 58, rate: 58, amount: 84 };
@@ -214,7 +210,6 @@ function generateInvoicePDF(booking, withGST = true) {
     doc.fontSize(9).fillColor('#374151');
     doc.text(`Amount in Words (Rs): ${numberToWords(amount)}`, margin, rowY);
 
-    // ----- Terms & Conditions (spacing after heading so content is not cramped) -----
     let termsY = rowY + 36;
     doc.fontSize(10).font('Helvetica-Bold').fillColor('black').text('Terms & Conditions', margin, termsY);
     termsY += 16;
@@ -233,7 +228,6 @@ function generateInvoicePDF(booking, withGST = true) {
       termsY += doc.heightOfString(`• ${t}`, { width: termsWidth }) + 2;
     });
 
-    // ----- Footer -----
     const footerY = 820;
     doc.fontSize(8).fillColor('#6b7280').text('This is computer generated Invoice hence no signature and seal is required.', margin, footerY, { width: pageWidth - 2 * margin, align: 'center' });
 
@@ -241,9 +235,6 @@ function generateInvoicePDF(booking, withGST = true) {
   });
 }
 
-/**
- * Generate invoice PDF for a corporate booking (same format as main invoice).
- */
 function generateCorporateInvoicePDF(booking, withGST = true) {
   let bookingDate = null;
   if (booking.travel_date) {

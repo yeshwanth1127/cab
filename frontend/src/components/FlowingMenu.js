@@ -90,8 +90,3 @@ function MenuItem({ link, text, image }) {
 }
 
 export default FlowingMenu;
-
-
-
-
-

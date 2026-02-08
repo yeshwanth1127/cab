@@ -19,10 +19,8 @@ function getInt(row, key, defaultVal = null) {
   return Number.isNaN(n) ? defaultVal : n;
 }
 
-// For local service, only these cab type names are shown in admin Rate Meter (and on the homepage).
 const LOCAL_RATE_METER_CAB_NAMES = ['Innova Crysta', 'SUV', 'Sedan'];
 
-// ----- Cab types ----- (paths under /rate-meter; admin mounts this router at root)
 router.get(
   '/rate-meter/cab-types',
   query('service_type').isIn(['local', 'airport', 'outstation']).withMessage('service_type must be local, airport, or outstation'),
@@ -140,7 +138,6 @@ router.delete(
   }
 );
 
-// ----- Cabs ----- (path under /rate-meter so frontend GET /admin/rate-meter/cabs works)
 router.get(
   '/rate-meter/cabs',
   query('cab_type_id').isInt({ min: 1 }).withMessage('cab_type_id is required'),
@@ -162,7 +159,6 @@ router.get(
   }
 );
 
-// Assign an existing cab to a cab type (rate meter: select car from dropdown only)
 router.post(
   '/rate-meter/cabs/assign',
   [
@@ -285,7 +281,6 @@ router.delete(
   }
 );
 
-// ----- Local rates -----
 router.get('/rate-meter/local/:cabTypeId', param('cabTypeId').isInt({ min: 1 }), async (req, res) => {
   try {
     const { cabTypeId } = req.params;
@@ -358,7 +353,6 @@ router.put(
   }
 );
 
-// ----- Airport rates -----
 router.get('/rate-meter/airport/:cabTypeId', param('cabTypeId').isInt({ min: 1 }), async (req, res) => {
   try {
     const { cabTypeId } = req.params;
@@ -429,7 +423,6 @@ router.put(
   }
 );
 
-// ----- Outstation rates -----
 router.get('/rate-meter/outstation/:cabTypeId', param('cabTypeId').isInt({ min: 1 }), async (req, res) => {
   try {
     const { cabTypeId } = req.params;

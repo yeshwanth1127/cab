@@ -22,7 +22,8 @@
 
 .location-input {
   width: 100%;
-  padding: 14px 60px 14px 16px; /* Right padding for location button */
+  padding: 14px 60px 14px 16px; 
+
   border: 2px solid #e0e0e0;
   border-radius: 12px;
   font-size: 16px;
@@ -199,7 +200,7 @@
   text-transform: capitalize;
 }
 
-/* Scrollbar styling for suggestions */
+
 .suggestions-dropdown::-webkit-scrollbar {
   width: 6px;
 }
@@ -218,7 +219,7 @@
   background: linear-gradient(135deg, #16a34a 0%, #d97706 100%);
 }
 
-/* Mobile Responsive Styles */
+
 @media (max-width: 768px) {
   .location-input-container {
     margin-bottom: 20px;
@@ -240,7 +241,8 @@
 
   .location-input {
     padding: 12px 55px 12px 14px;
-    font-size: 16px; /* Prevent zoom on iOS */
+    font-size: 16px; 
+
     border-radius: 10px;
   }
 
@@ -254,7 +256,8 @@
     padding: 7px 8px;
     font-size: 18px;
     border-radius: 6px;
-    /* Touch-friendly */
+    
+
     -webkit-tap-highlight-color: rgba(22, 163, 74, 0.3);
     touch-action: manipulation;
   }
@@ -267,13 +270,15 @@
   .location-dropdown {
     max-height: 250px;
     border-radius: 0 0 10px 10px;
-    /* Better touch scrolling */
+    
+
     -webkit-overflow-scrolling: touch;
   }
 
   .suggestion-item {
     padding: 16px 16px;
-    /* Larger touch target */
+    
+
     min-height: 48px;
     display: flex;
     flex-direction: column;
@@ -323,7 +328,7 @@
   }
 }
 
-/* Touch optimizations */
+
 @media (hover: none) and (pointer: coarse) {
   .location-button:hover {
     transform: none;

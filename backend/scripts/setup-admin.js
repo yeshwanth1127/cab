@@ -10,21 +10,21 @@ async function setupAdmin() {
   try {
     const passwordHash = await bcrypt.hash(password, 10);
     
-    // Check if user exists
+
     const existingUser = await db.getAsync(
       'SELECT id FROM users WHERE username = ?',
       [username]
     );
 
     if (existingUser) {
-      // Update existing user
+
       await db.runAsync(
         `UPDATE users SET password_hash = ?, email = ?, role = 'admin' WHERE username = ?`,
         [passwordHash, email, username]
       );
       console.log(`✅ Admin user "${username}" has been updated successfully!`);
     } else {
-      // Create new user
+
       await db.runAsync(
         `INSERT INTO users (username, email, password_hash, role) 
          VALUES (?, ?, ?, 'admin')`,
@@ -36,7 +36,7 @@ async function setupAdmin() {
     console.log(`   Email: ${email}`);
     console.log(`   Password: ${password}`);
     
-    // Close database connection
+
     db.close((err) => {
       if (err) {
         console.error('Error closing database:', err);

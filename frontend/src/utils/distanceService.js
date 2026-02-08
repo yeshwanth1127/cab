@@ -1,10 +1,4 @@
-/**
- * Get route distance and duration using Google Maps Distance Matrix API (browser).
- * Requires Google Maps JS to be loaded (e.g. via loadGoogleMaps).
- * @param {{ lat: number, lng: number }} origin - { lat, lng }
- * @param {{ lat: number, lng: number }} destination - { lat, lng }
- * @returns Promise<{ distance_km: number, duration_minutes: number }>
- */
+
 export function getRouteDistance(origin, destination) {
   if (!window.google?.maps?.DistanceMatrixService) {
     return Promise.reject(new Error('Google Maps DistanceMatrixService not loaded'));
@@ -39,12 +33,6 @@ export function getRouteDistance(origin, destination) {
   });
 }
 
-/**
- * Get total distance and duration for multiple legs (waypoints) using Distance Matrix.
- * waypoints = [{ lat, lng }, { lat, lng }, ...]. Returns sum of leg distances and durations.
- * @param {{ lat: number, lng: number }[]} waypoints - At least 2 points (start, ...stops, end).
- * @returns Promise<{ distance_km: number, duration_minutes: number }>
- */
 export function getMultiLegDistance(waypoints) {
   if (!waypoints || waypoints.length < 2) {
     return Promise.reject(new Error('At least 2 waypoints required'));

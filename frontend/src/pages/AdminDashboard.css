@@ -1,4 +1,4 @@
-/* Admin Dashboard - white & green theme throughout */
+
 
 .admin-dashboard-wrap {
   min-height: 100vh;
@@ -39,7 +39,7 @@
   text-decoration: underline;
 }
 
-/* Menu toggle (hamburger) – visible only on small screens via media query */
+
 .admin-dashboard-menu-toggle {
   display: none;
   align-items: center;
@@ -93,7 +93,7 @@
   overflow: hidden;
 }
 
-/* Sidebar: dark theme, sections, heading + sub-heading */
+
 .admin-dashboard-sidebar {
   width: 260px;
   min-width: 260px;
@@ -192,7 +192,7 @@
   background: #f0fdf4;
 }
 
-/* Stale bookings banner */
+
 .stale-bookings-banner {
   background: #fef3c7;
   color: #92400e;
@@ -221,7 +221,7 @@
   background: #15803d;
 }
 
-/* Notification toast */
+
 .admin-notification-toast {
   position: fixed;
   top: 20px;
@@ -261,7 +261,7 @@
   }
 }
 
-/* Stats cards */
+
 .admin-stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -305,7 +305,7 @@
   color: #16a34a;
 }
 
-/* Minimal animations */
+
 @keyframes adminFadeIn {
   from {
     opacity: 0;
@@ -317,7 +317,7 @@
   }
 }
 
-/* Clean boxes – dashboard */
+
 .admin-dashboard-tab {
   display: flex;
   flex-direction: column;
@@ -402,7 +402,7 @@
   flex-shrink: 0;
 }
 
-/* Dashboard Statistics title and green line */
+
 .admin-dashboard-statistics-title {
   margin: 0 0 8px;
   font-size: 1.5rem;
@@ -417,7 +417,7 @@
   max-width: 200px;
 }
 
-/* Dashboard pie chart */
+
 .admin-dashboard-pie-section {
   max-width: 520px;
   margin-bottom: 24px;
@@ -435,7 +435,7 @@
   cursor: pointer;
 }
 
-/* Dashboard bookings list */
+
 .admin-dashboard-list-section h2 {
   margin-bottom: 4px;
 }
@@ -465,7 +465,7 @@
   background: #f0fdf4;
 }
 
-/* Tabs content */
+
 .admin-tab-section {
   background: #fff;
   border: 1px solid rgba(187, 247, 208, 0.6);
@@ -489,7 +489,7 @@
   font-weight: 600;
 }
 
-/* Create Booking sub-tabs */
+
 .admin-create-booking-subtabs {
   display: flex;
   gap: 8px;
@@ -520,7 +520,7 @@
   color: #fff;
 }
 
-/* Enquiries */
+
 .admin-enquiries h2 {
   margin-bottom: 8px;
 }
@@ -638,7 +638,7 @@
   grid-column: 1 / -1;
 }
 
-/* Buttons */
+
 .admin-btn {
   padding: 8px 16px;
   border-radius: 8px;
@@ -684,7 +684,7 @@
   font-size: 0.8rem;
 }
 
-/* Tables / lists – default white & green (all tabs) */
+
 .admin-table-wrap {
   overflow-x: auto;
   border: 1px solid #16a34a;
@@ -749,7 +749,7 @@
   box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.2);
 }
 
-/* Bookings sections – white & green UI */
+
 .admin-bookings-section h2 {
   color: #16a34a;
   font-weight: 600;
@@ -761,7 +761,7 @@
   font-size: 0.9rem;
 }
 
-/* Entry cards: clean box per booking/entry */
+
 .admin-entry-cards {
   display: flex;
   flex-direction: column;
@@ -857,7 +857,7 @@
   width: 100%;
 }
 
-/* Ensure booking tables can scroll horizontally and show all columns */
+
 .admin-bookings-table-wrap .admin-bookings-table,
 .admin-bookings-table-wrap .admin-table,
 .admin-dashboard-bookings-table-wrap .admin-bookings-table,
@@ -874,7 +874,7 @@
   vertical-align: top;
 }
 
-/* From (col 2) and To (col 3): wrap long addresses so all columns stay visible */
+
 .admin-bookings-table td:nth-child(2),
 .admin-bookings-table td:nth-child(3) {
   word-break: break-word;
@@ -955,7 +955,7 @@
   border-color: #bbf7d0;
 }
 
-/* Booking detail modal – white & green */
+
 .admin-booking-detail-overlay .admin-booking-detail-modal {
   background: #fff;
   border: 2px solid #16a34a;
@@ -1003,7 +1003,7 @@
   font-weight: 500;
 }
 
-/* Modal – white & green */
+
 .admin-modal-overlay {
   position: fixed;
   inset: 0;
@@ -1044,7 +1044,7 @@
   color: #fff;
 }
 
-/* Stale bookings warning – inline banner on dashboard tab */
+
 .admin-stale-warning-banner {
   background: #fef2f2;
   border: 2px solid #b91c1c;
@@ -1161,7 +1161,7 @@
   color: #111827;
 }
 
-/* Invoices / Corporate */
+
 .admin-invoice-list {
   list-style: none;
   padding: 0;
@@ -1181,12 +1181,12 @@
   border-bottom: none;
 }
 
-/* Trip End / Driver Info */
+
 .driver-info-modal .admin-detail-row .value {
   font-weight: 500;
 }
 
-/* Create booking - location row */
+
 .admin-create-booking-locations {
   display: flex;
   flex-direction: column;
@@ -1198,7 +1198,7 @@
   margin-bottom: 0;
 }
 
-/* Create booking – multiple stops (outstation) */
+
 .admin-stops-row {
   display: flex;
   gap: 10px;
@@ -1223,7 +1223,7 @@
   margin-top: 4px;
 }
 
-/* Others tab: two sections side by side, horizontal scroll if needed */
+
 .admin-others-two-col {
   display: flex;
   flex-direction: row;
@@ -1256,7 +1256,7 @@
   margin-bottom: 0;
 }
 
-/* Rate meters section – white & green */
+
 .admin-rate-meters-block {
   margin-bottom: 32px;
   border: 1px solid #16a34a;
@@ -1318,7 +1318,7 @@
   margin-top: 12px;
 }
 
-/* Inner form blocks (hour packages, airport/outstation rates) – white & green */
+
 .admin-form-block {
   margin-bottom: 12px;
   padding: 12px 14px;
@@ -1335,7 +1335,7 @@
   font-size: 0.85rem;
 }
 
-/* ========== Responsive: Tablet (≤1024px) ========== */
+
 @media (max-width: 1024px) {
   .admin-dashboard-sidebar {
     width: 220px;
@@ -1366,7 +1366,7 @@
   }
 }
 
-/* ========== Responsive: Mobile (≤768px) ========== */
+
 @media (max-width: 768px) {
   .admin-dashboard-menu-toggle {
     display: flex;
@@ -1572,7 +1572,7 @@
   }
 }
 
-/* ========== Responsive: Small mobile (≤480px) ========== */
+
 @media (max-width: 480px) {
   .admin-dashboard-header {
     padding: 10px 12px;
@@ -1624,7 +1624,8 @@
   .admin-form-group select,
   .admin-form-group textarea {
     padding: 12px;
-    font-size: 16px; /* reduces zoom on iOS */
+    font-size: 16px; 
+
   }
 
   .admin-table th,
@@ -1642,7 +1643,7 @@
   }
 }
 
-/* Touch-friendly: ensure tap targets on small screens */
+
 @media (hover: none) and (pointer: coarse) {
   .admin-dashboard-nav-btn {
     min-height: 44px;

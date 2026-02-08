@@ -1,4 +1,4 @@
-/* Contact Page Styles */
+
 .contact-page {
   position: relative;
   min-height: 100vh;
@@ -21,7 +21,7 @@
   padding: 100px 20px 80px;
 }
 
-/* Hero Section */
+
 .contact-hero {
   text-align: center;
   margin-bottom: 80px;
@@ -82,7 +82,7 @@
   font-weight: 700;
 }
 
-/* Contact Cards Grid */
+
 .contact-cards-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -132,7 +132,7 @@
   border-color: rgba(22, 163, 74, 0.4);
 }
 
-/* Card Icon */
+
 .card-icon-wrapper {
   position: relative;
   display: inline-block;
@@ -180,7 +180,7 @@
   }
 }
 
-/* Card Content */
+
 .card-title {
   font-size: 24px;
   font-weight: 700;
@@ -235,7 +235,7 @@
   margin-bottom: 0;
 }
 
-/* Action Button */
+
 .card-action-btn {
   display: inline-flex;
   align-items: center;
@@ -286,7 +286,7 @@
   transform: translateX(4px);
 }
 
-/* Card Decoration */
+
 .card-decoration {
   position: absolute;
   top: 0;
@@ -298,7 +298,7 @@
   pointer-events: none;
 }
 
-/* CTA Section */
+
 .contact-cta {
   text-align: center;
   padding: 40px 20px;
@@ -319,7 +319,7 @@
   font-weight: 700;
 }
 
-/* Responsive Design */
+
 @media (max-width: 1024px) {
   .contact-cards-grid {
     grid-template-columns: repeat(3, 1fr);
@@ -327,7 +327,8 @@
 }
 
 @media (max-width: 768px) {
-  /* Prevent horizontal scroll globally */
+  
+
   * {
     max-width: 100%;
     box-sizing: border-box;
@@ -424,7 +425,7 @@
   }
 }
 
-/* Touch Optimizations */
+
 @media (hover: none) and (pointer: coarse) {
   .contact-card:hover {
     transform: translateY(0) scale(1);

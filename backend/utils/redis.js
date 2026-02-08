@@ -1,13 +1,8 @@
-/**
- * Redis client setup
- * Falls back to in-memory cache if Redis is not available
- */
 
 let redisClient = null;
 let inMemoryCache = new Map();
-const IN_MEMORY_TTL = 10 * 60 * 1000; // 10 minutes
+const IN_MEMORY_TTL = 10 * 60 * 1000;
 
-// Try to initialize Redis
 try {
   const redis = require('redis');
   
@@ -37,7 +32,6 @@ try {
     console.log('[Redis] Connected successfully');
   });
 
-  // Connect (non-blocking)
   redisClient.connect().catch(() => {
     console.warn('[Redis] Connection failed, using in-memory cache');
     redisClient = null;
@@ -48,9 +42,6 @@ try {
   redisClient = null;
 }
 
-/**
- * Get value from cache (Redis or in-memory)
- */
 async function get(key) {
   if (redisClient) {
     try {
@@ -64,9 +55,6 @@ async function get(key) {
   return getFromMemory(key);
 }
 
-/**
- * Set value in cache (Redis or in-memory)
- */
 async function set(key, value, ttlSeconds = 600) {
   const serialized = JSON.stringify(value);
   
@@ -83,9 +71,6 @@ async function set(key, value, ttlSeconds = 600) {
   setInMemory(key, value, ttlSeconds);
 }
 
-/**
- * Delete value from cache
- */
 async function del(key) {
   if (redisClient) {
     try {
@@ -98,7 +83,6 @@ async function del(key) {
   inMemoryCache.delete(key);
 }
 
-// In-memory cache helpers
 function getFromMemory(key) {
   const entry = inMemoryCache.get(key);
   if (!entry) return null;
@@ -115,7 +99,7 @@ function setInMemory(key, value, ttlSeconds) {
   const expires = Date.now() + (ttlSeconds * 1000);
   inMemoryCache.set(key, { value, expires });
   
-  // Cleanup expired entries periodically
+
   if (inMemoryCache.size > 1000) {
     const now = Date.now();
     for (const [k, v] of inMemoryCache.entries()) {

@@ -1,30 +1,26 @@
 const nodemailer = require('nodemailer');
 
-// Create transporter based on environment variables
 const createTransporter = () => {
-  // Clean email password (remove spaces, trim whitespace)
-  // Gmail app passwords are 16 characters without spaces, even though Google displays them with spaces
+
   const emailPassword = process.env.EMAIL_PASSWORD ? 
     process.env.EMAIL_PASSWORD.trim().replace(/\s+/g, '') : null;
   
   const emailUser = process.env.EMAIL_USER ? process.env.EMAIL_USER.trim() : null;
 
-  // For Gmail
   if (process.env.EMAIL_SERVICE === 'gmail') {
     return nodemailer.createTransport({
       service: 'gmail',
       auth: {
         user: emailUser,
-        pass: emailPassword, // Use App Password for Gmail
+        pass: emailPassword,
       },
     });
   }
 
-  // For SMTP (generic)
   return nodemailer.createTransport({
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
     port: parseInt(process.env.SMTP_PORT || '587'),
-    secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
+    secure: process.env.SMTP_SECURE === 'true',
     auth: {
       user: emailUser,
       pass: emailPassword,
@@ -33,13 +29,12 @@ const createTransporter = () => {
 };
 
 const sendBookingConfirmationEmail = async (booking) => {
-  // Don't send email if email service is not configured
+
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
     console.log('Email service not configured. Skipping email send.');
     return { success: false, message: 'Email service not configured' };
   }
 
-  // Validate booking email
   if (!booking.passenger_email) {
     console.log('Booking has no passenger email. Skipping email send.');
     return { success: false, message: 'No passenger email provided' };
@@ -255,7 +250,7 @@ const sendBookingConfirmationEmail = async (booking) => {
     console.error(`Error sending email to ${booking.passenger_email}:`, error.message);
     console.error('Full error:', error);
     
-    // Provide more helpful error messages
+
     let errorMessage = error.message;
     if (error.message && error.message.includes('Invalid login')) {
       errorMessage = 'Gmail authentication failed. Please check your EMAIL_USER and EMAIL_PASSWORD in .env file. Make sure you\'re using an App Password, not your regular Gmail password.';
@@ -268,7 +263,7 @@ const sendBookingConfirmationEmail = async (booking) => {
 };
 
 const sendInvoiceEmail = async (booking, pdfBuffer, withGST = true) => {
-  // Don't send email if email service is not configured
+
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
     console.log('Email service not configured. Skipping email send.');
     return { success: false, message: 'Email service not configured' };
@@ -361,7 +356,7 @@ const sendInvoiceEmail = async (booking, pdfBuffer, withGST = true) => {
 };
 
 const sendDriverAssignmentEmail = async (driver, booking) => {
-  // Don't send email if email service is not configured or driver has no email
+
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
     console.log('Email service not configured. Skipping email send.');
     return { success: false, message: 'Email service not configured' };
@@ -375,7 +370,6 @@ const sendDriverAssignmentEmail = async (driver, booking) => {
   try {
     const transporter = createTransporter();
 
-    // Format date/time for email
     let dateTimeStr = 'N/A';
     if (booking.travel_date) {
       try {
@@ -525,4 +519,3 @@ module.exports = {
   sendInvoiceEmail,
   sendDriverAssignmentEmail,
 };
-

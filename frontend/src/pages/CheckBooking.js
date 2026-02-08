@@ -11,13 +11,12 @@ const CheckBooking = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Check if booking ID is in URL params
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const id = urlParams.get('id');
     if (id) {
       setBookingId(id);
-      // Auto-check if ID is in URL
+
       checkBookingById(id);
     }
   }, []);
@@ -246,4 +245,3 @@ const CheckBooking = () => {
 };
 
 export default CheckBooking;
-

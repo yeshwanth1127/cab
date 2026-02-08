@@ -3,7 +3,8 @@
   inset: 0;
   overflow: hidden;
   z-index: 0;
-  pointer-events: none; /* background only, no clicks */
+  pointer-events: none; 
+
 }
 
 .animated-map-background .map-canvas {
@@ -12,27 +13,31 @@
   position: absolute;
   top: -30%;
   left: -30%;
-  /* Light/white map background */
+  
+
   filter: brightness(1.1) contrast(0.9);
   opacity: 1;
   transition: transform 0.2s ease-out;
-  /* Optimize for mobile performance */
+  
+
   will-change: transform;
   transform: translateZ(0);
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
 }
 
-/* Mobile optimizations */
+
 @media (max-width: 768px) {
   .animated-map-background .map-canvas {
-    /* Reduce size on mobile for better performance */
+    
+
     width: 140%;
     height: 140%;
     top: -20%;
     left: -20%;
     opacity: 1;
-    /* Reduce filter complexity on mobile */
+    
+
     filter: brightness(1.05) contrast(0.95);
   }
 }
@@ -47,7 +52,7 @@
   }
 }
 
-/* Reduce animations on low-end devices */
+
 @media (prefers-reduced-motion: reduce) {
   .animated-map-background .map-canvas {
     transition: none;

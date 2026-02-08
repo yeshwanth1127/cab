@@ -7,7 +7,7 @@ import './UserAuth.css';
 const UserAuth = () => {
   const { login, register } = useAuth();
   const navigate = useNavigate();
-  const [mode, setMode] = useState('login'); // 'login' or 'register'
+  const [mode, setMode] = useState('login');
   const [form, setForm] = useState({
     username: '',
     email: '',
@@ -133,5 +133,3 @@ const UserAuth = () => {
 };
 
 export default UserAuth;
-
-

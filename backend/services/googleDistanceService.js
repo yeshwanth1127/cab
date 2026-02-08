@@ -1,11 +1,5 @@
 const axios = require('axios');
 
-/**
- * Get distance and duration between two coordinates using Google Distance Matrix API
- * @param {Object} from - {lat: number, lng: number}
- * @param {Object} to - {lat: number, lng: number}
- * @returns {Promise<{distance_km: number, duration_min: number}>}
- */
 async function getDistanceAndTime(from, to) {
   console.log('[GOOGLE API] getDistanceAndTime called with:', { from, to });
   
@@ -35,7 +29,7 @@ async function getDistanceAndTime(from, to) {
           departure_time: 'now',
           key: apiKey,
         },
-        timeout: 10000, // 10 second timeout
+        timeout: 10000,
       }
     );
 
@@ -57,8 +51,8 @@ async function getDistanceAndTime(from, to) {
     }
 
     const result = {
-      distance_km: element.distance.value / 1000, // Convert meters to kilometers
-      duration_min: Math.round(element.duration.value / 60), // Convert seconds to minutes
+      distance_km: element.distance.value / 1000,
+      duration_min: Math.round(element.duration.value / 60),
     };
     
     console.log('[GOOGLE API] Success! Distance:', result.distance_km, 'km, Time:', result.duration_min, 'min');
@@ -67,15 +61,15 @@ async function getDistanceAndTime(from, to) {
     console.error('[GOOGLE API] Error occurred:', error.message);
     if (error.response) {
       console.error('[GOOGLE API] Response error:', error.response.data);
-      // API error response
+
       throw new Error(`Google Distance Matrix API error: ${error.response.data?.error_message || error.message}`);
     } else if (error.request) {
       console.error('[GOOGLE API] No response received');
-      // Request made but no response
+
       throw new Error('No response from Google Distance Matrix API');
     } else {
       console.error('[GOOGLE API] Request setup error:', error.message);
-      // Error setting up request
+
       throw new Error(`Error calling Google Distance Matrix API: ${error.message}`);
     }
   }
@@ -84,4 +78,3 @@ async function getDistanceAndTime(from, to) {
 module.exports = {
   getDistanceAndTime,
 };
-

@@ -1,4 +1,4 @@
-/* Home page – hero and CTAs (layout base: BookingPage.css .home-section) */
+
 
 .home-page .home-hero-section {
   min-height: 70vh;
@@ -44,7 +44,7 @@
   line-height: 1.5;
 }
 
-/* Three service options: Local, Airport, Outstation — separated by lines only, no boxes */
+
 .home-service-options {
   display: flex;
   flex-direction: row;
@@ -107,7 +107,7 @@
   line-height: 1.3;
 }
 
-/* Local flow: from location + hours */
+
 .home-flow-header {
   text-align: left;
   max-width: 420px;
@@ -295,7 +295,7 @@
   cursor: not-allowed;
 }
 
-/* Multi stops: Add stop button – above LocationInput dropdown so it stays clickable */
+
 .home-add-stop-wrap {
   margin-top: 4px;
   margin-bottom: 12px;
@@ -320,7 +320,7 @@
   color: #e5e7eb;
 }
 
-/* Local flow: choose cab (same screen) */
+
 .home-local-cab-types-wrap {
   max-width: 640px;
   margin: 0 auto 32px;
@@ -478,7 +478,7 @@
   gap: 14px;
 }
 
-/* Cab type section (e.g. Innova Crysta, SEDAN) */
+
 .home-local-cab-type-section {
   margin-bottom: 32px;
 }
@@ -502,7 +502,7 @@
   gap: 24px;
 }
 
-/* Cab box (rate details inside each cab card) */
+
 .home-cab-box {
   max-width: 380px;
   margin: 0;
@@ -672,7 +672,7 @@
   background: #c2410c;
 }
 
-/* Re-confirm modal */
+
 .home-confirm-overlay {
   position: fixed;
   inset: 0;
@@ -826,7 +826,7 @@
   cursor: not-allowed;
 }
 
-/* Success popup (fixed overlay, same scroll level as viewport) */
+
 .home-success-overlay {
   position: fixed;
   inset: 0;
@@ -900,7 +900,7 @@
   color: #e5e7eb;
 }
 
-/* Clickable cab cards (sub options) */
+
 .home-local-cab-card {
   display: flex;
   flex-direction: column;
@@ -979,7 +979,7 @@
   color: #6b7280;
 }
 
-/* Legacy CTA grid (kept for reference / secondary use) */
+
 .home-cta-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -1041,96 +1041,124 @@
   color: #94a3b8;
 }
 
-/* About Us section (summary from main About page) */
+
 .home-about-section {
-  padding: 48px 24px 40px;
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.6) 0%, rgba(2, 6, 23, 0.95) 100%);
-  border-top: 1px solid rgba(148, 163, 184, 0.2);
+  position: relative;
+  padding: 64px 24px 56px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.home-about-accent {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 5px;
+  height: 100%;
+  background: linear-gradient(180deg, #16a34a 0%, #15803d 50%, #166534 100%);
 }
 
 .home-about-inner {
   max-width: 640px;
   margin: 0 auto;
-  text-align: center;
-}
-
-.home-about-title {
-  font-size: 1.75rem;
-  font-weight: 700;
-  color: #f1f5f9;
-  margin: 0 0 8px;
-}
-
-.home-about-subtitle {
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: #16a34a;
-  margin: 0 0 20px;
-  line-height: 1.4;
-}
-
-.home-about-summary {
-  font-size: 0.95rem;
-  color: #94a3b8;
-  line-height: 1.65;
-  margin: 0 0 14px;
+  padding-left: 24px;
   text-align: left;
 }
 
+.home-about-title {
+  font-size: 1.85rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 12px;
+  letter-spacing: -0.02em;
+}
+
+.home-about-subtitle {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #16a34a;
+  margin: 0 0 24px;
+  line-height: 1.45;
+}
+
+.home-about-summary {
+  font-size: 1rem;
+  color: #334155;
+  line-height: 1.7;
+  margin: 0 0 16px;
+}
+
 .home-about-summary strong {
-  color: #e5e7eb;
+  color: #0f172a;
 }
 
 .home-about-link {
-  display: inline-block;
-  margin-top: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 20px;
+  padding: 10px 0;
   color: #16a34a;
   font-weight: 600;
   font-size: 0.95rem;
   text-decoration: none;
-  transition: color 0.2s ease;
+  transition: color 0.2s ease, gap 0.2s ease;
 }
 
 .home-about-link:hover {
-  color: #4ade80;
+  color: #15803d;
+  gap: 10px;
 }
 
 .home-about-link-arrow {
-  display: inline-block;
-  vertical-align: middle;
-  margin-left: 4px;
+  flex-shrink: 0;
 }
 
-/* Common Routes section */
+
 .home-routes-section {
-  padding: 40px 24px 56px;
-  background: rgba(2, 6, 23, 0.98);
-  border-top: 1px solid rgba(148, 163, 184, 0.15);
+  position: relative;
+  padding: 56px 24px 64px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+}
+
+.home-routes-accent {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #16a34a, #15803d);
 }
 
 .home-routes-inner {
-  max-width: 900px;
+  max-width: 960px;
   margin: 0 auto;
   text-align: center;
 }
 
 .home-routes-title {
-  font-size: 1.6rem;
-  font-weight: 700;
-  color: #f1f5f9;
-  margin: 0 0 8px;
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 10px;
+  letter-spacing: -0.02em;
 }
 
 .home-routes-desc {
-  font-size: 0.95rem;
-  color: #94a3b8;
-  margin: 0 0 28px;
+  font-size: 1rem;
+  color: #64748b;
+  margin: 0 0 32px;
+  max-width: 480px;
+  margin-left: auto;
+  margin-right: auto;
+  margin-bottom: 32px;
 }
 
 .home-routes-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 20px;
+  gap: 24px;
   justify-content: center;
 }
 
@@ -1138,60 +1166,160 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 24px 20px;
-  background: rgba(15, 23, 42, 0.85);
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  border-radius: 14px;
+  padding: 28px 22px;
+  background: #ffffff;
+  border: 2px solid #e2e8f0;
+  border-radius: 16px;
   text-align: center;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.2s ease;
 }
 
 .home-route-card:hover {
-  border-color: rgba(22, 163, 74, 0.4);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  border-color: #16a34a;
+  box-shadow: 0 12px 32px rgba(22, 163, 74, 0.12);
+  transform: translateY(-2px);
 }
 
 .home-route-airport {
-  border-color: rgba(22, 163, 74, 0.3);
-  background: linear-gradient(135deg, rgba(22, 163, 74, 0.08) 0%, rgba(15, 23, 42, 0.9) 100%);
+  border-color: #16a34a;
+  background: linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%);
+}
+
+.home-route-airport:hover {
+  box-shadow: 0 12px 32px rgba(22, 163, 74, 0.18);
 }
 
 .home-route-icon {
-  font-size: 1.75rem;
-  margin-bottom: 10px;
+  color: #16a34a;
+  margin-bottom: 12px;
   display: block;
 }
 
 .home-route-label {
   font-size: 1.05rem;
   font-weight: 700;
-  color: #e5e7eb;
+  color: #0f172a;
   margin-bottom: 4px;
 }
 
 .home-route-hint {
-  font-size: 0.8rem;
-  color: #94a3b8;
-  margin-bottom: 14px;
+  font-size: 0.85rem;
+  color: #64748b;
+  margin-bottom: 16px;
 }
 
 .home-route-btn {
   margin-top: auto;
-  padding: 10px 18px;
+  padding: 12px 22px;
   font-size: 0.9rem;
   font-weight: 600;
-  color: #fff;
+  color: #ffffff;
   background: #16a34a;
   border: none;
   border-radius: 10px;
   cursor: pointer;
   text-decoration: none;
-  transition: background 0.2s ease;
+  transition: background 0.2s ease, color 0.2s ease;
   font: inherit;
 }
 
 .home-route-btn:hover {
   background: #15803d;
+}
+
+
+.home-testimonials-section {
+  padding: 56px 0 64px;
+  background: #ffffff;
+  border-top: 1px solid #e2e8f0;
+  overflow: hidden;
+}
+
+.home-testimonials-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px 0 0;
+}
+
+.home-testimonials-title {
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 8px;
+  text-align: center;
+  letter-spacing: -0.02em;
+}
+
+.home-testimonials-desc {
+  font-size: 1rem;
+  color: #64748b;
+  margin: 0 0 36px;
+  text-align: center;
+}
+
+.home-testimonials-track-wrap {
+  overflow: hidden;
+  mask-image: linear-gradient(to right, transparent 0%, black 40px, black calc(100% - 40px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 40px, black calc(100% - 40px), transparent 100%);
+}
+
+.home-testimonials-track {
+  display: flex;
+  gap: 24px;
+  width: max-content;
+  animation: home-testimonials-flow 45s linear infinite;
+}
+
+.home-testimonials-track:hover {
+  animation-play-state: paused;
+}
+
+@keyframes home-testimonials-flow {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.home-testimonial-card {
+  flex-shrink: 0;
+  width: 320px;
+  padding: 24px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  border-left: 4px solid #16a34a;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.home-testimonial-card:hover {
+  box-shadow: 0 8px 24px rgba(22, 163, 74, 0.08);
+  border-color: #bbf7d0;
+}
+
+.home-testimonial-stars {
+  margin-bottom: 12px;
+}
+
+.home-testimonial-star {
+  color: #eab308;
+  font-size: 1rem;
+  margin-right: 2px;
+}
+
+.home-testimonial-text {
+  font-size: 0.95rem;
+  color: #334155;
+  line-height: 1.6;
+  margin: 0 0 16px;
+}
+
+.home-testimonial-meta {
+  font-size: 0.85rem;
+  color: #64748b;
+  margin: 0;
+}
+
+.home-testimonial-meta strong {
+  color: #0f172a;
 }
 
 .home-secondary-links {
@@ -1215,6 +1343,14 @@
 }
 
 @media (max-width: 640px) {
+  .home-about-inner {
+    padding-left: 16px;
+  }
+
+  .home-testimonial-card {
+    width: 280px;
+  }
+
   .home-page .home-hero-section {
     padding: 40px 0 60px;
     min-height: auto;

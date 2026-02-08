@@ -74,7 +74,8 @@ const ContactPage = () => {
       </div>
 
       <div className="contact-container">
-        {/* Hero Header */}
+        {
+}
         <div
           ref={contactRefs.header}
           className={`contact-hero ${isVisible.header ? 'visible' : ''}`}
@@ -88,9 +89,11 @@ const ContactPage = () => {
           </p>
         </div>
 
-        {/* Contact Cards Grid */}
+        {
+}
         <div className="contact-cards-grid">
-          {/* Address Card */}
+          {
+}
           <div
             ref={contactRefs.address}
             className={`contact-card address-card ${isVisible.address ? 'visible' : ''}`}
@@ -119,7 +122,8 @@ const ContactPage = () => {
             <div className="card-decoration"></div>
           </div>
 
-          {/* Phone Card */}
+          {
+}
           <div
             ref={contactRefs.phone}
             className={`contact-card phone-card ${isVisible.phone ? 'visible' : ''}`}
@@ -150,7 +154,8 @@ const ContactPage = () => {
             <div className="card-decoration"></div>
           </div>
 
-          {/* Email Card */}
+          {
+}
           <div
             ref={contactRefs.email}
             className={`contact-card email-card ${isVisible.email ? 'visible' : ''}`}
@@ -179,7 +184,8 @@ const ContactPage = () => {
           </div>
         </div>
 
-        {/* Bottom CTA Section */}
+        {
+}
         <div className="contact-cta">
           <p className="cta-text">
             Need immediate assistance? <strong>Call us now!</strong>

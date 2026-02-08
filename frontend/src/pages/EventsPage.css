@@ -11,7 +11,7 @@
   overflow: visible;
 }
 
-/* Flowing banner animation */
+
 .flowing-banner {
   position: absolute;
   top: 170px;
@@ -316,7 +316,8 @@
 }
 
 @media (max-width: 768px) {
-  /* Prevent horizontal scroll globally */
+  
+
   * {
     max-width: 100%;
     box-sizing: border-box;
@@ -357,7 +358,8 @@
     box-sizing: border-box !important;
   }
 
-  /* Fix forms on mobile */
+  
+
   .form-group {
     width: 100% !important;
     max-width: 100% !important;
@@ -372,7 +374,8 @@
     box-sizing: border-box !important;
   }
 
-  /* Fix buttons on mobile */
+  
+
   .btn,
   .btn-primary,
   .btn-secondary {

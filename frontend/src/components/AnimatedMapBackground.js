@@ -3,7 +3,7 @@ import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './AnimatedMapBackground.css';
 
-const defaultCenter = [77.5946, 12.9716]; // [lng, lat] for Bangalore
+const defaultCenter = [77.5946, 12.9716];
 const defaultZoom = 12;
 
 const AnimatedMapBackground = () => {
@@ -13,17 +13,16 @@ const AnimatedMapBackground = () => {
   const targetOffsetRef = useRef({ dx: 0, dy: 0 });
   const currentOffsetRef = useRef({ dx: 0, dy: 0 });
 
-  // Initialize MapLibre map
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
     const map = new maplibregl.Map({
       container: mapContainerRef.current,
-      // Carto Positron vector style for light/white background
+
       style: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
       center: defaultCenter,
       zoom: defaultZoom,
-      interactive: false, // purely visual background
+      interactive: false,
     });
 
     mapRef.current = map;
@@ -38,10 +37,9 @@ const AnimatedMapBackground = () => {
     };
   }, []);
 
-  // Track mouse globally and set target offset (opposite direction) - throttled
   useEffect(() => {
     let lastTime = 0;
-    const throttleMs = 50; // Throttle to ~20fps for mouse tracking
+    const throttleMs = 50;
 
     const handleMouseMove = (e) => {
       const currentTime = Date.now();
@@ -53,14 +51,12 @@ const AnimatedMapBackground = () => {
       const x = e.clientX;
       const y = e.clientY;
 
-      // Normalize to -1..1
       const nx = (x / width) * 2 - 1;
       const ny = (y / height) * 2 - 1;
 
-      // Opposite to cursor, small lng/lat offsets
       targetOffsetRef.current = {
-        dx: nx * 0.03, // lng delta
-        dy: ny * 0.03, // lat delta
+        dx: nx * 0.03,
+        dy: ny * 0.03,
       };
     };
 
@@ -70,10 +66,9 @@ const AnimatedMapBackground = () => {
     };
   }, []);
 
-  // Animate center for parallax effect (throttled for performance)
   useEffect(() => {
     let lastTime = 0;
-    const throttleMs = 16; // ~60fps max
+    const throttleMs = 16;
 
     const animate = (currentTime) => {
       if (currentTime - lastTime < throttleMs) {
@@ -86,7 +81,6 @@ const AnimatedMapBackground = () => {
         const { dx: targetDx, dy: targetDy } = targetOffsetRef.current;
         const { dx, dy } = currentOffsetRef.current;
 
-        // Check if change is significant enough to update
         const deltaX = Math.abs(targetDx - dx);
         const deltaY = Math.abs(targetDy - dy);
         
@@ -95,7 +89,6 @@ const AnimatedMapBackground = () => {
           return;
         }
 
-        // Smooth easing
         const easedDx = dx + (targetDx - dx) * 0.05;
         const easedDy = dy + (targetDy - dy) * 0.05;
         currentOffsetRef.current = { dx: easedDx, dy: easedDy };
@@ -131,4 +124,3 @@ const AnimatedMapBackground = () => {
 };
 
 export default AnimatedMapBackground;
-

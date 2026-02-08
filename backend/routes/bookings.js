@@ -4,7 +4,6 @@ const { generateGoogleMapsLink } = require('../utils/mapsLink');
 
 const router = express.Router();
 
-// Ensure optional columns exist on bookings table (migration)
 async function ensureBookingsColumns() {
   const columns = [
     ['service_type', 'TEXT'],
@@ -22,7 +21,7 @@ async function ensureBookingsColumns() {
     try {
       await db.runAsync(`ALTER TABLE bookings ADD COLUMN ${col} ${type}`);
     } catch (e) {
-      // Column already exists, ignore
+
     }
   }
 }
@@ -45,7 +44,6 @@ async function generateDefaultInvoiceNumber() {
   return `${prefix}${String(seq).padStart(4, '0')}`;
 }
 
-// POST / - Create booking (public, used by HomePage and CarOptions)
 router.post('/', async (req, res) => {
   try {
     await ensureBookingsColumns();
@@ -109,7 +107,7 @@ router.post('/', async (req, res) => {
       await db.runAsync('UPDATE bookings SET maps_link_drop = ? WHERE id = ?', [dropLink || null, newBooking.id]);
       newBooking = await db.getAsync('SELECT * FROM bookings WHERE id = ?', [newBooking.id]);
     } catch (e) {
-      // columns might not exist
+
     }
     res.status(201).json(newBooking);
   } catch (error) {
@@ -121,7 +119,6 @@ router.post('/', async (req, res) => {
   }
 });
 
-// GET /:id - Get single booking (public, used by CheckBooking)
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;

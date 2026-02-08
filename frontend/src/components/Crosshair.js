@@ -21,7 +21,6 @@ const Crosshair = ({ color = 'white', containerRef = null }) => {
   const filterXRef = useRef(null);
   const filterYRef = useRef(null);
 
-  // mutable mouse position (not in state to avoid re-renders)
   const mouseRef = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
@@ -212,5 +211,3 @@ const Crosshair = ({ color = 'white', containerRef = null }) => {
 };
 
 export default Crosshair;
-
-

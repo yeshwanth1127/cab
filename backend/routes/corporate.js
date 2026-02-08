@@ -10,7 +10,7 @@ async function ensureCorporateBookingsFareColumn() {
   try {
     await db.runAsync('ALTER TABLE corporate_bookings ADD COLUMN fare_amount REAL');
   } catch (e) {
-    // Column already exists, ignore
+
   }
 }
 
@@ -18,11 +18,10 @@ async function ensureCorporateBookingsInvoiceNumberColumn() {
   try {
     await db.runAsync('ALTER TABLE corporate_bookings ADD COLUMN invoice_number TEXT');
   } catch (e) {
-    // Column already exists, ignore
+
   }
 }
 
-/** Generate next corporate invoice number: crpYYYYMMDD0001, crpYYYYMMDD0002, ... */
 async function generateCorporateInvoiceNumber() {
   await ensureCorporateBookingsInvoiceNumberColumn();
   const today = new Date();
@@ -40,7 +39,6 @@ async function generateCorporateInvoiceNumber() {
   return prefix + String(next).padStart(4, '0');
 }
 
-// Public endpoint: Create corporate booking
 router.post('/bookings', [
   body('name').notEmpty().withMessage('Name is required'),
   body('phone_number').notEmpty().withMessage('Phone number is required'),
@@ -58,25 +56,23 @@ router.post('/bookings', [
 
     const { name, phone_number, company_name, pickup_point, service_type, travel_date, travel_time, notes } = req.body;
 
-    // Add columns if they don't exist (migration)
     try {
       await db.runAsync('ALTER TABLE corporate_bookings ADD COLUMN service_type TEXT');
     } catch (e) {
-      // Column already exists, ignore
+
     }
     try {
       await db.runAsync('ALTER TABLE corporate_bookings ADD COLUMN travel_date TEXT');
     } catch (e) {
-      // Column already exists, ignore
+
     }
     try {
       await db.runAsync('ALTER TABLE corporate_bookings ADD COLUMN travel_time TEXT');
     } catch (e) {
-      // Column already exists, ignore
+
     }
     
-    // Use 'N/A' as default for drop_point since it's required by schema but not in the form
-    // (drop_point was removed from the form and replaced with service_type)
+
     const drop_point = 'N/A';
 
     const result = await db.runAsync(
@@ -105,11 +101,9 @@ router.post('/bookings', [
   }
 });
 
-// Admin endpoints (require authentication)
 router.use(authenticateToken);
 router.use(requireAdmin);
 
-// Get all corporate bookings
 router.get('/bookings', async (req, res) => {
   try {
     const bookings = await db.allAsync(
@@ -126,7 +120,6 @@ router.get('/bookings', async (req, res) => {
   }
 });
 
-// Get single corporate booking invoice PDF (must be before /bookings/:id)
 router.get('/bookings/:id/invoice', async (req, res) => {
   try {
     const { id } = req.params;
@@ -150,7 +143,6 @@ router.get('/bookings/:id/invoice', async (req, res) => {
   }
 });
 
-// Get single corporate booking
 router.get('/bookings/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -170,7 +162,6 @@ router.get('/bookings/:id', async (req, res) => {
   }
 });
 
-// Update corporate booking
 router.put('/bookings/:id', [
   body('name').optional().notEmpty().withMessage('Name cannot be empty'),
   body('phone_number').optional().notEmpty().withMessage('Phone number cannot be empty'),
@@ -269,7 +260,6 @@ router.put('/bookings/:id', [
   }
 });
 
-// Delete corporate booking
 router.delete('/bookings/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -292,7 +282,6 @@ router.delete('/bookings/:id', async (req, res) => {
   }
 });
 
-// Create corporate invoice: create corporate booking + return PDF
 router.post('/invoice/create', [
   body('company_name').notEmpty().withMessage('company_name is required'),
   body('name').notEmpty().withMessage('name is required'),
@@ -339,7 +328,6 @@ router.post('/invoice/create', [
   }
 });
 
-// Download all corporate invoices as ZIP
 router.get('/invoices/download-all', async (req, res) => {
   try {
     const withGst = req.query.withGst !== 'false';

@@ -8,6 +8,14 @@ import './HomePage.css';
 
 const HOURS_OPTIONS = [4, 8, 12];
 
+const TESTIMONIALS = [
+  { name: 'Priya S.', role: 'Frequent traveller', text: 'Used Namma Cabs for airport drops multiple times. Always on time, clean cars and no surge pricing. Highly recommend!', rating: 5 },
+  { name: 'Rahul M.', role: 'Corporate', text: 'We use them for our team outstation trips. Professional drivers and transparent billing. Best cab service in Bangalore.', rating: 5 },
+  { name: 'Anitha K.', role: 'Family trips', text: 'Booked Bangalore to Mysore for a family wedding. Comfortable ride, fair price. Will book again for Coorg.', rating: 5 },
+  { name: 'Vikram R.', role: 'Airport transfer', text: 'Early morning KIA pickup was seamless. Driver was waiting with a placard. No hassle at all.', rating: 5 },
+  { name: 'Deepa N.', role: 'Local rides', text: 'Hourly packages for city errands work great. Fixed rate, no meter confusion. Simple and reliable.', rating: 5 },
+];
+
 const HomePage = () => {
   const navigate = useNavigate();
   const [serviceChoice, setServiceChoice] = useState(null);
@@ -706,11 +714,12 @@ const HomePage = () => {
       {serviceChoice === null && (
         <>
           <section className="home-about-section">
+            <div className="home-about-accent" aria-hidden="true" />
             <div className="home-about-inner">
               <h2 className="home-about-title">About Namma Cabs</h2>
-              <h3 className="home-about-subtitle">
+              <p className="home-about-subtitle">
                 Your trusted airport, local, outstation & corporate cab partner in Bangalore
-              </h3>
+              </p>
               <p className="home-about-summary">
                 <strong>Namma Cabs</strong> was born in Bangalore with one simple idea:
                 give people clean, reliable cars with honest pricing and zero drama.
@@ -729,65 +738,55 @@ const HomePage = () => {
           </section>
 
           <section className="home-routes-section">
+            <div className="home-routes-accent" aria-hidden="true" />
             <div className="home-routes-inner">
               <h2 className="home-routes-title">Common Routes</h2>
-              <p className="home-routes-desc">Popular destinations we serve. Book in one click.</p>
+              <p className="home-routes-desc">Popular destinations we serve.</p>
               <div className="home-routes-grid">
                 <div className="home-route-card home-route-airport">
                   <Icon name="plane" size={28} className="home-route-icon" />
                   <span className="home-route-label">Bangalore Airport ↔ City</span>
                   <span className="home-route-hint">Pickup or drop at KIA</span>
-                  <button type="button" className="home-route-btn" onClick={() => setServiceChoice('airport')}>
-                    Book airport cab
-                  </button>
                 </div>
                 <div className="home-route-card">
                   <Icon name="road" size={28} className="home-route-icon" />
                   <span className="home-route-label">Bangalore → Mysore</span>
                   <span className="home-route-hint">One-way or round trip</span>
-                  <button
-                    type="button"
-                    className="home-route-btn"
-                    onClick={() => navigate('/car-options', { state: { service_type: 'outstation', trip_type: 'one_way', from_location: 'Bangalore', to_location: 'Mysore' } })}
-                  >
-                    Book this route
-                  </button>
                 </div>
                 <div className="home-route-card">
                   <Icon name="road" size={28} className="home-route-icon" />
                   <span className="home-route-label">Bangalore → Coorg</span>
                   <span className="home-route-hint">One-way or round trip</span>
-                  <button
-                    type="button"
-                    className="home-route-btn"
-                    onClick={() => navigate('/car-options', { state: { service_type: 'outstation', trip_type: 'one_way', from_location: 'Bangalore', to_location: 'Coorg' } })}
-                  >
-                    Book this route
-                  </button>
                 </div>
                 <div className="home-route-card">
                   <Icon name="road" size={28} className="home-route-icon" />
                   <span className="home-route-label">Bangalore → Ooty</span>
                   <span className="home-route-hint">One-way or round trip</span>
-                  <button
-                    type="button"
-                    className="home-route-btn"
-                    onClick={() => navigate('/car-options', { state: { service_type: 'outstation', trip_type: 'one_way', from_location: 'Bangalore', to_location: 'Ooty' } })}
-                  >
-                    Book this route
-                  </button>
                 </div>
                 <div className="home-route-card">
                   <Icon name="road" size={28} className="home-route-icon" />
                   <span className="home-route-label">Bangalore → Chennai</span>
                   <span className="home-route-hint">One-way or round trip</span>
-                  <button
-                    type="button"
-                    className="home-route-btn"
-                    onClick={() => navigate('/car-options', { state: { service_type: 'outstation', trip_type: 'one_way', from_location: 'Bangalore', to_location: 'Chennai' } })}
-                  >
-                    Book this route
-                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="home-testimonials-section">
+            <div className="home-testimonials-inner">
+              <h2 className="home-testimonials-title">What our customers say</h2>
+              <p className="home-testimonials-desc">Trusted by travellers and corporates across Bangalore and beyond</p>
+              <div className="home-testimonials-track-wrap">
+                <div className="home-testimonials-track">
+                  {[...TESTIMONIALS, ...TESTIMONIALS].map((t, i) => (
+                    <div key={i} className="home-testimonial-card">
+                      <div className="home-testimonial-stars" aria-hidden="true">
+                        {Array.from({ length: t.rating }, (_, j) => <span key={j} className="home-testimonial-star">★</span>)}
+                      </div>
+                      <p className="home-testimonial-text">&ldquo;{t.text}&rdquo;</p>
+                      <p className="home-testimonial-meta"><strong>{t.name}</strong> · {t.role}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>

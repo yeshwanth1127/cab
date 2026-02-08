@@ -1,5 +1,3 @@
-// Location service for geolocation and place suggestions
-// Uses browser geolocation API and OpenStreetMap Nominatim API (free, no key required)
 
 export const getCurrentLocation = () => {
   return new Promise((resolve, reject) => {
@@ -27,7 +25,6 @@ export const getCurrentLocation = () => {
   });
 };
 
-// Get address from coordinates (reverse geocoding)
 export const getAddressFromCoordinates = async (lat, lng) => {
   try {
     const response = await fetch(
@@ -46,7 +43,6 @@ export const getAddressFromCoordinates = async (lat, lng) => {
   }
 };
 
-// Search for places (autocomplete suggestions)
 export const searchPlaces = async (query, userLocation = null) => {
   if (!query || query.length < 2) {
     return [];
@@ -55,7 +51,7 @@ export const searchPlaces = async (query, userLocation = null) => {
   try {
     let url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&addressdetails=1`;
     
-    // If user location is provided, prioritize nearby results
+
     if (userLocation) {
       url += `&lat=${userLocation.lat}&lon=${userLocation.lng}&bounded=1&radius=50000`;
     }
@@ -82,27 +78,26 @@ export const searchPlaces = async (query, userLocation = null) => {
   }
 };
 
-// Alternative: Google Maps Places API (requires API key)
 export const searchPlacesGoogle = async (query, userLocation = null, apiKey) => {
   if (!apiKey || !query || query.length < 2) {
     return [];
   }
 
   try {
-    // Build URL with parameters to prioritize street-level addresses
+
     const params = new URLSearchParams({
       input: query,
       key: apiKey,
-      // Prioritize addresses over regions/cities
+
       types: 'address',
-      // Restrict to India (can be made configurable)
+
       components: 'country:in'
     });
     
     if (userLocation) {
-      // Use tighter radius for better proximity results
+
       params.append('location', `${userLocation.lat},${userLocation.lng}`);
-      params.append('radius', '5000'); // Reduced from 50000 for better accuracy
+      params.append('radius', '5000');
     }
 
     const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?${params}`;
@@ -124,4 +119,3 @@ export const searchPlacesGoogle = async (query, userLocation = null, apiKey) => 
     return [];
   }
 };
-

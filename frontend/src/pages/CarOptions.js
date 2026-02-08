@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import api, { getImageUrl } from '../services/api';
 import MainNavbar from '../components/MainNavbar';
+import Icon from '../components/Icon';
 import AnimatedMapBackground from '../components/AnimatedMapBackground';
 import './CarOptions.css';
 
@@ -106,7 +107,6 @@ const CarOptions = () => {
   const selectedHours = bookingState.number_of_hours ? Number(bookingState.number_of_hours) : null;
   const fromLocation = bookingState.from_location || '';
 
-  // Unified cab card: one card per cab, layout and data from backend (matches design spec)
   const renderUnifiedCabCard = (cab, ct, opts) => {
     const {
       displayFare,
@@ -324,7 +324,8 @@ const CarOptions = () => {
             {loading && <div className="loading">Loading...</div>}
             {error && !loading && <div className="error-message">{error}</div>}
 
-            {/* Local flow: unified cab cards (one per cab, data from backend) */}
+            {
+}
             {!loading && !error && isLocalFlow && localOffers.length > 0 && (() => {
               const localCards = localOffers.flatMap((ct) => (ct.cabs || []).map((cab) => {
                 const baseFare = Number(ct.baseFare) || 0;
@@ -346,14 +347,16 @@ const CarOptions = () => {
               );
             })()}
 
-            {/* Airport flow: no cabs configured */}
+            {
+}
             {!loading && !error && isAirportFlow && airportOffers.length === 0 && (
               <div className="empty-state">
                 <p>No airport cabs configured yet. Please check back later.</p>
               </div>
             )}
 
-            {/* Airport flow: unified cab cards (one per cab, data from backend) */}
+            {
+}
             {!loading && !error && isAirportFlow && airportOffers.length > 0 && (() => {
               const airportCards = airportOffers.flatMap((ct) => (ct.cabs || []).map((cab) => renderUnifiedCabCard(cab, ct, {
                 displayFare: airportFares[ct.id] ?? ct.baseFare ?? 0,
@@ -370,14 +373,16 @@ const CarOptions = () => {
               );
             })()}
 
-            {/* Outstation flow: no cabs configured */}
+            {
+}
             {!loading && !error && isOutstationFlow && outstationOffers.length === 0 && (
               <div className="empty-state">
                 <p>No outstation cabs configured yet. Please check back later.</p>
               </div>
             )}
 
-            {/* Outstation flow: unified cab cards (one per cab, data from backend) */}
+            {
+}
             {!loading && !error && isOutstationFlow && outstationOffers.length > 0 && (() => {
               const outstationCards = outstationOffers.flatMap((ct) => (ct.cabs || []).map((cab) => renderUnifiedCabCard(cab, ct, {
                 displayFare: outstationFares[ct.id] ?? ct.baseFare ?? 0,
@@ -394,7 +399,8 @@ const CarOptions = () => {
               );
             })()}
 
-            {/* Default: marketing car options */}
+            {
+}
             {!loading && !error && !isLocalFlow && !isAirportFlow && !isOutstationFlow && options.length === 0 && localOffers.length === 0 && (
               <div className="empty-state">
                 <p>No car options available yet. Please check back soon.</p>

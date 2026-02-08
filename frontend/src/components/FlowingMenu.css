@@ -114,7 +114,7 @@
   }
 }
 
-/* Mobile Responsive Styles */
+
 @media (max-width: 768px) {
   .menu {
     padding: 12px 0;
@@ -124,7 +124,8 @@
   .menu__item-link {
     padding: 18px 0;
     font-size: 3.5vh;
-    /* Touch-friendly */
+    
+
     -webkit-tap-highlight-color: rgba(22, 163, 74, 0.3);
     touch-action: manipulation;
     min-height: 48px;
@@ -175,7 +176,7 @@
   }
 }
 
-/* Touch optimizations */
+
 @media (hover: none) and (pointer: coarse) {
   .menu__item-link:hover {
     color: #16a34a;
@@ -195,7 +196,7 @@
   }
 }
 
-/* Performance optimizations for mobile */
+
 @media (max-width: 768px) {
   .marquee__inner {
     will-change: transform;

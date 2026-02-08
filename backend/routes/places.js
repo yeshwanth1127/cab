@@ -1,12 +1,3 @@
-/**
- * Production-grade Places API
- * 
- * Architecture:
- * - Google Places Autocomplete ONLY (no multi-provider aggregation)
- * - Session tokens for cost optimization
- * - Redis caching (with in-memory fallback)
- * - Simple, fast, maintainable
- */
 
 const express = require('express');
 const axios = require('axios');
@@ -14,14 +5,12 @@ const redis = require('../utils/redis');
 
 const router = express.Router();
 
-// Use single-underscore name (matches .env: GOOGLE_MAPS_BACKEND_KEY_NEW); double-underscore was typo
 const GOOGLE_API_KEY = process.env.GOOGLE_MAPS_BACKEND_KEY_NEW || process.env.GOOGLE_MAPS_BACKEND_KEY;
 
 if (!GOOGLE_API_KEY) {
   console.warn('[Places API] WARNING: Google Maps API key not configured');
 }
 
-// KIA (Kempegowda International Airport) - inject when user searches "kia" so we show airport, not pincode 560300
 const KIA_PLACE_ID = 'KIA_BANGALORE';
 const KIA_AUTOCOMPLETE = {
   place_id: KIA_PLACE_ID,
@@ -50,14 +39,12 @@ function shouldInjectKIA(query) {
     q === '560300' || q.replace(/\s/g, '') === '560300';
 }
 
-// Exact "kia" – return only KIA airport, never call Google (so Karnataka 560300 never appears)
 function isExactKIAQuery(query) {
   if (!query || typeof query !== 'string') return false;
   const q = query.toLowerCase().trim();
   return q === 'kia' || q.replace(/\s/g, '') === 'kia';
 }
 
-// Filter out "Karnataka 560300, India" pincode – any suggestion containing 560300 when user meant KIA
 function isPincode560300Result(pred) {
   if (!pred) return false;
   const d = (pred.description || '').toLowerCase();
@@ -66,58 +53,34 @@ function isPincode560300Result(pred) {
   return d.includes('560300') || main.includes('560300') || sec.includes('560300');
 }
 
-// Cache TTL: 10 minutes (short for freshness)
-const CACHE_TTL = 600; // seconds
+const CACHE_TTL = 600;
 
-/**
- * Normalize query for cache key
- */
 function normalizeQuery(query) {
   if (!query) return '';
   return query
     .toLowerCase()
     .trim()
-    .replace(/\s+/g, ' ') // Multiple spaces to single space
-    .replace(/[^\w\s]/g, '') // Remove special characters
+    .replace(/\s+/g, ' ')
+    .replace(/[^\w\s]/g, '')
     .trim();
 }
 
-/**
- * Generate cache key
- */
 function getCacheKey(query, lat, lng) {
   const normalizedQuery = normalizeQuery(query);
-  // Round coordinates to 2 decimal places (~1km precision)
+
   const roundedLat = lat ? Math.round(parseFloat(lat) * 100) / 100 : 0;
   const roundedLng = lng ? Math.round(parseFloat(lng) * 100) / 100 : 0;
   return `ac|${normalizedQuery}|${roundedLat}|${roundedLng}`;
 }
 
-/**
- * Round coordinates for location bias
- */
 function roundCoordinate(coord) {
   return coord ? Math.round(parseFloat(coord) * 100) / 100 : null;
 }
 
-/**
- * GET /api/places/autocomplete
- * 
- * Fast autocomplete using Google Places Autocomplete API
- * 
- * Query params:
- * - q (required): Search query (min 2 chars)
- * - lat (optional): User latitude for location bias
- * - lng (optional): User longitude for location bias
- * - sessionToken (optional): Session token for cost optimization
- * 
- * Response: Array of predictions (Google's format, slightly normalized)
- */
 router.get('/autocomplete', async (req, res) => {
   try {
     const { q, lat, lng, sessionToken } = req.query;
 
-    // Validation
     if (!q || q.trim().length < 2) {
       return res.json([]);
     }
@@ -135,14 +98,12 @@ router.get('/autocomplete', async (req, res) => {
     const isKIAQuery = shouldInjectKIA(query);
     const exactKIA = isExactKIAQuery(query);
 
-    // Exact "kia" – return ONLY KIA airport, do not call Google (Karnataka 560300 can never appear)
     if (exactKIA) {
       const kiaOnly = [{ ...KIA_AUTOCOMPLETE }];
       await redis.set(cacheKey, kiaOnly, CACHE_TTL);
       return res.json(kiaOnly);
     }
 
-    // Don't use cache for other "kia-like" / "560300" so we always return KIA airport first
     if (!isKIAQuery) {
       const cached = await redis.get(cacheKey);
       if (cached) {
@@ -150,33 +111,27 @@ router.get('/autocomplete', async (req, res) => {
       }
     }
 
-    // Build Google Autocomplete request
-    // Note: types=geocode|establishment is INVALID (Google rejects: geocode and establishment cannot be combined)
     const url = 'https://maps.googleapis.com/maps/api/place/autocomplete/json';
     const params = {
       input: query,
       key: GOOGLE_API_KEY,
-      components: 'country:in', // India only; omit types to get both addresses and establishments
+      components: 'country:in',
     };
 
-    // Add location bias if user location provided
     if (userLat && userLng) {
       params.location = `${roundCoordinate(userLat)},${roundCoordinate(userLng)}`;
-      params.radius = 50000; // 50km radius
+      params.radius = 50000;
     }
 
-    // Add session token if provided (for cost optimization)
     if (sessionToken) {
       params.sessiontoken = sessionToken;
     }
 
-    // Call Google Autocomplete API
     const response = await axios.get(url, {
       params,
-      timeout: 2000, // 2 second timeout
+      timeout: 2000,
     });
 
-    // Handle Google API response
     if (response.data.status !== 'OK' && response.data.status !== 'ZERO_RESULTS') {
       console.warn('[Places API] Google Autocomplete:', response.data.status, response.data.error_message || '');
       return res.json([]);
@@ -184,7 +139,6 @@ router.get('/autocomplete', async (req, res) => {
 
     const predictions = response.data.predictions || [];
 
-    // Normalize predictions (minimal transformation)
     let normalized = predictions.map((prediction) => ({
       place_id: prediction.place_id,
       description: prediction.description,
@@ -193,14 +147,12 @@ router.get('/autocomplete', async (req, res) => {
       types: prediction.types || [],
     }));
 
-    // When user searches "kia" or "560300", show only KIA airport – remove Karnataka 560300 entirely
     if (isKIAQuery) {
       const kiaEntry = { ...KIA_AUTOCOMPLETE };
       normalized = normalized.filter((p) => p.place_id !== KIA_PLACE_ID && !isPincode560300Result(p));
       normalized = [kiaEntry, ...normalized];
     }
 
-    // Cache results
     await redis.set(cacheKey, normalized, CACHE_TTL);
 
     return res.json(normalized);
@@ -214,17 +166,6 @@ router.get('/autocomplete', async (req, res) => {
   }
 });
 
-/**
- * POST /api/places/details
- * 
- * Get full place details (lat/lng + address) for a selected place
- * 
- * Body:
- * - placeId (required): Google Place ID
- * - sessionToken (optional): Session token from autocomplete session
- * 
- * Response: Full place details
- */
 router.post('/details', async (req, res) => {
   try {
     const { placeId, sessionToken } = req.body;
@@ -233,7 +174,6 @@ router.post('/details', async (req, res) => {
       return res.status(400).json({ error: 'placeId is required' });
     }
 
-    // KIA synthetic place: return fixed address/coords (no Google call)
     if (placeId === KIA_PLACE_ID) {
       return res.json(KIA_DETAILS);
     }
@@ -242,7 +182,6 @@ router.post('/details', async (req, res) => {
       return res.status(503).json({ error: 'Google Maps API key not configured' });
     }
 
-    // Build Google Place Details request
     const url = 'https://maps.googleapis.com/maps/api/place/details/json';
     const params = {
       place_id: placeId,
@@ -250,12 +189,10 @@ router.post('/details', async (req, res) => {
       fields: 'geometry,formatted_address,address_components,place_id,name',
     };
 
-    // Add session token if provided (reduces cost)
     if (sessionToken) {
       params.sessiontoken = sessionToken;
     }
 
-    // Call Google Place Details API
     const response = await axios.get(url, {
       params,
       timeout: 2000,
@@ -268,7 +205,6 @@ router.post('/details', async (req, res) => {
 
     const place = response.data.result;
 
-    // Extract location
     const location = place.geometry?.location;
     if (!location) {
       return res.status(404).json({ error: 'Location not found' });
@@ -277,7 +213,6 @@ router.post('/details', async (req, res) => {
     const lat = typeof location.lat === 'function' ? location.lat() : location.lat;
     const lng = typeof location.lng === 'function' ? location.lng() : location.lng;
 
-    // Extract address components
     const addressComponents = place.address_components || [];
     const getComponent = (type) => {
       const component = addressComponents.find(
@@ -290,7 +225,6 @@ router.post('/details', async (req, res) => {
     const city = getComponent('administrative_area_level_2') || getComponent('locality') || '';
     const state = getComponent('administrative_area_level_1') || '';
 
-    // Return normalized response
     return res.json({
       place_id: place.place_id,
       name: place.name || '',
@@ -312,13 +246,6 @@ router.post('/details', async (req, res) => {
   }
 });
 
-/**
- * POST /api/places/reverse
- *
- * Reverse geocode using Google Geocoding API (India only).
- * Body: { lat, lng }
- * Response: { address, geocode: { lat, lng } }
- */
 router.post('/reverse', async (req, res) => {
   try {
     const { lat, lng } = req.body;

@@ -1,7 +1,3 @@
-/**
- * Clock-style time picker using react-time-picker. Value/onChange: "HH:mm" (24-hour).
- * Uses format "hh:mm a" for display; converts to/from 24h for parent components.
- */
 
 import React from 'react';
 import ReactTimePicker from 'react-time-picker';
@@ -9,7 +5,6 @@ import 'react-time-picker/dist/TimePicker.css';
 import 'react-clock/dist/Clock.css';
 import './TimePicker.css';
 
-/** Convert "HH:mm" (24h) to "hh:mm a" for react-time-picker */
 function to12h(value) {
   if (!value || typeof value !== 'string') return null;
   const [hStr, mStr] = value.trim().split(':');
@@ -26,7 +21,6 @@ function to12h(value) {
   return `${hh}:${mm} ${ampm}`;
 }
 
-/** Convert "hh:mm a" from react-time-picker to "HH:mm" (24h) */
 function to24h(value) {
   if (!value || typeof value !== 'string') return '';
   const trimmed = value.trim();

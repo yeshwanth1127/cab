@@ -8,9 +8,8 @@ import AnimatedMapBackground from '../components/AnimatedMapBackground';
 import MainNavbar from '../components/MainNavbar';
 import './EventsPage.css';
 
-// Helper function to open calendar picker when clicking anywhere on date/time inputs
 const handleDateInputClick = (e) => {
-  // Ensure calendar opens when clicking anywhere on the input
+
   if (e.target.showPicker) {
     e.target.showPicker();
   } else {
@@ -24,7 +23,7 @@ const EventsPage = () => {
   const eventTypeFromUrl = searchParams.get('type');
   const [activeTab, setActiveTab] = useState(eventTypeFromUrl || 'weddings');
   
-  // Update active tab when URL parameter changes
+
   useEffect(() => {
     if (eventTypeFromUrl && ['weddings', 'birthdays', 'others'].includes(eventTypeFromUrl)) {
       setActiveTab(eventTypeFromUrl);
@@ -49,7 +48,6 @@ const EventsPage = () => {
   const [bookingId, setBookingId] = useState(null);
   const [errors, setErrors] = useState({});
 
-  // Request user location on mount
   React.useEffect(() => {
     const consent = localStorage.getItem('locationConsent');
     if (!consent || consent === 'granted') {
@@ -57,7 +55,6 @@ const EventsPage = () => {
     }
   }, []);
 
-  // Reset form when tab changes
   React.useEffect(() => {
     setFormData(prev => ({
       ...prev,
@@ -201,7 +198,7 @@ const EventsPage = () => {
       setBookingSuccess(true);
       setBookingId(response.data.id);
       
-      // Reset form
+
       setFormData({
         name: '',
         phone_number: '',
@@ -451,4 +448,3 @@ const EventsPage = () => {
 };
 
 export default EventsPage;
-

@@ -1,15 +1,3 @@
--- SQLite Database Schema for Cab Booking System
--- 
--- ⚠️  CRITICAL: DO NOT ADD DELETE, DROP, or TRUNCATE STATEMENTS TO THIS FILE!
--- This file is executed on every database initialization.
--- Any DELETE/DROP/TRUNCATE statements will be automatically blocked by the database.js safeguard,
--- but it's better to never add them in the first place.
--- 
--- Use INSERT OR IGNORE for adding default data.
--- Use CREATE TABLE IF NOT EXISTS for creating tables.
--- Use ALTER TABLE with error handling for migrations.
-
--- Users table (for admin and potentially regular users)
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
@@ -19,7 +7,6 @@ CREATE TABLE IF NOT EXISTS users (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Cab types table
 CREATE TABLE IF NOT EXISTS cab_types (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
@@ -32,7 +19,6 @@ CREATE TABLE IF NOT EXISTS cab_types (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Cabs table (individual vehicles)
 CREATE TABLE IF NOT EXISTS cabs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     cab_type_id INTEGER,
@@ -47,7 +33,6 @@ CREATE TABLE IF NOT EXISTS cabs (
     FOREIGN KEY (driver_id) REFERENCES drivers(id) ON DELETE SET NULL
 );
 
--- Drivers table
 CREATE TABLE IF NOT EXISTS drivers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -63,7 +48,6 @@ CREATE TABLE IF NOT EXISTS drivers (
     UNIQUE(license_number)
 );
 
--- Routes table (popular routes with fixed fares)
 CREATE TABLE IF NOT EXISTS routes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     from_location TEXT NOT NULL,
@@ -74,7 +58,6 @@ CREATE TABLE IF NOT EXISTS routes (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Bookings table
 CREATE TABLE IF NOT EXISTS bookings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER,
@@ -99,7 +82,6 @@ CREATE TABLE IF NOT EXISTS bookings (
     FOREIGN KEY (car_option_id) REFERENCES car_options(id) ON DELETE SET NULL
 );
 
--- Car options table (for marketing / info cards)
 CREATE TABLE IF NOT EXISTS car_options (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -110,7 +92,6 @@ CREATE TABLE IF NOT EXISTS car_options (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Corporate companies table
 CREATE TABLE IF NOT EXISTS corporate_companies (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -124,7 +105,6 @@ CREATE TABLE IF NOT EXISTS corporate_companies (
     UNIQUE(contact_email)
 );
 
--- Corporate HR/auth users
 CREATE TABLE IF NOT EXISTS corporate_users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     company_id INTEGER NOT NULL,
@@ -138,7 +118,6 @@ CREATE TABLE IF NOT EXISTS corporate_users (
     FOREIGN KEY (company_id) REFERENCES corporate_companies(id) ON DELETE CASCADE
 );
 
--- Employee intake records
 CREATE TABLE IF NOT EXISTS corporate_employees (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     company_id INTEGER NOT NULL,
@@ -157,7 +136,6 @@ CREATE TABLE IF NOT EXISTS corporate_employees (
     FOREIGN KEY (company_id) REFERENCES corporate_companies(id) ON DELETE CASCADE
 );
 
--- Intake links generated for employees
 CREATE TABLE IF NOT EXISTS corporate_intake_links (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     company_id INTEGER NOT NULL,
@@ -168,7 +146,6 @@ CREATE TABLE IF NOT EXISTS corporate_intake_links (
     FOREIGN KEY (company_id) REFERENCES corporate_companies(id) ON DELETE CASCADE
 );
 
--- Vehicle assignments for corporate employees
 CREATE TABLE IF NOT EXISTS corporate_vehicle_assignments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     employee_id INTEGER NOT NULL,
@@ -184,7 +161,6 @@ CREATE TABLE IF NOT EXISTS corporate_vehicle_assignments (
     UNIQUE(employee_id)
 );
 
--- Corporate bookings table (public form submissions)
 CREATE TABLE IF NOT EXISTS corporate_bookings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -203,7 +179,6 @@ CREATE TABLE IF NOT EXISTS corporate_bookings (
     FOREIGN KEY (cab_id) REFERENCES cabs(id) ON DELETE SET NULL
 );
 
--- Manager permissions table (for section-based access control)
 CREATE TABLE IF NOT EXISTS manager_permissions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -216,7 +191,6 @@ CREATE TABLE IF NOT EXISTS manager_permissions (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Insert default service-type cab types (only if they don't exist)
 INSERT OR IGNORE INTO cab_types (name, description, base_fare, per_km_rate, per_minute_rate, capacity) VALUES
 ('Local', 'Local city rides', 50.00, 10.00, 1.00, 4),
 ('Airport', 'Airport pick-up and drop', 80.00, 12.00, 1.20, 4),

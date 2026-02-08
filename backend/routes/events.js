@@ -5,7 +5,6 @@ const { authenticateToken, requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Public endpoint: Create event booking
 router.post('/bookings', [
   body('name').notEmpty().withMessage('Name is required'),
   body('phone_number').notEmpty().withMessage('Phone number is required'),
@@ -41,11 +40,9 @@ router.post('/bookings', [
   }
 });
 
-// Admin endpoints (require authentication)
 router.use(authenticateToken);
 router.use(requireAdmin);
 
-// Get all event bookings
 router.get('/bookings', async (req, res) => {
   try {
     const bookings = await db.allAsync(
@@ -56,7 +53,7 @@ router.get('/bookings', async (req, res) => {
        ORDER BY eb.created_at DESC`
     );
     
-    // Get assignments for each booking
+
     for (let booking of bookings) {
       const assignments = await db.allAsync(
         `SELECT eba.*, c.vehicle_number, c.driver_name as cab_driver_name, c.driver_phone as cab_driver_phone,
@@ -78,7 +75,6 @@ router.get('/bookings', async (req, res) => {
   }
 });
 
-// Get single event booking
 router.get('/bookings/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -98,7 +94,6 @@ router.get('/bookings/:id', async (req, res) => {
   }
 });
 
-// Update event booking
 router.put('/bookings/:id', [
   body('name').optional().notEmpty().withMessage('Name cannot be empty'),
   body('phone_number').optional().notEmpty().withMessage('Phone number cannot be empty'),
@@ -181,7 +176,6 @@ router.put('/bookings/:id', [
   }
 });
 
-// Delete event booking
 router.delete('/bookings/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -204,7 +198,6 @@ router.delete('/bookings/:id', async (req, res) => {
   }
 });
 
-// Assign cars and drivers to event booking
 router.post('/bookings/:id/assign', [
   body('assignments').isArray().withMessage('Assignments must be an array'),
   body('assignments.*.cab_id').optional({ nullable: true }).isInt().withMessage('cab_id must be integer'),
@@ -224,10 +217,8 @@ router.post('/bookings/:id/assign', [
       return res.status(404).json({ error: 'Event booking not found' });
     }
 
-    // Delete existing assignments
     await db.runAsync('DELETE FROM event_booking_assignments WHERE event_booking_id = ?', [id]);
 
-    // Insert new assignments
     for (const assignment of assignments) {
       let driverName = null;
       let driverPhone = null;
@@ -255,13 +246,11 @@ router.post('/bookings/:id/assign', [
       );
     }
 
-    // Update booking status and assigned_at
     await db.runAsync(
       `UPDATE event_bookings SET status = 'confirmed', assigned_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
       [id]
     );
 
-    // Get updated booking with assignments
     const updated = await db.getAsync('SELECT * FROM event_bookings WHERE id = ?', [id]);
     const updatedAssignments = await db.allAsync(
       `SELECT eba.*, c.vehicle_number, c.driver_name as cab_driver_name, c.driver_phone as cab_driver_phone,
@@ -283,4 +272,3 @@ router.post('/bookings/:id/assign', [
 });
 
 module.exports = router;
-

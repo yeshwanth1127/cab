@@ -1,25 +1,15 @@
-/**
- * Utility functions for mapping cars to subtypes
- * Ensures consistent mapping across the application
- */
 
-/**
- * Maps a car name and description to its subtype
- * @param {string} name - Car name (e.g., "Etios", "Honda City")
- * @param {string} description - Car description
- * @returns {string|null} - Subtype: Sedan, SUV, Innova, Innova Crysta, Tempo, Urbenia, Minibus
- */
 const mapCarToSubtype = (name, description) => {
   if (!name) return null;
   const carName = name.toLowerCase().trim();
   const desc = (description || '').toLowerCase();
   
-  // Map specific car names to subtypes
+
   if (carName.includes('honda city') || carName.includes('ciaz')) {
     return 'Sedan';
   }
   if (carName.includes('etios') || carName.includes('dzire')) {
-    return 'Sedan'; // Entry-level sedans map to Sedan
+    return 'Sedan';
   }
   if (carName.includes('ertiga') || carName.includes('marazzo') || carName.includes('rumion')) {
     return 'SUV';
@@ -40,7 +30,7 @@ const mapCarToSubtype = (name, description) => {
     return 'Minibus';
   }
   
-  // Fallback to description-based mapping
+
   if (desc.includes('sedan')) {
     return 'Sedan';
   }
@@ -66,21 +56,13 @@ const mapCarToSubtype = (name, description) => {
   return null;
 };
 
-/**
- * Gets the car category used for rate meter lookup.
- * We now treat each CAR as its own "category":
- *  - Prefer the car's name (so rates are per car),
- *  - Fallback to subtype mapping only if name is missing.
- */
 const getCarCategory = (carOption) => {
   if (!carOption) return 'Sedan';
 
-  // Primary: use the specific car name so each car can have its own rate
   if (carOption.name) {
     return carOption.name;
   }
 
-  // Fallbacks: keep existing subtype logic as backup
   if (carOption.car_subtype) {
     return carOption.car_subtype;
   }
@@ -93,4 +75,3 @@ module.exports = {
   mapCarToSubtype,
   getCarCategory,
 };
-

@@ -1,12 +1,3 @@
-/**
- * Migration: Rate Meter tables and cab_types.service_type
- *
- * - Adds service_type to cab_types and UNIQUE(name, service_type)
- * - Creates rate_meters table
- * - Creates local_package_rates table
- *
- * Run from backend dir: node db/migrations/rate_meter_tables.js
- */
 
 const path = require('path');
 try {
@@ -18,7 +9,6 @@ async function runMigration() {
   try {
     console.log('Starting migration: Rate Meter tables...');
 
-    // 1. Add service_type to cab_types if not present
     try {
       await db.runAsync('ALTER TABLE cab_types ADD COLUMN service_type TEXT DEFAULT \'local\'');
       console.log('Added service_type to cab_types');
@@ -28,7 +18,6 @@ async function runMigration() {
       } else throw e;
     }
 
-    // 2. Recreate cab_types with UNIQUE(name, service_type)
     const tableInfo = await db.getAsync(
       "SELECT name FROM sqlite_master WHERE type='table' AND name='cab_types'"
     );
@@ -65,7 +54,6 @@ async function runMigration() {
       }
     }
 
-    // 3. Optional: add name, description, image_url to cabs if used by public APIs
     for (const col of [
       ['name', 'TEXT'],
       ['description', 'TEXT'],
@@ -76,12 +64,11 @@ async function runMigration() {
         console.log(`Added cabs.${col[0]}`);
       } catch (e) {
         if (e.message && e.message.includes('duplicate column')) {
-          // ignore
+
         } else throw e;
       }
     }
 
-    // 4. Create rate_meters table
     await db.runAsync(`
       CREATE TABLE IF NOT EXISTS rate_meters (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -101,7 +88,6 @@ async function runMigration() {
     `);
     console.log('Created rate_meters table (if not exists)');
 
-    // 5. Create local_package_rates table
     await db.runAsync(`
       CREATE TABLE IF NOT EXISTS local_package_rates (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -3,8 +3,6 @@ const db = require('../db/database');
 
 const router = express.Router();
 
-// Helper to normalize image_url column into array + primary URL
-// Also strips protocol/host to avoid mixed-content issues, keeping /uploads/... paths
 const normalizeCarOptionImages = (row) => {
   let imageUrls = [];
 
@@ -17,31 +15,33 @@ const normalizeCarOptionImages = (row) => {
         imageUrls = [parsed];
       }
     } catch {
-      // Not JSON, treat as single URL string
+
       imageUrls = [row.image_url];
     }
   }
 
   const normalizeUrl = (url) => {
     if (!url) return url;
+    const s = String(url).trim();
 
-    // If it's an absolute URL, strip protocol/host and keep the /uploads/... path
     try {
       const u = new URL(url);
       if (u.pathname && u.pathname.startsWith('/uploads/')) {
         return u.pathname;
       }
     } catch {
-      // Not a full URL, fall through
+
     }
 
-    // Fallback: look for /uploads/ segment in the string
-    const idx = url.indexOf('/uploads/');
+    const idx = s.indexOf('/uploads/');
     if (idx !== -1) {
-      return url.substring(idx);
+      return s.substring(idx);
     }
 
-    return url;
+    // Paths like "car-options/file.avif" or "uploads/car-options/file.avif" → always return /uploads/...
+    if (s.startsWith('/uploads/')) return s;
+    if (s.startsWith('uploads/')) return `/${s}`;
+    return s.startsWith('/') ? `/uploads${s}` : `/uploads/${s}`;
   };
 
   const normalizedUrls = imageUrls.map(normalizeUrl);
@@ -53,7 +53,6 @@ const normalizeCarOptionImages = (row) => {
   };
 };
 
-// Get all active car options (public)
 router.get('/', async (req, res) => {
   try {
     const { service_type } = req.query;
@@ -66,13 +65,13 @@ router.get('/', async (req, res) => {
     `;
     const params = [];
     
-    // If service_type is provided, only show cars assigned to cab types with that service_type
+
     if (service_type) {
       query += ` AND ct.service_type = ? 
                  AND ct.is_active = 1`;
       params.push(service_type);
     } else {
-      // If no service_type, only show cars that are assigned to any active cab type
+
       query += ` AND ct.is_active = 1`;
     }
     
@@ -82,7 +81,7 @@ router.get('/', async (req, res) => {
     console.log('[Car Options API] Params:', params);
     console.log('[Car Options API] Service Type:', service_type);
     
-    // Debug: Always check what cab types exist for this service_type
+
     if (service_type) {
       const debugQuery = `SELECT ct.id, ct.name, ct.service_type, ct.is_active, COUNT(co.id) as car_count 
                          FROM cab_types ct 
@@ -92,7 +91,7 @@ router.get('/', async (req, res) => {
       const debugResult = await db.allAsync(debugQuery, [service_type]);
       console.log('[Car Options API] Debug - All cab types for service_type:', service_type, ':', debugResult);
       
-      // Also check cars assigned to each cab type
+
       const carsDebugQuery = `SELECT co.id, co.name, co.cab_type_id, co.is_active, ct.name as cab_type_name, ct.service_type
                               FROM car_options co
                               LEFT JOIN cab_types ct ON co.cab_type_id = ct.id
@@ -107,7 +106,7 @@ router.get('/', async (req, res) => {
         is_active: c.is_active
       })));
       
-      // Debug: Check ALL cab types and their service_type (not just for this service_type)
+
       const allCabTypesQuery = `SELECT ct.id, ct.name, ct.service_type, ct.is_active, COUNT(co.id) as car_count
                                 FROM cab_types ct
                                 LEFT JOIN car_options co ON co.cab_type_id = ct.id AND co.is_active = 1
@@ -142,5 +141,3 @@ router.get('/', async (req, res) => {
 });
 
 module.exports = router;
-
-

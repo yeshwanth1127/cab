@@ -7,7 +7,6 @@ const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
 
-// User registration
 router.post(
   '/register',
   [
@@ -59,7 +58,6 @@ router.post(
   }
 );
 
-// Login (for both admins and regular users)
 router.post('/login', [
   body('username').notEmpty().withMessage('Username is required'),
   body('password').notEmpty().withMessage('Password is required'),
@@ -94,7 +92,6 @@ router.post('/login', [
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    // Fetch permissions if manager
     let permissions = [];
     if (user.role === 'manager') {
       const perms = await db.allAsync(
@@ -130,7 +127,6 @@ router.post('/login', [
   }
 });
 
-// Register admin user (requires admin authentication)
 router.post(
   '/register-admin',
   authenticateToken,
@@ -141,7 +137,7 @@ router.post(
   ],
   async (req, res) => {
     try {
-      // Check if current user is admin
+
       if (req.user.role !== 'admin') {
         return res.status(403).json({ error: 'Only admins can register other admin users' });
       }
@@ -153,17 +149,15 @@ router.post(
 
       const { username, email, password, role = 'admin', permissions = [] } = req.body;
 
-      // Validate role
       if (role !== 'admin' && role !== 'manager') {
         return res.status(400).json({ error: 'Role must be either "admin" or "manager"' });
       }
 
-      // Validate permissions if manager
       if (role === 'manager') {
         if (!Array.isArray(permissions)) {
           return res.status(400).json({ error: 'Permissions must be an array' });
         }
-        // Validate permission structure
+
         for (const perm of permissions) {
           if (!perm.section_key || typeof perm.can_view !== 'boolean' || typeof perm.can_edit !== 'boolean') {
             return res.status(400).json({ error: 'Invalid permission structure. Each permission must have section_key, can_view, and can_edit' });
@@ -189,7 +183,6 @@ router.post(
 
       const userId = result.lastID;
 
-      // Insert permissions if manager
       if (role === 'manager' && permissions.length > 0) {
         for (const perm of permissions) {
           try {
@@ -199,7 +192,7 @@ router.post(
             );
           } catch (permError) {
             console.error('Error inserting permission:', permError);
-            // Continue with other permissions
+
           }
         }
       }
@@ -220,7 +213,6 @@ router.post(
   }
 );
 
-// Get current user
 router.get('/me', authenticateToken, async (req, res) => {
   try {
     const user = await db.getAsync(
@@ -232,7 +224,6 @@ router.get('/me', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Fetch permissions if manager
     let permissions = [];
     if (user.role === 'manager') {
       const perms = await db.allAsync(

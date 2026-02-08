@@ -49,7 +49,7 @@
   color: #16a34a;
 }
 
-/* Local flow: cab types with rates and cabs */
+
 .local-cab-types {
   display: flex;
   flex-direction: column;
@@ -278,7 +278,7 @@
   background: #c2410c;
 }
 
-/* Unified cab card (same layout for local, airport, outstation – data from backend) */
+
 .unified-cab-cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
@@ -429,7 +429,7 @@
   background: #c2410c;
 }
 
-/* Success popup (fixed overlay, same as HomePage) */
+
 .car-options-success-overlay {
   position: fixed;
   inset: 0;
@@ -499,7 +499,7 @@
   color: #111827;
 }
 
-/* Re-confirm modal */
+
 .car-options-confirm-overlay {
   position: fixed;
   inset: 0;
@@ -763,7 +763,8 @@
   }
 
   .car-option-card {
-    /* Touch-friendly */
+    
+
     -webkit-tap-highlight-color: rgba(22, 163, 74, 0.2);
     touch-action: manipulation;
   }
@@ -812,7 +813,7 @@
   }
 }
 
-/* Touch optimizations */
+
 @media (hover: none) and (pointer: coarse) {
   .car-option-card:hover {
     transform: none;

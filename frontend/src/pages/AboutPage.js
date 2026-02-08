@@ -14,7 +14,8 @@ const AboutPage = () => {
 
       <section className="home-section about-section about-section-alt">
         <div className="home-section-inner about-two-panel">
-          {/* Left side – upper section content */}
+          {
+}
           <div className="about-hero-left">
             <h2>About Namma Cabs</h2>
             <h3>Your trusted airport, local, outstation & corporate cab partner in Bangalore</h3>
@@ -33,7 +34,8 @@ const AboutPage = () => {
             </p>
           </div>
 
-          {/* Right side – lower section content */}
+          {
+}
           <div className="about-hero-right">
             <h2>Why Ride With Us</h2>
             <p className="about-intro">
@@ -77,7 +79,8 @@ const AboutPage = () => {
         </div>
       </section>
 
-      {/* Corporate Services Section - Full Width Highlight */}
+      {
+}
       <section className="home-section corporate-section" style={{
         background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.98) 0%, rgba(30, 41, 59, 0.95) 100%)',
         padding: '60px 0',

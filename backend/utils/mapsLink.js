@@ -1,11 +1,4 @@
-/**
- * Build a single-location Google Maps search URL (pickup or drop point).
- * Uses coordinates when available for accuracy; URL-encodes the value.
- * @param {string|null} address - Text address (from_location or to_location)
- * @param {number|null} lat - Latitude
- * @param {number|null} lng - Longitude
- * @returns {string|null} Google Maps search URL or null
- */
+
 function buildLocationSearchUrl(address, lat, lng) {
   if (lat != null && lng != null) {
     const la = Number(lat);
@@ -21,14 +14,6 @@ function buildLocationSearchUrl(address, lat, lng) {
   return null;
 }
 
-/**
- * Generate map link(s) for a booking by service type:
- * - Local: pickup location link only.
- * - Airport: pickup location link + drop location link.
- * - Outstation: pickup location link only.
- * @param {Object} booking - { service_type, from_location, to_location, pickup_lat, pickup_lng, destination_lat, destination_lng }
- * @returns {{ pickup: string|null, drop: string|null }}
- */
 function generateGoogleMapsLink(booking) {
   const serviceType = (booking.service_type || 'local').toLowerCase();
   const pickupUrl = buildLocationSearchUrl(

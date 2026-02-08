@@ -3,7 +3,6 @@ const db = require('../db/database');
 
 const router = express.Router();
 
-// Get all active routes (public)
 router.get('/', async (req, res) => {
   try {
     const result = await db.allAsync(
@@ -16,7 +15,6 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Search routes
 router.get('/search', async (req, res) => {
   try {
     const { from, to } = req.query;

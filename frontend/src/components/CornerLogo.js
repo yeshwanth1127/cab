@@ -29,7 +29,7 @@ const CornerLogo = () => {
     <a href="/" className={className} aria-label="Namma Cabs home">
       {showImage ? (
         <img
-          src="/logo.png"
+          src="/logo_final.jpeg"
           alt="Namma Cabs"
           className="corner-logo__img"
           onError={() => setShowImage(false)}
@@ -45,5 +45,3 @@ const CornerLogo = () => {
 };
 
 export default CornerLogo;
-
-

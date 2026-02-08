@@ -83,7 +83,7 @@ const MainNavbar = ({ logoOnly = false }) => {
 
     layout();
     
-    // Throttle resize handler for performance
+
     let resizeTimeout;
     const onResize = () => {
       clearTimeout(resizeTimeout);
@@ -144,7 +144,6 @@ const MainNavbar = ({ logoOnly = false }) => {
   const navbarClass = `navbar${hidden ? ' navbar--hidden' : ''}`;
   const linksClass = `nav-links${menuOpen ? ' nav-links--open' : ''}`;
 
-  // Build nav items array (skip when logoOnly)
   const navItems = logoOnly
     ? []
     : [
@@ -183,16 +182,12 @@ const MainNavbar = ({ logoOnly = false }) => {
           aria-label="Namma Cabs home"
           onMouseEnter={handleLogoEnter}
         >
-          <img 
-            src="/nammacabs-logo.png" 
-            alt="Namma Cabs" 
-            style={{ 
-              height: '140px', 
-              width: 'auto',
-              objectFit: 'contain',
-              marginRight: '10px'
-            }}
-          />
+          <span className="navbar-logo-circle">
+            <img 
+              src="/logo_final.jpeg" 
+              alt="Namma Cabs"
+            />
+          </span>
           <span className="logo-text" ref={logoTextRef} style={{ display: 'none' }}>
             <span className="logo-namma">namma</span>
             <span className="logo-cabs">cabs</span>
@@ -314,7 +309,7 @@ const MainNavbar = ({ logoOnly = false }) => {
                       ) : item.isButton ? (
                         <button
                           type="button"
-                          className="pill nav-pill-button"
+                          className={`pill nav-pill-button${item.label === 'Logout' ? ' pill--black' : ''}`}
                           onClick={item.onClick}
                           onMouseEnter={() => handleEnter(i)}
                           onMouseLeave={() => handleLeave(i)}
@@ -334,7 +329,7 @@ const MainNavbar = ({ logoOnly = false }) => {
                       ) : (
                         <a
                           href={item.href}
-                          className="pill"
+                          className={`pill${item.label === 'Admin' || item.label === 'Logout' ? ' pill--black' : ''}`}
                           onClick={closeMenu}
                           onMouseEnter={() => handleEnter(i)}
                           onMouseLeave={() => handleLeave(i)}
@@ -365,4 +360,3 @@ const MainNavbar = ({ logoOnly = false }) => {
 };
 
 export default MainNavbar;
-

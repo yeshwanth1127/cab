@@ -19,13 +19,13 @@ import { loadGoogleMaps } from './utils/googleMapsLoader';
 import './App.css';
 
 function App() {
-  // Preload Google Maps on app start (not on demand)
+
   useEffect(() => {
     const googleKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY_NEW;
     if (googleKey && !window.google?.maps) {
-      // Load in background, don't block UI
+
       loadGoogleMaps(googleKey).catch(() => {
-        // Silently fail - will retry when needed
+
       });
     }
   }, []);
@@ -55,4 +55,3 @@ function App() {
 }
 
 export default App;
-

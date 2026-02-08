@@ -1,7 +1,3 @@
-/**
- * Single date+time field. Value/onChange: "YYYY-MM-DDTHH:mm" (datetime-local format).
- * Uses one input on all screens so mobile doesn't show two separate boxes.
- */
 
 import React from 'react';
 import './DateTimePicker.css';

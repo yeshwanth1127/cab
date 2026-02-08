@@ -1,14 +1,8 @@
 const https = require('https');
 const querystring = require('querystring');
 
-/**
- * Send WhatsApp message using UltraMsg API
- * @param {string} phone - Phone number with country code (e.g., +919876543210)
- * @param {string} message - Message text to send
- * @returns {Promise<{success: boolean, message?: string, error?: string}>}
- */
 const sendWhatsAppMessage = (phone, message) => {
-  // Don't send WhatsApp if service is not configured
+
   console.log('[WhatsApp DEBUG] ULTRAMSG_API_URL:', process.env.ULTRAMSG_API_URL ? 'SET' : 'NOT SET');
   console.log('[WhatsApp DEBUG] ULTRAMSG_TOKEN:', process.env.ULTRAMSG_TOKEN ? 'SET (length: ' + process.env.ULTRAMSG_TOKEN.length + ')' : 'NOT SET');
   
@@ -20,22 +14,19 @@ const sendWhatsAppMessage = (phone, message) => {
 
   return new Promise((resolve, reject) => {
     try {
-      // Extract instance ID from ULTRAMSG_API_URL
-      // Supports both formats:
-      // - https://api.ultramsg.com/instance158421
-      // - instance158421
+
       let instanceId = process.env.ULTRAMSG_API_URL;
       if (instanceId.includes('ultramsg.com')) {
-        // Extract instance ID from full URL
+
         const match = instanceId.match(/\/instance\d+/);
         if (match) {
-          instanceId = match[0].substring(1); // Remove leading slash
+          instanceId = match[0].substring(1);
         }
       }
 
       const path = `/${instanceId}/messages/chat`;
       
-      // Prepare POST data
+
       const postData = querystring.stringify({
         token: process.env.ULTRAMSG_TOKEN,
         to: phone,
@@ -65,7 +56,6 @@ const sendWhatsAppMessage = (phone, message) => {
             const body = Buffer.concat(chunks).toString();
             console.log('WhatsApp API response:', body);
 
-            // Parse response if it's JSON
             let responseData;
             try {
               responseData = JSON.parse(body);
@@ -73,7 +63,6 @@ const sendWhatsAppMessage = (phone, message) => {
               responseData = { body: body };
             }
 
-            // Check if request was successful (status 200-299)
             if (res.statusCode >= 200 && res.statusCode < 300) {
               console.log(`WhatsApp message sent successfully to ${phone}`);
               resolve({ success: true, message: 'WhatsApp message sent successfully', response: responseData });
@@ -94,7 +83,6 @@ const sendWhatsAppMessage = (phone, message) => {
         resolve({ success: false, error: error.message });
       });
 
-      // Write POST data
       req.write(postData);
       req.end();
 
@@ -108,4 +96,3 @@ const sendWhatsAppMessage = (phone, message) => {
 module.exports = {
   sendWhatsAppMessage,
 };
-

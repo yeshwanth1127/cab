@@ -112,7 +112,7 @@
   gap: 6px;
 }
 
-/* We show the arrow in the link text itself, so no extra icon here */
+
 .login-footer a::before {
   content: '';
 }
@@ -122,7 +122,7 @@
   transform: translateX(-4px);
 }
 
-/* Form Group Styling */
+
 .form-group {
   margin-bottom: 20px;
 }
@@ -167,7 +167,7 @@
   color: #94a3b8;
 }
 
-/* Error Message Styling */
+
 .error-message {
   background: #fee2e2;
   color: #991b1b;
@@ -178,7 +178,7 @@
   border-left: 4px solid #dc2626;
 }
 
-/* Button Block Styling */
+
 .btn-block {
   width: 100%;
 }
@@ -216,7 +216,8 @@
 
   .login-footer a {
     font-size: 13px;
-    /* Touch-friendly */
+    
+
     -webkit-tap-highlight-color: rgba(22, 163, 74, 0.3);
     touch-action: manipulation;
     padding: 8px;
@@ -224,12 +225,14 @@
   }
 
   .form-group input {
-    font-size: 16px; /* Prevent zoom on iOS */
+    font-size: 16px; 
+
     padding: 12px 14px;
   }
 
   .btn {
-    /* Touch-friendly */
+    
+
     min-height: 44px;
     -webkit-tap-highlight-color: rgba(22, 163, 74, 0.3);
     touch-action: manipulation;
@@ -257,7 +260,7 @@
   }
 }
 
-/* Touch optimizations */
+
 @media (hover: none) and (pointer: coarse) {
   .login-footer a:hover {
     transform: none;
@@ -270,7 +273,7 @@
   }
 }
 
-/* Admin login button text color */
+
 .admin-login-page .btn-primary {
   color: #000000 !important;
 }
@@ -279,4 +282,4 @@
   color: #000000 !important;
 }
 
-/* no hover transform for the (now empty) ::before */
+

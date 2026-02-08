@@ -1,12 +1,3 @@
-/**
- * Migration: Add Manager Role and Permissions Support
- * 
- * This migration:
- * 1. Updates users table to allow 'manager' role
- * 2. Creates manager_permissions table for section-based permissions
- * 
- * Run this with: node db/migrations/add-manager-role.js
- */
 
 const db = require('../database');
 
@@ -14,30 +5,20 @@ async function runMigration() {
   try {
     console.log('🔄 Starting migration: Add Manager Role and Permissions...');
 
-    // Step 1: Update users table role constraint to include 'manager'
-    // SQLite doesn't support ALTER TABLE to modify CHECK constraints directly
-    // So we'll need to recreate the constraint by:
-    // 1. Creating a new table with the updated constraint
-    // 2. Copying data
-    // 3. Dropping old table
-    // 4. Renaming new table
     
-    // Check if manager role already exists
+
     try {
       const testUser = await db.getAsync("SELECT role FROM users WHERE role = 'manager' LIMIT 1");
       if (testUser) {
         console.log('✅ Manager role already exists in database');
       }
     } catch (e) {
-      // Continue with migration
+
     }
 
-    // For SQLite: We'll use a workaround - just try to insert/update with manager role
-    // The CHECK constraint will be updated in schema.sql for new installations
-    // For existing databases, we'll remove the constraint and add a new one
     
     if (process.env.DB_HOST) {
-      // MySQL
+
       try {
         await db.runAsync(`
           ALTER TABLE users 
@@ -46,7 +27,7 @@ async function runMigration() {
         `);
         console.log('✅ Updated users table role constraint (MySQL)');
       } catch (err) {
-        // Try alternative MySQL syntax
+
         try {
           await db.runAsync(`
             ALTER TABLE users 
@@ -58,14 +39,14 @@ async function runMigration() {
         }
       }
     } else {
-      // SQLite - need to recreate table
+
       try {
-        // Check if constraint needs updating
+
         const tableInfo = await db.allAsync("PRAGMA table_info(users)");
         const roleColumn = tableInfo.find(col => col.name === 'role');
         
         if (roleColumn) {
-          // SQLite workaround: We'll create a new table and copy data
+
           console.log('📋 Creating new users table with manager role support...');
           
           await db.runAsync(`
@@ -79,16 +60,16 @@ async function runMigration() {
             )
           `);
           
-          // Copy data
+
           await db.runAsync(`
             INSERT INTO users_new (id, username, email, password_hash, role, created_at)
             SELECT id, username, email, password_hash, role, created_at FROM users
           `);
           
-          // Drop old table
+
           await db.runAsync('DROP TABLE users');
           
-          // Rename new table
+
           await db.runAsync('ALTER TABLE users_new RENAME TO users');
           
           console.log('✅ Updated users table role constraint (SQLite)');
@@ -98,7 +79,6 @@ async function runMigration() {
       }
     }
 
-    // Step 2: Create manager_permissions table
     const managerPermissionsSQL = process.env.DB_HOST
       ? `CREATE TABLE IF NOT EXISTS manager_permissions (
           id INT PRIMARY KEY AUTO_INCREMENT,
@@ -145,18 +125,13 @@ async function runMigration() {
     console.error('❌ Migration failed:', error);
     process.exit(1);
   } finally {
-    // Don't close database connection - it's shared
+
     process.exit(0);
   }
 }
 
-// Run migration if called directly
 if (require.main === module) {
   runMigration();
 }
 
 module.exports = { runMigration };
-
-
-
-
