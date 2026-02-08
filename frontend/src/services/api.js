@@ -19,6 +19,12 @@ function getBackendBaseURL() {
   return '';
 }
 
+function shouldUseApiUploadsPath() {
+  if (typeof apiBaseURL !== 'string') return false;
+  if (apiBaseURL.startsWith('http://') || apiBaseURL.startsWith('https://')) return false;
+  return true;
+}
+
 export function getImageUrl(relativePath) {
   if (!relativePath || typeof relativePath !== 'string') return null;
   const trimmed = relativePath.trim();
@@ -34,6 +40,10 @@ export function getImageUrl(relativePath) {
   }
 
   const backendBaseURL = getBackendBaseURL();
+  if (shouldUseApiUploadsPath() && backendBaseURL) {
+    const uploadsSegment = path.replace(/^\/uploads\/?/, '/');
+    return `${backendBaseURL}/api/uploads${uploadsSegment}`;
+  }
   if (backendBaseURL) {
     return `${backendBaseURL}${path}`;
   }

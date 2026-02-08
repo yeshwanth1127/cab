@@ -259,7 +259,7 @@ router.put('/bookings/:id', async (req, res) => {
 router.get('/cabs', async (req, res) => {
   try {
     const rows = await db.allAsync(
-      `SELECT c.id, c.vehicle_number, c.name, c.driver_id, c.driver_name, c.driver_phone, c.cab_type_id, ct.name as cab_type_name
+      `SELECT c.id, c.vehicle_number, c.name, c.driver_id, c.driver_name, c.driver_phone, c.cab_type_id, ct.name as cab_type_name, ct.service_type as cab_type_service_type
        FROM cabs c
        LEFT JOIN cab_types ct ON c.cab_type_id = ct.id
        WHERE c.is_active = 1
@@ -274,6 +274,7 @@ router.get('/cabs', async (req, res) => {
       driver_phone: r.driver_phone ?? r.DRIVER_PHONE ?? '',
       cab_type_id: r.cab_type_id ?? r.CAB_TYPE_ID,
       cab_type_name: r.cab_type_name ?? r.CAB_TYPE_NAME ?? '—',
+      cab_type_service_type: r.cab_type_service_type ?? r.CAB_TYPE_SERVICE_TYPE ?? null,
     }));
     res.json(cabs);
   } catch (error) {

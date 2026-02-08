@@ -79,10 +79,26 @@ function normalizeImageUrl(url) {
   if (s.startsWith('http://') || s.startsWith('https://')) return s;
   if (s.startsWith('/uploads/')) return s;
   if (s.startsWith('uploads/')) return `/${s}`;
-
-  if (!s.includes('/')) return s;
-
+  if (s.indexOf('/uploads/') !== -1) return s.substring(s.indexOf('/uploads/'));
+  if (!s.includes('/')) return `/uploads/car-options/${s}`;
   return s.startsWith('/') ? `/uploads${s}` : `/uploads/${s}`;
+}
+
+async function getDefaultImageForCabType(cabTypeId) {
+  const row = await db.getAsync(
+    'SELECT image_url FROM car_options WHERE cab_type_id = ? AND is_active = 1 ORDER BY sort_order ASC, id ASC LIMIT 1',
+    [cabTypeId]
+  );
+  if (!row || !row.image_url) return null;
+  let firstUrl = null;
+  try {
+    const parsed = JSON.parse(row.image_url);
+    firstUrl = Array.isArray(parsed) ? parsed[0] : (typeof parsed === 'string' ? parsed : null);
+  } catch {
+    firstUrl = row.image_url;
+  }
+  if (!firstUrl || typeof firstUrl !== 'string') return null;
+  return normalizeImageUrl(firstUrl.trim());
 }
 
 const LOCAL_OFFER_CAB_TYPE_NAMES = ['Innova Crysta', 'SUV', 'Sedan'];
@@ -99,27 +115,47 @@ router.get('/local-offers', async (req, res) => {
       );
       if (!nameAllowed) continue;
 
-      const rates = await db.allAsync(
-        `SELECT hours, package_fare, extra_hour_rate FROM local_package_rates WHERE cab_type_id = ? ORDER BY hours`,
-        [ct.id]
-      );
-      const extraHourRow = rates.find((r) => r.extra_hour_rate != null && r.extra_hour_rate !== '');
-      const extraHourRate = extraHourRow ? Number(extraHourRow.extra_hour_rate) : null;
-      const packageRates = {};
-      (rates || []).forEach((r) => {
-        if (r.hours != null) packageRates[r.hours] = r.package_fare != null ? Number(r.package_fare) : null;
-      });
-      const hasConfiguredRate = [4, 8, 12].some(
-        (h) => packageRates[h] != null && !Number.isNaN(packageRates[h]) && packageRates[h] > 0
-      );
-      if (!hasConfiguredRate) continue;
-
       const cabsRaw = await db.allAsync(
         `SELECT id, vehicle_number, name, description, image_url, driver_name, driver_phone
          FROM cabs WHERE cab_type_id = ? AND is_active = 1 AND is_available = 1 ORDER BY vehicle_number`,
         [ct.id]
       );
-      const cabs = (cabsRaw || []).map((c) => ({ ...c, image_url: normalizeImageUrl(c.image_url) || c.image_url }));
+      const defaultCabTypeImage = await getDefaultImageForCabType(ct.id).catch(() => null);
+      const cabs = (cabsRaw || []).map((c) => {
+        const normalized = normalizeImageUrl(c.image_url) || c.image_url;
+        return { ...c, image_url: normalized || defaultCabTypeImage };
+      });
+      if (cabs.length === 0) continue;
+
+      let rates = await db.allAsync(
+        `SELECT hours, package_fare, extra_hour_rate FROM local_package_rates WHERE cab_type_id = ? ORDER BY hours`,
+        [ct.id]
+      );
+      if (!rates || rates.length === 0) {
+        await db.runAsync(
+          'INSERT INTO local_package_rates (cab_type_id, hours, package_fare, extra_hour_rate) VALUES (?, 4, 0, 0)',
+          [ct.id]
+        );
+        await db.runAsync(
+          'INSERT INTO local_package_rates (cab_type_id, hours, package_fare, extra_hour_rate) VALUES (?, 8, 0, 0)',
+          [ct.id]
+        );
+        await db.runAsync(
+          'INSERT INTO local_package_rates (cab_type_id, hours, package_fare, extra_hour_rate) VALUES (?, 12, 0, 0)',
+          [ct.id]
+        );
+        rates = await db.allAsync(
+          'SELECT hours, package_fare, extra_hour_rate FROM local_package_rates WHERE cab_type_id = ? ORDER BY hours',
+          [ct.id]
+        );
+      }
+      const extraHourRow = (rates || []).find((r) => r.extra_hour_rate != null && r.extra_hour_rate !== '');
+      const extraHourRate = extraHourRow ? Number(extraHourRow.extra_hour_rate) : null;
+      const packageRates = {};
+      (rates || []).forEach((r) => {
+        if (r.hours != null) packageRates[r.hours] = r.package_fare != null ? Number(r.package_fare) : null;
+      });
+
       const baseFare = ct.base_fare != null ? Number(ct.base_fare) : 0;
       const capacity = ct.capacity != null ? Number(ct.capacity) : 4;
       result.push({
@@ -165,7 +201,11 @@ router.get('/airport-offers', async (req, res) => {
          FROM cabs WHERE cab_type_id = ? AND is_active = 1 AND is_available = 1 ORDER BY vehicle_number`,
         [ct.id]
       );
-      const cabs = (cabsRaw || []).map((c) => ({ ...c, image_url: normalizeImageUrl(c.image_url) || c.image_url }));
+      const defaultCabTypeImage = await getDefaultImageForCabType(ct.id).catch(() => null);
+      const cabs = (cabsRaw || []).map((c) => {
+        const normalized = normalizeImageUrl(c.image_url) || c.image_url;
+        return { ...c, image_url: normalized || defaultCabTypeImage };
+      });
       const capacity = ct.capacity != null ? Number(ct.capacity) : 4;
       result.push({
         id: ct.id,
@@ -270,7 +310,11 @@ router.get('/outstation-offers', async (req, res) => {
          FROM cabs WHERE cab_type_id = ? AND is_active = 1 AND is_available = 1 ORDER BY vehicle_number`,
         [ct.id]
       );
-      const cabs = (cabsRaw || []).map((c) => ({ ...c, image_url: normalizeImageUrl(c.image_url) || c.image_url }));
+      const defaultCabTypeImage = await getDefaultImageForCabType(ct.id).catch(() => null);
+      const cabs = (cabsRaw || []).map((c) => {
+        const normalized = normalizeImageUrl(c.image_url) || c.image_url;
+        return { ...c, image_url: normalized || defaultCabTypeImage };
+      });
       const capacity = ct.capacity != null ? Number(ct.capacity) : 4;
       const firstRate = oneWay || roundTrip || multiStop;
       result.push({

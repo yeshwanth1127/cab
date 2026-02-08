@@ -132,21 +132,15 @@ const HomePage = () => {
   const handleContinueToCabSelection = () => {
     if (!fromAddress.trim()) return;
     if (!numberOfHours) return;
-    setLocalOffersError('');
-    setLocalOffersLoading(true);
-    api
-      .get('/cabs/local-offers')
-      .then((res) => {
-        setLocalOffers(res.data || []);
-      })
-      .catch((err) => {
-        console.error(err);
-        setLocalOffersError('Unable to load cab types. Please try again.');
-        setLocalOffers([]);
-      })
-      .finally(() => {
-        setLocalOffersLoading(false);
-      });
+    navigate('/car-options', {
+      state: {
+        service_type: 'local',
+        from_location: fromAddress,
+        number_of_hours: numberOfHours,
+        from_lat: fromLocation?.lat ?? null,
+        from_lng: fromLocation?.lng ?? null,
+      },
+    });
   };
 
   const handleBookNow = (cab, cabType) => {
@@ -478,8 +472,7 @@ const HomePage = () => {
                 </p>
               </div>
 
-              {localOffers.length === 0 && (
-                <div className="home-local-form">
+              <div className="home-local-form">
                   <div className="home-form-group">
                     <label className="home-form-label">Pickup location</label>
                     <LocationInput
@@ -515,197 +508,6 @@ const HomePage = () => {
                     Continue
                   </button>
                 </div>
-              )}
-
-              {localOffersLoading && (
-                <p className="home-hero-tagline">Loading cab options…</p>
-              )}
-              {localOffersError && (
-                <p className="home-local-offers-error">{localOffersError}</p>
-              )}
-
-              {!localOffersLoading && localOffers.length > 0 && (
-                <div className="home-local-cab-types-wrap">
-                  <div className="home-flow-header">
-                    <button
-                      type="button"
-                      className="home-back-link"
-                      onClick={() => {
-                        setLocalOffers([]);
-                        setLocalOffersError('');
-                      }}
-                    >
-                      <Icon name="arrowBack" size={18} className="home-back-link-icon" /> Change location or hours
-                    </button>
-                    <h2 className="home-flow-title">Choose your cab</h2>
-                    <p className="home-flow-desc">
-                      From: {fromAddress} · {numberOfHours}h package
-                    </p>
-                  </div>
-                  <div className="home-local-cab-types">
-                    {localOffers.map((ct) => {
-                      const baseFare = Number(ct.baseFare) || 0;
-                      const packageForHours =
-                        numberOfHours && ct.packageRates?.[numberOfHours] != null
-                          ? Number(ct.packageRates[numberOfHours])
-                          : null;
-                      const rateForSelected =
-                        packageForHours != null ? baseFare + packageForHours : null;
-                      const firstCarImage =
-                        ct.cabs?.length > 0 && ct.cabs[0].image_url
-                          ? getImageUrl(ct.cabs[0].image_url)
-                          : null;
-                      return (
-                        <div key={ct.id} className="home-local-cab-type-card">
-                          <div className="home-local-cab-type-header">
-                            <div className="home-local-cab-type-image-wrap">
-                              {firstCarImage ? (
-                                <img
-                                  src={firstCarImage}
-                                  alt={ct.name}
-                                  className="home-local-cab-type-image"
-                                  onError={(e) => {
-                                    e.target.style.display = 'none';
-                                  }}
-                                />
-                              ) : (
-                                <div className="home-local-cab-type-image-placeholder">
-                                  <Icon name="car" size={48} />
-                                </div>
-                              )}
-                            </div>
-                            <div className="home-local-cab-type-info">
-                              <h3 className="home-local-cab-type-name">
-                                {ct.name}
-                              </h3>
-                              {ct.description && (
-                                <p className="home-local-cab-type-desc">
-                                  {ct.description}
-                                </p>
-                              )}
-                              <div className="home-local-cab-type-rates">
-                                <span className="home-local-rate-label">
-                                  Packages:
-                                </span>
-                                {[4, 8, 12].map((h) => (
-                                  <span
-                                    key={h}
-                                    className={`home-local-rate-pill ${
-                                      numberOfHours === h
-                                        ? 'home-local-rate-pill-selected'
-                                        : ''
-                                    }`}
-                                  >
-                                    {h}h: ₹
-                                    {ct.packageRates?.[h] != null
-                                      ? ct.packageRates[h]
-                                      : '—'}
-                                  </span>
-                                ))}
-                                {ct.extraHourRate != null && (
-                                  <span className="home-local-rate-extra">
-                                    Extra hr: ₹{ct.extraHourRate}
-                                  </span>
-                                )}
-                              </div>
-                              {baseFare > 0 && (
-                                <div className="home-local-cab-type-base-fare">
-                                  Base fare: ₹{baseFare}
-                                </div>
-                              )}
-                              {rateForSelected != null && (
-                                <div className="home-local-cab-type-selected-rate">
-                                  Your {numberOfHours}h rate:{' '}
-                                  <strong>₹{rateForSelected}</strong>
-                                  {baseFare > 0 && <span className="home-local-rate-includes-base"> (incl. base fare)</span>}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          <div className="home-local-cabs-list">
-                            <h4 className="home-local-cabs-list-title">
-                              Cabs
-                            </h4>
-                            {ct.cabs?.length > 0 ? (
-                              <div className="home-local-cabs-grid">
-                                {ct.cabs.map((cab) => {
-                                  const cabImageUrl = cab.image_url
-                                    ? getImageUrl(cab.image_url)
-                                    : null;
-                                  return (
-                                    <div
-                                      key={cab.id}
-                                      className="home-local-cab-card"
-                                    >
-                                      <div className="home-local-cab-image-wrap">
-                                        {cabImageUrl ? (
-                                          <img
-                                            src={cabImageUrl}
-                                            alt={
-                                              cab.name || cab.vehicle_number
-                                            }
-                                            className="home-local-cab-image"
-                                            onError={(e) => {
-                                              e.target.style.display = 'none';
-                                            }}
-                                          />
-                                        ) : (
-                                          <div className="home-local-cab-image-placeholder">
-                                            <Icon name="car" size={48} />
-                                          </div>
-                                        )}
-                                      </div>
-                                      <div className="home-local-cab-details">
-                                        <div className="home-local-cab-vehicle">
-                                          {cab.vehicle_number}
-                                        </div>
-                                        {cab.name && (
-                                          <div className="home-local-cab-name">
-                                            {cab.name}
-                                          </div>
-                                        )}
-                                        {cab.driver_name && (
-                                          <div className="home-local-cab-driver">
-                                            Driver: {cab.driver_name}
-                                          </div>
-                                        )}
-                                        {cab.driver_phone && (
-                                          <div className="home-local-cab-phone">
-                                            {cab.driver_phone}
-                                          </div>
-                                        )}
-                                        {rateForSelected != null && (
-                                          <div className="home-local-cab-type-selected-rate">
-                                            ₹{rateForSelected} ({numberOfHours}
-                                            h)
-                                          </div>
-                                        )}
-                                        <button
-                                          type="button"
-                                          className="home-continue-btn"
-                                          onClick={() =>
-                                            handleBookNow(cab, ct)
-                                          }
-                                        >
-                                          Book Now
-                                        </button>
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            ) : (
-                              <p className="home-local-cabs-empty">
-                                No cabs added for this type.
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
             </>
           )}
         </div>

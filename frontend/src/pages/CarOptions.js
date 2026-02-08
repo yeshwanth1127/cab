@@ -118,13 +118,10 @@ const CarOptions = () => {
     } = opts;
     const imageUrl = cab?.image_url ? getImageUrl(cab.image_url) : (ct.cabs?.[0]?.image_url ? getImageUrl(ct.cabs[0].image_url) : null);
     const seating = ct.seatingCapacity != null ? `${ct.seatingCapacity - 1}+1 seater` : '—';
-    const luggage = ct.luggageCapacity != null ? `${ct.luggageCapacity} bags` : '—';
-    const acText = ct.hasAc === true ? 'Ac' : ct.hasAc === false ? 'Non-Ac' : '—';
     const gstText = ct.gstIncluded === true ? 'Includes GST' : ct.gstIncluded === false ? 'Excludes GST' : 'Includes GST';
     const driverText = driverCharges == null || Number(driverCharges) === 0 ? 'Included' : `₹${driverCharges}`;
     const nightText = nightCharges == null || Number(nightCharges) === 0 ? 'Included' : `₹${nightCharges}`;
     const extraKmText = extraPerKm != null && Number(extraPerKm) >= 0 ? `₹${extraPerKm}/KM` : '—';
-    const includedKmText = includedKm != null ? `${includedKm} KM` : '—';
 
     return (
       <div key={cab?.id ?? ct.id} className="unified-cab-card">
@@ -135,35 +132,34 @@ const CarOptions = () => {
             <div className="unified-cab-card-image-placeholder"><Icon name="car" size={48} /></div>
           )}
         </div>
-        <div className="unified-cab-card-features">
-          <span className="unified-cab-card-feature">{seating}</span>
-          <span className="unified-cab-card-feature">{luggage}</span>
-          <span className="unified-cab-card-feature">{acText}</span>
+        <div className="unified-cab-card-seating-row">
+          <span className="unified-cab-card-seating">{seating}</span>
+          <span className="unified-cab-card-seating-dash">—</span>
         </div>
         <div className="unified-cab-card-fare">
           <span className="unified-cab-card-fare-amount">₹{displayFare != null ? displayFare : '—'}/-</span>
           <p className="unified-cab-card-gst">{gstText}</p>
-          <p className="unified-cab-card-service-label">{serviceLabel}</p>
+          <p className="unified-cab-card-service-label">{ct.name}</p>
         </div>
         <div className="unified-cab-card-breakdown">
           <div className="unified-cab-card-breakdown-row">
-            <span>Included Km</span>
-            <span>{includedKmText}</span>
+            <span className="unified-cab-card-breakdown-label">Included Km</span>
+            <span className="unified-cab-card-breakdown-value">{includedKm != null ? `${includedKm} KM` : '—'}</span>
           </div>
           <div className="unified-cab-card-breakdown-row">
-            <span>Extra fare/Km</span>
-            <span>{extraKmText}</span>
+            <span className="unified-cab-card-breakdown-label">Extra fare/Km</span>
+            <span className="unified-cab-card-breakdown-value">{extraKmText}</span>
           </div>
           <div className="unified-cab-card-breakdown-row">
-            <span>Driver Charges</span>
-            <span>{driverText}</span>
+            <span className="unified-cab-card-breakdown-label">Driver Charges</span>
+            <span className="unified-cab-card-breakdown-value">{driverText}</span>
           </div>
           <div className="unified-cab-card-breakdown-row">
-            <span>Night Charges</span>
-            <span>{nightText}</span>
+            <span className="unified-cab-card-breakdown-label">Night Charges</span>
+            <span className="unified-cab-card-breakdown-value">{nightText}</span>
           </div>
         </div>
-        <div className="unified-cab-card-links">
+        <div className="unified-cab-card-terms-block">
           <a href="/terms" className="unified-cab-card-link">Terms &amp; Condition</a>
           <span className="unified-cab-card-link-sep">|</span>
           <a href="/fare-details" className="unified-cab-card-link">Fare Details</a>

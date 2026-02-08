@@ -1,8 +1,26 @@
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 const { body, param, query, validationResult } = require('express-validator');
 const db = require('../db/database');
 
 const router = express.Router();
+
+const carOptionsUploadDir = path.join(__dirname, '../uploads/car-options');
+if (!fs.existsSync(carOptionsUploadDir)) {
+  fs.mkdirSync(carOptionsUploadDir, { recursive: true });
+}
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, carOptionsUploadDir),
+    filename: (_req, file, cb) => {
+      const safe = (file.originalname || 'image').replace(/[^a-zA-Z0-9._-]/g, '_');
+      cb(null, `${Date.now()}-${safe}`);
+    },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
 
 function getNum(row, key, defaultVal = 0) {
   if (!row) return defaultVal;
@@ -45,6 +63,21 @@ router.get(
           )
         );
       }
+      // Deduplicate by name (case-insensitive): keep one row per name (prefer lowest id), sum cab_count
+      const byKey = new Map();
+      for (const row of result) {
+        const key = (row.name || '').trim().toLowerCase();
+        const cabCount = (row.cab_count != null ? Number(row.cab_count) : 0) || 0;
+        const existing = byKey.get(key);
+        if (!existing) {
+          byKey.set(key, { ...row, cab_count: cabCount });
+        } else if (row.id < existing.id) {
+          byKey.set(key, { ...row, cab_count: (existing.cab_count != null ? Number(existing.cab_count) : 0) + cabCount });
+        } else {
+          existing.cab_count = (existing.cab_count != null ? Number(existing.cab_count) : 0) + cabCount;
+        }
+      }
+      result = Array.from(byKey.values()).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       res.json(result);
     } catch (error) {
       console.error('Error fetching rate-meter cab types:', error);
@@ -146,10 +179,19 @@ router.get(
       const errors = validationResult(req);
       if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
       const { cab_type_id } = req.query;
+      const ct = await db.getAsync('SELECT id, name, service_type FROM cab_types WHERE id = ? AND is_active = 1', [cab_type_id]);
+      if (!ct) return res.json([]);
+      const sameNameIds = await db.allAsync(
+        `SELECT id FROM cab_types WHERE is_active = 1 AND service_type = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))`,
+        [ct.service_type, ct.name]
+      );
+      const ids = (sameNameIds || []).map((r) => r.id);
+      if (ids.length === 0) return res.json([]);
+      const placeholders = ids.map(() => '?').join(',');
       const rows = await db.allAsync(
         `SELECT id, cab_type_id, vehicle_number, driver_name, driver_phone, name, description, image_url, is_available, is_active
-         FROM cabs WHERE cab_type_id = ? AND is_active = 1 ORDER BY vehicle_number`,
-        [cab_type_id]
+         FROM cabs WHERE cab_type_id IN (${placeholders}) AND is_active = 1 ORDER BY vehicle_number`,
+        ids
       );
       res.json(rows || []);
     } catch (error) {
@@ -194,12 +236,15 @@ router.post(
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
-      const { cab_type_id, vehicle_number, driver_name, driver_phone, name, description, image_url } = req.body;
+      const { cab_type_id, vehicle_number, driver_name, driver_phone, name, description, image_url, create_only } = req.body;
       const ct = await db.getAsync('SELECT id FROM cab_types WHERE id = ? AND is_active = 1', [cab_type_id]);
       if (!ct) return res.status(400).json({ error: 'Cab type not found' });
       const vn = vehicle_number.trim();
       const existing = await db.getAsync('SELECT id FROM cabs WHERE vehicle_number = ?', [vn]);
       if (existing) {
+        if (create_only) {
+          return res.status(400).json({ error: 'This vehicle number is already used. Use a different number or assign that cab via "Assign existing cab".' });
+        }
         await db.runAsync(
           `UPDATE cabs SET cab_type_id = ?, driver_name = ?, driver_phone = ?, name = ?, description = ?, image_url = ?, is_active = 1 WHERE id = ?`,
           [cab_type_id, driver_name || null, driver_phone || null, name || null, description || null, image_url || null, existing.id]
@@ -259,6 +304,37 @@ router.put(
       res.json(row);
     } catch (error) {
       console.error('Error updating cab:', error);
+      res.status(500).json({ error: 'Server error' });
+    }
+  }
+);
+
+router.post(
+  '/rate-meter/cabs/:id/upload',
+  param('id').isInt({ min: 1 }),
+  (req, res, next) => {
+    upload.single('image')(req, res, (err) => {
+      if (err) {
+        if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: 'Image must be under 5MB' });
+        return res.status(400).json({ error: err.message || 'Upload failed' });
+      }
+      next();
+    });
+  },
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      if (!req.file || !req.file.filename) {
+        return res.status(400).json({ error: 'No image file provided' });
+      }
+      const existing = await db.getAsync('SELECT id FROM cabs WHERE id = ?', [id]);
+      if (!existing) return res.status(404).json({ error: 'Cab not found' });
+      const imagePath = `car-options/${req.file.filename}`;
+      await db.runAsync('UPDATE cabs SET image_url = ? WHERE id = ?', [imagePath, id]);
+      const row = await db.getAsync('SELECT * FROM cabs WHERE id = ?', [id]);
+      res.json(row);
+    } catch (error) {
+      console.error('Error uploading cab image:', error);
       res.status(500).json({ error: 'Server error' });
     }
   }

@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import api from '../services/api';
+import api, { getImageUrl } from '../services/api';
 import LocationInput from '../components/LocationInput';
 import Icon from '../components/Icon';
 import './AdminDashboard.css';
@@ -86,12 +86,17 @@ const AdminDashboard = () => {
   const [rateMeterLoading, setRateMeterLoading] = useState({ cabTypes: false, cabs: false, rates: false });
   const [rateMeterSaving, setRateMeterSaving] = useState(false);
   const [rateMeterCabModal, setRateMeterCabModal] = useState({ open: false, cabTypeId: null });
+  const [rateMeterAddCabMode, setRateMeterAddCabMode] = useState('assign'); // 'assign' | 'create'
+  const [rateMeterNewCabForm, setRateMeterNewCabForm] = useState({ vehicle_number: '', name: '', driver_id: '' });
   const [rateMeterSelectedCabId, setRateMeterSelectedCabId] = useState('');
   const [rateMeterModalCabs, setRateMeterModalCabs] = useState([]);
   const [rateMeterModalOptionsLoading, setRateMeterModalOptionsLoading] = useState(false);
   const [rateMeterLocalForm, setRateMeterLocalForm] = useState({});
   const [rateMeterAirportForm, setRateMeterAirportForm] = useState({});
   const [rateMeterOutstationForm, setRateMeterOutstationForm] = useState({});
+  const [uploadingCabId, setUploadingCabId] = useState(null);
+  const cabImageUploadTarget = useRef({ cabId: null, cabTypeId: null });
+  const cabImageInputRef = useRef(null);
 
   const [othersCabTypes, setOthersCabTypes] = useState([]);
   const [othersCabTypesLoading, setOthersCabTypesLoading] = useState(false);
@@ -892,11 +897,7 @@ const AdminDashboard = () => {
       showToast('Cab type and vehicle number are required.', 'error');
       return;
     }
-    const driver = drivers.find((d) => Number(d.id) === Number(driver_id));
-    if (!driver) {
-      showToast('Please select a driver.', 'error');
-      return;
-    }
+    const driver = driver_id ? drivers.find((d) => Number(d.id) === Number(driver_id)) : null;
     setOthersAddCabSubmitting(true);
     try {
       if (othersEditingCabId) {
@@ -904,8 +905,8 @@ const AdminDashboard = () => {
           cab_type_id: Number(cab_type_id),
           vehicle_number: vehicle_number.trim(),
           name: (name || '').trim() || null,
-          driver_name: driver.name || '',
-          driver_phone: driver.phone || '',
+          driver_name: driver?.name || '',
+          driver_phone: driver?.phone || '',
         });
         showToast('Cab updated.');
       } else {
@@ -913,8 +914,8 @@ const AdminDashboard = () => {
           cab_type_id: Number(cab_type_id),
           vehicle_number: vehicle_number.trim(),
           name: (name || '').trim() || null,
-          driver_name: driver.name || '',
-          driver_phone: driver.phone || '',
+          driver_name: driver?.name || '',
+          driver_phone: driver?.phone || '',
         });
         showToast('Cab added.');
       }
@@ -1013,13 +1014,49 @@ const AdminDashboard = () => {
 
   const openRateMeterCabModal = (cabTypeId) => {
     setRateMeterCabModal({ open: true, cabTypeId });
+    setRateMeterAddCabMode('create');
+    setRateMeterNewCabForm({ vehicle_number: '', name: '', driver_id: '' });
     setRateMeterSelectedCabId('');
     fetchRateMeterModalOptions();
+  };
+
+  const closeRateMeterCabModal = () => {
+    setRateMeterCabModal({ open: false, cabTypeId: null });
+    setRateMeterAddCabMode('assign');
+    setRateMeterNewCabForm({ vehicle_number: '', name: '', driver_id: '' });
+    setRateMeterSelectedCabId('');
   };
 
   const handleRateMeterCabSubmit = async (e) => {
     e.preventDefault();
     const { cabTypeId } = rateMeterCabModal;
+    if (rateMeterAddCabMode === 'create') {
+      const { vehicle_number, name, driver_id } = rateMeterNewCabForm;
+      if (!vehicle_number?.trim()) {
+        showToast('Vehicle number is required.', 'error');
+        return;
+      }
+      setRateMeterSaving(true);
+      try {
+        const driver = driver_id ? drivers.find((d) => Number(d.id) === Number(driver_id)) : null;
+        await api.post('/admin/rate-meter/cabs', {
+          cab_type_id: cabTypeId,
+          vehicle_number: vehicle_number.trim(),
+          name: (name || '').trim() || null,
+          driver_name: driver?.name || '',
+          driver_phone: driver?.phone || '',
+          create_only: true,
+        });
+        showToast('Cab added.');
+        closeRateMeterCabModal();
+        if (cabTypeId) fetchRateMeterCabs(cabTypeId);
+      } catch (err) {
+        showToast(err.response?.data?.error || 'Failed to add cab', 'error');
+      } finally {
+        setRateMeterSaving(false);
+      }
+      return;
+    }
     if (!rateMeterSelectedCabId) {
       showToast('Please select a car.', 'error');
       return;
@@ -1028,8 +1065,7 @@ const AdminDashboard = () => {
     try {
       await api.post('/admin/rate-meter/cabs/assign', { cab_id: Number(rateMeterSelectedCabId), cab_type_id: cabTypeId });
       showToast('Cab assigned.');
-      setRateMeterCabModal({ open: false, cabTypeId: null });
-      setRateMeterSelectedCabId('');
+      closeRateMeterCabModal();
       if (cabTypeId) fetchRateMeterCabs(cabTypeId);
     } catch (err) {
       showToast(err.response?.data?.error || 'Failed to assign cab', 'error');
@@ -1058,6 +1094,36 @@ const AdminDashboard = () => {
       fetchRateMeterCabs(cabTypeId);
     } catch (err) {
       showToast(err.response?.data?.error || 'Failed to deactivate cab', 'error');
+    }
+  };
+
+  const triggerCabImageUpload = (cabId, cabTypeId) => {
+    cabImageUploadTarget.current = { cabId, cabTypeId };
+    cabImageInputRef.current?.click();
+  };
+
+  const handleCabImageSelect = async (e) => {
+    const file = e.target.files?.[0];
+    const { cabId, cabTypeId } = cabImageUploadTarget.current || {};
+    if (!file || !cabId || !cabTypeId) {
+      e.target.value = '';
+      return;
+    }
+    setUploadingCabId(cabId);
+    e.target.value = '';
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+      await api.post(`/admin/rate-meter/cabs/${cabId}/upload`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      showToast('Image uploaded.');
+      fetchRateMeterCabs(cabTypeId);
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Upload failed', 'error');
+    } finally {
+      setUploadingCabId(null);
+      cabImageUploadTarget.current = { cabId: null, cabTypeId: null };
     }
   };
 
@@ -1615,6 +1681,7 @@ const AdminDashboard = () => {
             <div className="admin-tab-section">
               <h2>Rate Meter</h2>
               <p className="admin-bookings-desc">Set fares and manage cabs for Local, Airport, and Outstation. Create missing cab types, then set rates and add cabs per type.</p>
+              <input ref={cabImageInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleCabImageSelect} aria-hidden="true" tabIndex={-1} />
               {rateMeterLoading.cabTypes && <p className="admin-dashboard-list-loading">Loading cab types…</p>}
               {!rateMeterLoading.cabTypes && (
                 <>
@@ -1675,13 +1742,29 @@ const AdminDashboard = () => {
                                 <div className="admin-form-block">
                                   <div className="admin-form-block-title">Cabs</div>
                                   {(rateMeterCabsByType[ct.id] || []).length === 0 && !rateMeterLoading.cabs && <p className="admin-rate-meters-empty">No cabs. Add one above.</p>}
-                                  {(rateMeterCabsByType[ct.id] || []).map((cab) => (
-                                    <div key={cab.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                                      <span>{cab.vehicle_number}</span>
-                                      {cab.driver_name && <span>({cab.driver_name})</span>}
-                                      <button type="button" className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => deleteRateMeterCab(ct.id, cab.id)}>Remove</button>
-                                    </div>
-                                  ))}
+                                  {(rateMeterCabsByType[ct.id] || []).map((cab) => {
+                                    const cabImageUrl = cab.image_url ? getImageUrl(cab.image_url) : null;
+                                    return (
+                                      <div key={cab.id} className="admin-cab-row">
+                                        <div className="admin-cab-row-image-wrap">
+                                          {cabImageUrl ? (
+                                            <img src={cabImageUrl} alt={cab.vehicle_number || 'Cab'} className="admin-cab-row-image" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling?.classList.add('visible'); }} />
+                                          ) : null}
+                                          <div className={`admin-cab-row-image-placeholder ${!cabImageUrl ? 'visible' : ''}`}><Icon name="car" size={24} /></div>
+                                        </div>
+                                        <div className="admin-cab-row-details">
+                                          <span className="admin-cab-row-vehicle">{cab.vehicle_number}</span>
+                                          {cab.name && <span className="admin-cab-row-name">{cab.name}</span>}
+                                          {cab.driver_name && <span className="admin-cab-row-driver">Driver: {cab.driver_name}</span>}
+                                          {cab.driver_phone && <span className="admin-cab-row-phone">{cab.driver_phone}</span>}
+                                        </div>
+                                        <div className="admin-cab-row-actions">
+                                          <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => triggerCabImageUpload(cab.id, ct.id)} disabled={uploadingCabId === cab.id}>{uploadingCabId === cab.id ? 'Uploading…' : 'Upload image'}</button>
+                                          <button type="button" className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => deleteRateMeterCab(ct.id, cab.id)}>Remove</button>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               </>
                             )}
@@ -1744,13 +1827,29 @@ const AdminDashboard = () => {
                                 <div className="admin-form-block">
                                   <div className="admin-form-block-title">Cabs</div>
                                   {(rateMeterCabsByType[ct.id] || []).length === 0 && !rateMeterLoading.cabs && <p className="admin-rate-meters-empty">No cabs. Add one above.</p>}
-                                  {(rateMeterCabsByType[ct.id] || []).map((cab) => (
-                                    <div key={cab.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                                      <span>{cab.vehicle_number}</span>
-                                      {cab.driver_name && <span>({cab.driver_name})</span>}
-                                      <button type="button" className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => deleteRateMeterCab(ct.id, cab.id)}>Remove</button>
-                                    </div>
-                                  ))}
+                                  {(rateMeterCabsByType[ct.id] || []).map((cab) => {
+                                    const cabImageUrl = cab.image_url ? getImageUrl(cab.image_url) : null;
+                                    return (
+                                      <div key={cab.id} className="admin-cab-row">
+                                        <div className="admin-cab-row-image-wrap">
+                                          {cabImageUrl ? (
+                                            <img src={cabImageUrl} alt={cab.vehicle_number || 'Cab'} className="admin-cab-row-image" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling?.classList.add('visible'); }} />
+                                          ) : null}
+                                          <div className={`admin-cab-row-image-placeholder ${!cabImageUrl ? 'visible' : ''}`}><Icon name="car" size={24} /></div>
+                                        </div>
+                                        <div className="admin-cab-row-details">
+                                          <span className="admin-cab-row-vehicle">{cab.vehicle_number}</span>
+                                          {cab.name && <span className="admin-cab-row-name">{cab.name}</span>}
+                                          {cab.driver_name && <span className="admin-cab-row-driver">Driver: {cab.driver_name}</span>}
+                                          {cab.driver_phone && <span className="admin-cab-row-phone">{cab.driver_phone}</span>}
+                                        </div>
+                                        <div className="admin-cab-row-actions">
+                                          <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => triggerCabImageUpload(cab.id, ct.id)} disabled={uploadingCabId === cab.id}>{uploadingCabId === cab.id ? 'Uploading…' : 'Upload image'}</button>
+                                          <button type="button" className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => deleteRateMeterCab(ct.id, cab.id)}>Remove</button>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               </>
                             )}
@@ -1830,13 +1929,29 @@ const AdminDashboard = () => {
                                 <div className="admin-form-block">
                                   <div className="admin-form-block-title">Cabs</div>
                                   {(rateMeterCabsByType[ct.id] || []).length === 0 && !rateMeterLoading.cabs && <p className="admin-rate-meters-empty">No cabs. Add one above.</p>}
-                                  {(rateMeterCabsByType[ct.id] || []).map((cab) => (
-                                    <div key={cab.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                                      <span>{cab.vehicle_number}</span>
-                                      {cab.driver_name && <span>({cab.driver_name})</span>}
-                                      <button type="button" className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => deleteRateMeterCab(ct.id, cab.id)}>Remove</button>
-                                    </div>
-                                  ))}
+                                  {(rateMeterCabsByType[ct.id] || []).map((cab) => {
+                                    const cabImageUrl = cab.image_url ? getImageUrl(cab.image_url) : null;
+                                    return (
+                                      <div key={cab.id} className="admin-cab-row">
+                                        <div className="admin-cab-row-image-wrap">
+                                          {cabImageUrl ? (
+                                            <img src={cabImageUrl} alt={cab.vehicle_number || 'Cab'} className="admin-cab-row-image" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling?.classList.add('visible'); }} />
+                                          ) : null}
+                                          <div className={`admin-cab-row-image-placeholder ${!cabImageUrl ? 'visible' : ''}`}><Icon name="car" size={24} /></div>
+                                        </div>
+                                        <div className="admin-cab-row-details">
+                                          <span className="admin-cab-row-vehicle">{cab.vehicle_number}</span>
+                                          {cab.name && <span className="admin-cab-row-name">{cab.name}</span>}
+                                          {cab.driver_name && <span className="admin-cab-row-driver">Driver: {cab.driver_name}</span>}
+                                          {cab.driver_phone && <span className="admin-cab-row-phone">{cab.driver_phone}</span>}
+                                        </div>
+                                        <div className="admin-cab-row-actions">
+                                          <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => triggerCabImageUpload(cab.id, ct.id)} disabled={uploadingCabId === cab.id}>{uploadingCabId === cab.id ? 'Uploading…' : 'Upload image'}</button>
+                                          <button type="button" className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => deleteRateMeterCab(ct.id, cab.id)}>Remove</button>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               </>
                             )}
@@ -1968,13 +2083,13 @@ const AdminDashboard = () => {
                         </thead>
                         <tbody>
                           {(cabs || []).length === 0 && (
-                            <tr><td colSpan={4} className="admin-dashboard-list-empty">No cabs yet. Add drivers first, then click “Add cab” and select a driver and cab type.</td></tr>
+                            <tr><td colSpan={4} className="admin-dashboard-list-empty">No cabs yet. Click "Add cab" and enter vehicle number and cab type (driver is optional).</td></tr>
                           )}
                           {(cabs || []).map((c) => (
                             <tr key={c.id}>
                               <td>{c.name?.trim() || c.vehicle_number}</td>
                               <td>{c.driver_name || '—'} {c.driver_phone ? `(${c.driver_phone})` : ''}</td>
-                              <td>{c.cab_type_name || '—'}</td>
+                              <td>{c.cab_type_name || '—'}{c.cab_type_service_type ? ` (${(c.cab_type_service_type || '').charAt(0).toUpperCase() + (c.cab_type_service_type || '').slice(1).toLowerCase()})` : ''}</td>
                               <td className="actions">
                                 <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => { setOthersEditingCabId(c.id); setOthersAddCabForm({ cab_type_id: String(c.cab_type_id || ''), name: c.name || '', vehicle_number: c.vehicle_number || '', driver_id: String((drivers || []).find((d) => d.phone === c.driver_phone || d.name === c.driver_name)?.id || '') }); setOthersAddCabModalOpen(true); }}>Edit</button>
                                 <button type="button" className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => deleteOthersCab(c.id)}>Delete</button>
@@ -2025,14 +2140,13 @@ const AdminDashboard = () => {
                   <input type="text" value={othersAddCabForm.vehicle_number} onChange={(e) => setOthersAddCabForm((f) => ({ ...f, vehicle_number: e.target.value }))} required />
                 </div>
                 <div className="admin-form-group full-width">
-                  <label>Driver</label>
+                  <label>Driver (optional)</label>
                   <select
                     value={othersAddCabForm.driver_id}
                     onChange={(e) => setOthersAddCabForm((f) => ({ ...f, driver_id: e.target.value }))}
-                    required
                     style={{ width: '100%', padding: '8px 12px', border: '1px solid #bbf7d0', borderRadius: 6 }}
                   >
-                    <option value="">— Select driver —</option>
+                    <option value="">— Select driver (optional) —</option>
                     {(drivers || []).map((d) => (
                       <option key={d.id} value={d.id}>{d.name} {d.phone ? `— ${d.phone}` : ''}</option>
                     ))}
@@ -2660,37 +2774,77 @@ const AdminDashboard = () => {
       )}
 
       {rateMeterCabModal.open && (
-        <div className="admin-modal-overlay" onClick={() => { setRateMeterCabModal({ open: false, cabTypeId: null }); setRateMeterSelectedCabId(''); }}>
+        <div className="admin-modal-overlay" onClick={closeRateMeterCabModal}>
           <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
             <div className="admin-modal-header">
-              <h3>Assign cab</h3>
-              <button type="button" className="admin-modal-close" onClick={() => { setRateMeterCabModal({ open: false, cabTypeId: null }); setRateMeterSelectedCabId(''); }} aria-label="Close">×</button>
+              <h3>Add cab</h3>
+              <button type="button" className="admin-modal-close" onClick={closeRateMeterCabModal} aria-label="Close">×</button>
+            </div>
+            <div className="admin-modal-body" style={{ marginBottom: 12 }}>
+              <div className="admin-form-group" style={{ marginBottom: 16 }}>
+                <span style={{ marginRight: 12 }}>
+                  <button type="button" className={`admin-btn admin-btn-sm ${rateMeterAddCabMode === 'assign' ? 'admin-btn-primary' : 'admin-btn-secondary'}`} onClick={() => setRateMeterAddCabMode('assign')}>Assign existing cab</button>
+                </span>
+                <span>
+                  <button type="button" className={`admin-btn admin-btn-sm ${rateMeterAddCabMode === 'create' ? 'admin-btn-primary' : 'admin-btn-secondary'}`} onClick={() => setRateMeterAddCabMode('create')}>Create new cab</button>
+                </span>
+              </div>
+              <p style={{ fontSize: 12, color: '#666', marginBottom: 12 }}>
+                {rateMeterAddCabMode === 'assign' ? 'Choose a cab already in the database to show under this type (moves it from its current type).' : 'Add a new cab for this type only. Other types are unchanged.'}
+              </p>
             </div>
             <form onSubmit={handleRateMeterCabSubmit} className="admin-modal-body">
-              {rateMeterModalOptionsLoading && <p className="admin-dashboard-list-loading" style={{ marginBottom: 12 }}>Loading cabs…</p>}
-              {!rateMeterModalOptionsLoading && (
-                <div className="admin-form-group" style={{ marginBottom: 16 }}>
-                  <label>Select car</label>
-                  <select
-                    value={rateMeterSelectedCabId}
-                    onChange={(e) => setRateMeterSelectedCabId(e.target.value)}
-                    style={{ width: '100%', padding: '8px 12px', border: '1px solid #bbf7d0', borderRadius: 6 }}
-                    required
-                  >
-                    <option value="">
-                      {rateMeterModalCabs.length === 0 ? 'No cabs in database. Add cabs in Others → Add cabs.' : '— Choose a car —'}
-                    </option>
-                    {rateMeterModalCabs.map((c) => (
-                      <option key={String(c.id)} value={String(c.id)}>
-                        {(c.name || c.vehicle_number || '').trim() || '—'} {c.driver_name ? ` (${c.driver_name})` : ''}
-                      </option>
-                    ))}
-                  </select>
+              {rateMeterAddCabMode === 'assign' && (
+                <>
+                  {rateMeterModalOptionsLoading && <p className="admin-dashboard-list-loading" style={{ marginBottom: 12 }}>Loading cabs…</p>}
+                  {!rateMeterModalOptionsLoading && (
+                    <div className="admin-form-group" style={{ marginBottom: 16 }}>
+                      <label>Select car</label>
+                      <select
+                        value={rateMeterSelectedCabId}
+                        onChange={(e) => setRateMeterSelectedCabId(e.target.value)}
+                        style={{ width: '100%', padding: '8px 12px', border: '1px solid #bbf7d0', borderRadius: 6 }}
+                        required={rateMeterAddCabMode === 'assign'}
+                      >
+                        <option value="">
+                          {rateMeterModalCabs.length === 0 ? 'No cabs in database. Add cabs in Others or create new below.' : '— Choose a car —'}
+                        </option>
+                        {rateMeterModalCabs.map((c) => (
+                          <option key={String(c.id)} value={String(c.id)}>
+                            {(c.name || c.vehicle_number || '').trim() || '—'} {c.driver_name ? ` (${c.driver_name})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </>
+              )}
+              {rateMeterAddCabMode === 'create' && (
+                <div className="admin-form-grid" style={{ marginBottom: 16 }}>
+                  <div className="admin-form-group">
+                    <label>Vehicle number *</label>
+                    <input type="text" value={rateMeterNewCabForm.vehicle_number} onChange={(e) => setRateMeterNewCabForm((f) => ({ ...f, vehicle_number: e.target.value }))} style={{ width: '100%', padding: '8px 12px', border: '1px solid #bbf7d0', borderRadius: 6 }} required={rateMeterAddCabMode === 'create'} />
+                  </div>
+                  <div className="admin-form-group">
+                    <label>Name (optional)</label>
+                    <input type="text" value={rateMeterNewCabForm.name} onChange={(e) => setRateMeterNewCabForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Ertiga" style={{ width: '100%', padding: '8px 12px', border: '1px solid #bbf7d0', borderRadius: 6 }} />
+                  </div>
+                  <div className="admin-form-group full-width">
+                    <label>Driver (optional)</label>
+                    <select value={rateMeterNewCabForm.driver_id} onChange={(e) => setRateMeterNewCabForm((f) => ({ ...f, driver_id: e.target.value }))} style={{ width: '100%', padding: '8px 12px', border: '1px solid #bbf7d0', borderRadius: 6 }}>
+                      <option value="">— Select driver (optional) —</option>
+                      {(drivers || []).map((d) => (
+                        <option key={d.id} value={d.id}>{d.name} {d.phone ? ` — ${d.phone}` : ''}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               )}
               <div className="admin-modal-actions">
-                <button type="button" className="admin-btn admin-btn-secondary" onClick={() => { setRateMeterCabModal({ open: false, cabTypeId: null }); setRateMeterSelectedCabId(''); }}>Cancel</button>
-                <button type="submit" className="admin-btn admin-btn-primary" disabled={rateMeterSaving || !rateMeterSelectedCabId}>{rateMeterSaving ? 'Assigning…' : 'Assign'}</button>
+                <button type="button" className="admin-btn admin-btn-secondary" onClick={closeRateMeterCabModal}>Cancel</button>
+                <button type="submit" className="admin-btn admin-btn-primary" disabled={rateMeterSaving || (rateMeterAddCabMode === 'assign' && !rateMeterSelectedCabId) || (rateMeterAddCabMode === 'create' && !rateMeterNewCabForm.vehicle_number?.trim())}>
+                  {rateMeterSaving ? (rateMeterAddCabMode === 'create' ? 'Adding…' : 'Assigning…') : (rateMeterAddCabMode === 'create' ? 'Add cab' : 'Assign')}
+                </button>
               </div>
             </form>
           </div>
