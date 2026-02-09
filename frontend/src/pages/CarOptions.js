@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useLocation, Link } from 'react-router-dom';
+import { useLocation, Link, useNavigate } from 'react-router-dom';
 import api, { getImageUrl } from '../services/api';
 import MainNavbar from '../components/MainNavbar';
 import Icon from '../components/Icon';
@@ -8,6 +8,7 @@ import './CarOptions.css';
 
 const CarOptions = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const bookingState = location.state || {};
   const isLocalFlow = bookingState.service_type === 'local' && bookingState.number_of_hours;
   const isAirportFlow = bookingState.service_type === 'airport' && bookingState.from_location;
@@ -479,7 +480,7 @@ const CarOptions = () => {
                     <button
                       type="button"
                       className="car-options-success-back"
-                      onClick={() => setSuccessBookingId(null)}
+                      onClick={() => { setSuccessBookingId(null); navigate('/'); }}
                     >
                       Back to booking
                     </button>

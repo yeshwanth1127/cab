@@ -45,6 +45,8 @@ const AdminDashboard = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [stats, setStats] = useState(null);
+  const [pieHoverSegment, setPieHoverSegment] = useState(null);
+  const [pieTooltipPos, setPieTooltipPos] = useState({ x: 0, y: 0 });
   const [bookings, setBookings] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [cabs, setCabs] = useState([]);
@@ -1207,12 +1209,46 @@ const AdminDashboard = () => {
   };
 
   const pieData = stats ? [
-    { label: 'Completed', value: stats.completed ?? 0, color: '#16a34a' },
-    { label: 'Assigned', value: stats.assigned ?? 0, color: '#2563eb' },
-    { label: 'Cancelled', value: stats.cancelled ?? 0, color: '#dc2626' },
-    { label: 'Enquiries', value: stats.pending ?? 0, color: '#ea580c' },
+    { label: 'Completed', value: stats.completed ?? 0, color: '#16a34a', tab: TABS.tripEnd },
+    { label: 'Assigned', value: stats.assigned ?? 0, color: '#2563eb', tab: TABS.driverAssigned },
+    { label: 'Cancelled', value: stats.cancelled ?? 0, color: '#dc2626', tab: TABS.cancelledBookings },
+    { label: 'Enquiries', value: stats.pending ?? 0, color: '#ea580c', tab: TABS.enquiries },
   ].filter((d) => d.value > 0) : [];
   const pieTotal = pieData.reduce((s, d) => s + d.value, 0) || 1;
+
+  const getPieSegmentAtEvent = (e) => {
+    if (pieData.length === 0) return null;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const dx = e.clientX - centerX;
+    const dy = e.clientY - centerY;
+    const angleFromTop = (Math.atan2(dy, dx) * (180 / Math.PI) + 90 + 360) % 360;
+    let acc = 0;
+    for (let i = 0; i < pieData.length; i++) {
+      const segmentDeg = (pieData[i].value / pieTotal) * 360;
+      if (angleFromTop >= acc && angleFromTop < acc + segmentDeg) {
+        return pieData[i];
+      }
+      acc += segmentDeg;
+    }
+    return null;
+  };
+
+  const handlePieClick = (e) => {
+    const segment = getPieSegmentAtEvent(e);
+    if (segment) setTab(segment.tab);
+  };
+
+  const handlePieMouseMove = (e) => {
+    const segment = getPieSegmentAtEvent(e);
+    setPieHoverSegment(segment);
+    setPieTooltipPos({ x: e.clientX, y: e.clientY });
+  };
+
+  const handlePieMouseLeave = () => {
+    setPieHoverSegment(null);
+  };
 
   const setTab = (tab) => {
     setActiveTab(tab);
@@ -1549,6 +1585,11 @@ const AdminDashboard = () => {
                         <div className="admin-dashboard-pie-wrap admin-dashboard-pie-inner">
                           <div
                             className="admin-dashboard-pie-chart"
+                            role="img"
+                            aria-label="Status overview chart. Click a segment to open that tab."
+                            onClick={handlePieClick}
+                            onMouseMove={handlePieMouseMove}
+                            onMouseLeave={handlePieMouseLeave}
                             style={{
                               width: 200,
                               height: 200,
@@ -1560,12 +1601,28 @@ const AdminDashboard = () => {
                               }).join(', ')})`,
                             }}
                           />
+                          {pieHoverSegment && (
+                            <div
+                              className="admin-dashboard-pie-tooltip"
+                              style={{
+                                left: pieTooltipPos.x + 12,
+                                top: pieTooltipPos.y + 12,
+                              }}
+                            >
+                              {pieHoverSegment.label}: {pieHoverSegment.value}
+                            </div>
+                          )}
                           <div className="admin-dashboard-pie-legend">
                             {pieData.map((d) => (
-                              <div key={d.label} className="admin-dashboard-pie-legend-item">
+                              <button
+                                key={d.label}
+                                type="button"
+                                className="admin-dashboard-pie-legend-item"
+                                onClick={() => setTab(d.tab)}
+                              >
                                 <span className="admin-dashboard-pie-legend-dot" style={{ background: d.color }} />
                                 <span>{d.label}: {d.value}</span>
-                              </div>
+                              </button>
                             ))}
                           </div>
                         </div>

@@ -599,14 +599,6 @@ const HomePage = () => {
               </div>
             </div>
           </section>
-
-          <div className="home-secondary-links">
-            <Link to="/about">About</Link>
-            <Link to="/contact">Contact</Link>
-            <Link to="/check-booking">Check booking</Link>
-            <Link to="/corporate">Corporate</Link>
-            <Link to="/events">Events</Link>
-          </div>
         </>
       )}
 

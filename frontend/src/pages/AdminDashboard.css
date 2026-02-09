@@ -439,6 +439,38 @@
   flex-wrap: wrap;
 }
 
+.admin-dashboard-pie-chart {
+  cursor: pointer;
+}
+
+.admin-dashboard-pie-wrap {
+  position: relative;
+}
+
+.admin-dashboard-pie-tooltip {
+  position: fixed;
+  z-index: 100;
+  transform: translate(0, -50%);
+  padding: 8px 12px;
+  background: #111827;
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: 8px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+.admin-dashboard-pie-tooltip::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 4px solid transparent;
+  border-right-color: #111827;
+}
+
 .admin-dashboard-pie-legend {
   display: flex;
   flex-direction: column;
@@ -451,6 +483,16 @@
   gap: 10px;
   font-size: 0.9rem;
   color: #374151;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.admin-dashboard-pie-legend-item:hover {
+  color: #111827;
 }
 
 .admin-dashboard-pie-legend-dot {
