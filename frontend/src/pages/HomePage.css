@@ -235,6 +235,27 @@
   margin-bottom: 8px;
 }
 
+.home-airport-drop-display {
+  padding: 14px 16px;
+  background: rgba(148, 163, 184, 0.12);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 10px;
+}
+
+.home-airport-drop-name {
+  display: block;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  margin-bottom: 6px;
+}
+
+.home-airport-drop-display .home-airport-destination-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
 .home-airport-destination-hint {
   font-size: 0.875rem;
   color: #94a3b8;

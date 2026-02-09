@@ -105,6 +105,8 @@ const AdminDashboard = () => {
   const [othersAddCabForm, setOthersAddCabForm] = useState({ cab_type_id: '', name: '', vehicle_number: '', driver_id: '' });
   const [othersAddCabSubmitting, setOthersAddCabSubmitting] = useState(false);
 
+  const [tabFilter, setTabFilter] = useState({ search: '', serviceType: '', dateFrom: '', dateTo: '' });
+
   const [invoiceForm, setInvoiceForm] = useState({
     from_location: '',
     to_location: '',
@@ -134,6 +136,7 @@ const AdminDashboard = () => {
     fare_amount: '',
     travel_date: '',
     travel_time: '',
+    invoice_number: '',
     with_gst: true,
   });
   const [corporateInvoiceSubmitting, setCorporateInvoiceSubmitting] = useState(false);
@@ -440,13 +443,14 @@ const AdminDashboard = () => {
   const handleAssignSubmit = async (e) => {
     e.preventDefault();
     if (!assignBooking || !assignCabId) return;
+    const wasAlreadyAssigned = !!assignBooking.cab_id;
     setAssignSubmitting(true);
     try {
       await api.put(`/admin/bookings/${assignBooking.id}`, {
         cab_id: Number(assignCabId),
         booking_status: 'confirmed',
       });
-      showToast('Driver & cab assigned.');
+      showToast(wasAlreadyAssigned ? 'Driver & cab reassigned.' : 'Driver & cab assigned.');
       setAssignBooking(null);
       setAssignDriverId('');
       setAssignCabId('');
@@ -824,7 +828,7 @@ const AdminDashboard = () => {
 
   const handleCreateCorporateInvoiceSubmit = async (e) => {
     e.preventDefault();
-    const { company_name, name, phone_number, pickup_point, drop_point, fare_amount, service_type, travel_date, travel_time, with_gst } = corporateInvoiceForm;
+    const { company_name, name, phone_number, pickup_point, drop_point, fare_amount, service_type, travel_date, travel_time, invoice_number, with_gst } = corporateInvoiceForm;
     if (!company_name?.trim() || !name?.trim() || !phone_number?.trim() || !pickup_point?.trim() || !drop_point?.trim() || fare_amount === '' || Number(fare_amount) < 0) {
       showToast('Please fill required fields.', 'error');
       return;
@@ -841,6 +845,7 @@ const AdminDashboard = () => {
         service_type: service_type || 'local',
         travel_date: travel_date || undefined,
         travel_time: travel_time || undefined,
+        invoice_number: (invoice_number || '').trim() || undefined,
         with_gst: with_gst,
       }, { responseType: 'blob' });
       const blob = new Blob([response.data], { type: 'application/pdf' });
@@ -853,7 +858,7 @@ const AdminDashboard = () => {
       a.remove();
       window.URL.revokeObjectURL(url);
       showToast('Corporate invoice created and downloaded.');
-      setCorporateInvoiceForm({ company_name: '', name: '', phone_number: '', pickup_point: '', drop_point: '', service_type: 'local', fare_amount: '', travel_date: '', travel_time: '', with_gst: true });
+      setCorporateInvoiceForm({ company_name: '', name: '', phone_number: '', pickup_point: '', drop_point: '', service_type: 'local', fare_amount: '', travel_date: '', travel_time: '', invoice_number: '', with_gst: true });
       fetchCorporateBookings();
     } catch (err) {
       const msg = err.response?.data?.error || (err.response?.data?.errors && err.response.data.errors.map((e) => e.msg).join('; ')) || 'Failed to create corporate invoice';
@@ -1144,6 +1149,63 @@ const AdminDashboard = () => {
     .filter((b) => b.booking_status === 'cancelled')
     .sort(sortLatestFirst);
 
+  const filterBySearch = (text, item, keys) => {
+    if (!text || !text.trim()) return true;
+    if (item == null || typeof item !== 'object') return false;
+    const q = (text || '').trim().toLowerCase();
+    return keys.some((k) => String(item[k] ?? '').toLowerCase().includes(q));
+  };
+  const getBookingDateStr = (b) => {
+    const raw = b.booking_date || b.travel_date || '';
+    if (!raw) return '';
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  };
+  const filterBooking = (b) => {
+    if (tabFilter.serviceType && (b.service_type || '') !== tabFilter.serviceType) return false;
+    if (tabFilter.dateFrom || tabFilter.dateTo) {
+      const dateStr = getBookingDateStr(b);
+      if (!dateStr) return false;
+      if (tabFilter.dateFrom && dateStr < tabFilter.dateFrom) return false;
+      if (tabFilter.dateTo && dateStr > tabFilter.dateTo) return false;
+    }
+    return filterBySearch(tabFilter.search, b, ['from_location', 'to_location', 'passenger_name', 'passenger_phone', 'booking_status', 'invoice_number']);
+  };
+  const filterDriver = (d) => filterBySearch(tabFilter.search, d, ['name', 'phone', 'license_number', 'emergency_contact_name', 'emergency_contact_phone']);
+  const filterCab = (c) => filterBySearch(tabFilter.search, c, ['name', 'vehicle_number', 'driver_name', 'driver_phone', 'cab_type_name']);
+  const getCorporateDateStr = (b) => {
+    const raw = b.travel_date || b.booking_date || b.created_at || '';
+    if (!raw) return '';
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  };
+  const filterCorporate = (b) => {
+    if (tabFilter.dateFrom || tabFilter.dateTo) {
+      const dateStr = getCorporateDateStr(b);
+      if (!dateStr) return false;
+      if (tabFilter.dateFrom && dateStr < tabFilter.dateFrom) return false;
+      if (tabFilter.dateTo && dateStr > tabFilter.dateTo) return false;
+    }
+    return filterBySearch(tabFilter.search, b, ['company_name', 'name', 'phone_number', 'pickup_point', 'drop_point', 'invoice_number', 'status']);
+  };
+
+  const filteredBookings = bookings.filter(filterBooking);
+  const filteredEnquiriesBookings = enquiriesBookings.filter(filterBooking);
+  const filteredConfirmedBookingsList = confirmedBookingsList.filter(filterBooking);
+  const filteredDriverAssignedBookings = driverAssignedBookings.filter(filterBooking);
+  const filteredTripEndBookings = tripEndBookings.filter(filterBooking);
+  const filteredCancelledBookingsList = cancelledBookingsList.filter(filterBooking);
+  const filteredDrivers = (drivers || []).filter(filterDriver);
+  const filteredCabs = (cabs || []).filter(filterCab);
+  const filteredCorporateBookings = (corporateBookings || []).filter(filterCorporate);
+  const filteredRateMeterCabTypes = {
+    local: (rateMeterCabTypes.local || []).filter((ct) => filterBySearch(tabFilter.search, ct, ['name'])),
+    airport: (rateMeterCabTypes.airport || []).filter((ct) => filterBySearch(tabFilter.search, ct, ['name'])),
+    outstation: (rateMeterCabTypes.outstation || []).filter((ct) => filterBySearch(tabFilter.search, ct, ['name'])),
+  };
+
   const pieData = stats ? [
     { label: 'Completed', value: stats.completed ?? 0, color: '#16a34a' },
     { label: 'Assigned', value: stats.assigned ?? 0, color: '#2563eb' },
@@ -1155,6 +1217,7 @@ const AdminDashboard = () => {
   const setTab = (tab) => {
     setActiveTab(tab);
     setSidebarOpen(false);
+    setTabFilter({ search: '', serviceType: '', dateFrom: '', dateTo: '' });
   };
 
   const renderBookingsTable = (list, title, desc) => (
@@ -1194,7 +1257,7 @@ const AdminDashboard = () => {
                     </button>
                   </>
                 )}
-                <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => { setAssignBooking(b); setAssignDriverId(''); setAssignCabId(b.cab_id || ''); }}>Assign</button>
+                <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => { setAssignBooking(b); setAssignDriverId(''); setAssignCabId(b.cab_id || ''); }}>{b.cab_id ? 'Reassign' : 'Assign'}</button>
                 {b.maps_link && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link)}>Copy pickup map</button>}
                 {b.maps_link_drop && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link_drop)}>Copy drop map</button>}
                 {(b.driver_phone || b.driver_name) && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendWhatsApp(b)}>WhatsApp</button>}
@@ -1355,6 +1418,93 @@ const AdminDashboard = () => {
         </aside>
 
         <main className="admin-dashboard-main">
+          {[
+            TABS.dashboard,
+            TABS.enquiries,
+            TABS.confirmedBookings,
+            TABS.driverAssigned,
+            TABS.tripEnd,
+            TABS.cancelledBookings,
+            TABS.driverStatus,
+            TABS.others,
+            TABS.billing,
+            TABS.rateMeter,
+            TABS.corporateBookings,
+            TABS.corporateInvoices,
+          ].includes(activeTab) && (
+            <div className="admin-tab-filter-bar">
+              <input
+                type="text"
+                className="admin-tab-filter-input"
+                placeholder={
+                  [TABS.driverStatus, TABS.others].includes(activeTab)
+                    ? 'Filter by name, phone…'
+                    : [TABS.rateMeter].includes(activeTab)
+                      ? 'Filter by cab type name…'
+                      : [TABS.corporateBookings, TABS.corporateInvoices].includes(activeTab)
+                        ? 'Filter by company, name, phone, pickup…'
+                        : 'Filter by from, to, passenger…'
+                }
+                value={tabFilter.search}
+                onChange={(e) => setTabFilter((f) => ({ ...f, search: e.target.value }))}
+              />
+              {[TABS.dashboard, TABS.enquiries, TABS.confirmedBookings, TABS.driverAssigned, TABS.tripEnd, TABS.cancelledBookings, TABS.billing].includes(activeTab) && (
+                <>
+                  <select
+                    className="admin-tab-filter-select"
+                    value={tabFilter.serviceType}
+                    onChange={(e) => setTabFilter((f) => ({ ...f, serviceType: e.target.value }))}
+                  >
+                    <option value="">All service types</option>
+                    <option value="local">Local</option>
+                    <option value="airport">Airport</option>
+                    <option value="outstation">Outstation</option>
+                  </select>
+                  <label className="admin-tab-filter-date-label">
+                    <span>From</span>
+                    <input
+                      type="date"
+                      className="admin-tab-filter-input admin-tab-filter-date"
+                      value={tabFilter.dateFrom}
+                      onChange={(e) => setTabFilter((f) => ({ ...f, dateFrom: e.target.value }))}
+                    />
+                  </label>
+                  <label className="admin-tab-filter-date-label">
+                    <span>To</span>
+                    <input
+                      type="date"
+                      className="admin-tab-filter-input admin-tab-filter-date"
+                      value={tabFilter.dateTo}
+                      onChange={(e) => setTabFilter((f) => ({ ...f, dateTo: e.target.value }))}
+                    />
+                  </label>
+                </>
+              )}
+              {[TABS.corporateBookings, TABS.corporateInvoices].includes(activeTab) && (
+                <>
+                  <label className="admin-tab-filter-date-label">
+                    <span>From</span>
+                    <input
+                      type="date"
+                      className="admin-tab-filter-input admin-tab-filter-date"
+                      value={tabFilter.dateFrom}
+                      onChange={(e) => setTabFilter((f) => ({ ...f, dateFrom: e.target.value }))}
+                    />
+                  </label>
+                  <label className="admin-tab-filter-date-label">
+                    <span>To</span>
+                    <input
+                      type="date"
+                      className="admin-tab-filter-input admin-tab-filter-date"
+                      value={tabFilter.dateTo}
+                      onChange={(e) => setTabFilter((f) => ({ ...f, dateTo: e.target.value }))}
+                    />
+                  </label>
+                </>
+              )}
+            </div>
+          )}
+
           {activeTab === TABS.dashboard && (
             <div className="admin-dashboard-tab">
               {staleBookingsWarning && staleBookingsWarning.length > 0 && (
@@ -1455,7 +1605,7 @@ const AdminDashboard = () => {
                 {!loading.dashboard && bookings.length === 0 && <p className="admin-dashboard-list-empty">No bookings yet.</p>}
                 {!loading.dashboard && bookings.length > 0 && (
                   <div className="admin-entry-cards">
-                    {bookings.map((b) => (
+                    {filteredBookings.map((b) => (
                       <div key={b.id} className="admin-entry-card">
                         <div className="admin-entry-card-header">
                           <span className="admin-entry-card-id">#{b.id}</span>
@@ -1484,7 +1634,7 @@ const AdminDashboard = () => {
                               </button>
                             </>
                           )}
-                          <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => { setAssignBooking(b); setAssignDriverId(''); setAssignCabId(b.cab_id || ''); }}>Assign</button>
+                          <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => { setAssignBooking(b); setAssignDriverId(''); setAssignCabId(b.cab_id || ''); }}>{b.cab_id ? 'Reassign' : 'Assign'}</button>
                           {b.maps_link && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link)}>Copy pickup map</button>}
                           {b.maps_link_drop && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link_drop)}>Copy drop map</button>}
                           {(b.driver_phone || b.driver_name) && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendWhatsApp(b)}>WhatsApp</button>}
@@ -1497,11 +1647,11 @@ const AdminDashboard = () => {
             </div>
           )}
 
-          {activeTab === TABS.enquiries && renderBookingsTable(enquiriesBookings, 'Enquiries', 'All received bookings, latest to oldest. View and assign driver & cab.')}
-          {activeTab === TABS.confirmedBookings && renderBookingsTable(confirmedBookingsList, 'Confirmed Bookings', 'View and assign driver & cab.')}
-          {activeTab === TABS.driverAssigned && renderBookingsTable(driverAssignedBookings, 'Driver Assigned', 'With driver info. View, copy map, WhatsApp.')}
-          {activeTab === TABS.tripEnd && renderBookingsTable(tripEndBookings, 'Trip End', 'Completed trips.')}
-          {activeTab === TABS.cancelledBookings && renderBookingsTable(cancelledBookingsList, 'Cancelled Bookings', 'Cancelled only.')}
+          {activeTab === TABS.enquiries && renderBookingsTable(filteredEnquiriesBookings, 'Enquiries', 'All received bookings, latest to oldest. View and assign driver & cab.')}
+          {activeTab === TABS.confirmedBookings && renderBookingsTable(filteredConfirmedBookingsList, 'Confirmed Bookings', 'View and assign driver & cab.')}
+          {activeTab === TABS.driverAssigned && renderBookingsTable(filteredDriverAssignedBookings, 'Driver Assigned', 'With driver info. View, copy map, WhatsApp.')}
+          {activeTab === TABS.tripEnd && renderBookingsTable(filteredTripEndBookings, 'Trip End', 'Completed trips.')}
+          {activeTab === TABS.cancelledBookings && renderBookingsTable(filteredCancelledBookingsList, 'Cancelled Bookings', 'Cancelled only.')}
 
           {activeTab === TABS.bookingForm && (
             <div className="admin-tab-section">
@@ -1697,7 +1847,7 @@ const AdminDashboard = () => {
                         <div className="admin-modal-actions" style={{ marginBottom: 16 }}>
                           <button type="button" className="admin-btn admin-btn-primary" onClick={() => ensureRateMeterCabTypes('local')} disabled={rateMeterSaving}>Create missing cab types</button>
                         </div>
-                        {(rateMeterCabTypes.local || []).map((ct) => (
+                        {(filteredRateMeterCabTypes.local || []).map((ct) => (
                           <div key={ct.id} className="admin-rate-meters-card">
                             <button type="button" className="admin-form-block admin-form-block-title" style={{ width: '100%', textAlign: 'left', cursor: 'pointer', marginBottom: 8 }} onClick={() => toggleRateMeterCabTypeExpand(ct.id, 'local')}>
                               {ct.name} {ct.cab_count != null ? `(${ct.cab_count} cab${Number(ct.cab_count) !== 1 ? 's' : ''})` : ''} {rateMeterExpandedId === ct.id ? '▼' : '▶'}
@@ -1770,13 +1920,11 @@ const AdminDashboard = () => {
                             )}
                           </div>
                         ))}
-                        {(rateMeterCabTypes.local || []).length === 0 && <p className="admin-rate-meters-empty">Click “Create missing cab types” to add Innova Crysta, SUV, Sedan.</p>}
+                        {(filteredRateMeterCabTypes.local || []).length === 0 && <p className="admin-rate-meters-empty">Click “Create missing cab types” to add Innova Crysta, SUV, Sedan.</p>}
                       </div>
                     )}
                   </div>
 
-                  {
-}
                   <div className={`admin-rate-meters-block ${rateMeterOpenSection === 'airport' ? 'open' : ''}`}>
                     <button type="button" className="admin-rate-meters-block-btn" onClick={() => setRateMeterOpenSection(rateMeterOpenSection === 'airport' ? null : 'airport')}>
                       <span>Airport (distance × per km + base + driver + night)</span>
@@ -1787,7 +1935,7 @@ const AdminDashboard = () => {
                         <div className="admin-modal-actions" style={{ marginBottom: 16 }}>
                           <button type="button" className="admin-btn admin-btn-primary" onClick={() => ensureRateMeterCabTypes('airport')} disabled={rateMeterSaving}>Create missing cab types</button>
                         </div>
-                        {(rateMeterCabTypes.airport || []).map((ct) => (
+                        {(filteredRateMeterCabTypes.airport || []).map((ct) => (
                           <div key={ct.id} className="admin-rate-meters-card">
                             <button type="button" className="admin-form-block admin-form-block-title" style={{ width: '100%', textAlign: 'left', cursor: 'pointer', marginBottom: 8 }} onClick={() => toggleRateMeterCabTypeExpand(ct.id, 'airport')}>
                               {ct.name} {ct.cab_count != null ? `(${ct.cab_count} cab${Number(ct.cab_count) !== 1 ? 's' : ''})` : ''} {rateMeterExpandedId === ct.id ? '▼' : '▶'}
@@ -1855,7 +2003,7 @@ const AdminDashboard = () => {
                             )}
                           </div>
                         ))}
-                        {(rateMeterCabTypes.airport || []).length === 0 && <p className="admin-rate-meters-empty">Click “Create missing cab types” to add Innova, Crysta, SUV, Sedan.</p>}
+                        {(filteredRateMeterCabTypes.airport || []).length === 0 && <p className="admin-rate-meters-empty">Click “Create missing cab types” to add Innova, Crysta, SUV, Sedan.</p>}
                       </div>
                     )}
                   </div>
@@ -1872,7 +2020,7 @@ const AdminDashboard = () => {
                         <div className="admin-modal-actions" style={{ marginBottom: 16 }}>
                           <button type="button" className="admin-btn admin-btn-primary" onClick={() => ensureRateMeterCabTypes('outstation')} disabled={rateMeterSaving}>Create missing cab types</button>
                         </div>
-                        {(rateMeterCabTypes.outstation || []).map((ct) => (
+                        {(filteredRateMeterCabTypes.outstation || []).map((ct) => (
                           <div key={ct.id} className="admin-rate-meters-card">
                             <button type="button" className="admin-form-block admin-form-block-title" style={{ width: '100%', textAlign: 'left', cursor: 'pointer', marginBottom: 8 }} onClick={() => toggleRateMeterCabTypeExpand(ct.id, 'outstation')}>
                               {ct.name} {ct.cab_count != null ? `(${ct.cab_count} cab${Number(ct.cab_count) !== 1 ? 's' : ''})` : ''} {rateMeterExpandedId === ct.id ? '▼' : '▶'}
@@ -1957,7 +2105,7 @@ const AdminDashboard = () => {
                             )}
                           </div>
                         ))}
-                        {(rateMeterCabTypes.outstation || []).length === 0 && <p className="admin-rate-meters-empty">Click “Create missing cab types” to add Innova, Crysta, SUV, Sedan, TT, Minibus.</p>}
+                        {(filteredRateMeterCabTypes.outstation || []).length === 0 && <p className="admin-rate-meters-empty">Click “Create missing cab types” to add Innova, Crysta, SUV, Sedan, TT, Minibus.</p>}
                       </div>
                     )}
                   </div>
@@ -1987,7 +2135,7 @@ const AdminDashboard = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {drivers.map((d) => (
+                      {filteredDrivers.map((d) => (
                         <tr key={d.id}>
                           <td>{d.name}</td>
                           <td>{d.phone}</td>
@@ -2011,8 +2159,6 @@ const AdminDashboard = () => {
               <h2>Others – Drivers & Cabs</h2>
               <p className="admin-bookings-desc">This is the only source for drivers and cabs. Add them here; they appear in Rate Meter and booking assignment.</p>
 
-              {
-}
               <div className="admin-rate-meters-block open" style={{ marginTop: 24 }}>
                 <button type="button" className="admin-rate-meters-block-btn" style={{ pointerEvents: 'none' }}>
                   <span>Register drivers</span>
@@ -2039,7 +2185,7 @@ const AdminDashboard = () => {
                           {(drivers || []).length === 0 && (
                             <tr><td colSpan={5} className="admin-dashboard-list-empty">No drivers yet. Click “Add driver” to register.</td></tr>
                           )}
-                          {(drivers || []).map((d) => (
+                          {filteredDrivers.map((d) => (
                             <tr key={d.id}>
                               <td>{d.name}</td>
                               <td>{d.phone}</td>
@@ -2058,8 +2204,6 @@ const AdminDashboard = () => {
                 </div>
               </div>
 
-              {
-}
               <div className="admin-rate-meters-block admin-others-col open">
                 <button type="button" className="admin-rate-meters-block-btn" style={{ pointerEvents: 'none' }}>
                   <span>Add cabs</span>
@@ -2085,7 +2229,7 @@ const AdminDashboard = () => {
                           {(cabs || []).length === 0 && (
                             <tr><td colSpan={4} className="admin-dashboard-list-empty">No cabs yet. Click "Add cab" and enter vehicle number and cab type (driver is optional).</td></tr>
                           )}
-                          {(cabs || []).map((c) => (
+                          {filteredCabs.map((c) => (
                             <tr key={c.id}>
                               <td>{c.name?.trim() || c.vehicle_number}</td>
                               <td>{c.driver_name || '—'} {c.driver_phone ? `(${c.driver_phone})` : ''}</td>
@@ -2170,7 +2314,7 @@ const AdminDashboard = () => {
               {!loading.bookings && confirmedBookingsList.length === 0 && <p className="admin-dashboard-list-empty">No confirmed bookings.</p>}
               {!loading.bookings && confirmedBookingsList.length > 0 && (
                 <div className="admin-entry-cards">
-                  {confirmedBookingsList.map((b) => (
+                  {filteredConfirmedBookingsList.map((b) => (
                     <div key={b.id} className="admin-entry-card">
                       <div className="admin-entry-card-header">
                         <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -2410,7 +2554,7 @@ const AdminDashboard = () => {
               {!corporateBookingsLoading && corporateBookings.length === 0 && <p className="admin-dashboard-list-empty">No corporate bookings yet.</p>}
               {!corporateBookingsLoading && corporateBookings.length > 0 && (
                 <div className="admin-entry-cards">
-                  {corporateBookings.map((b) => (
+                  {filteredCorporateBookings.map((b) => (
                     <div key={b.id} className="admin-entry-card">
                       <div className="admin-entry-card-header">
                         <span className="admin-entry-card-id">#{b.id}</span>
@@ -2470,7 +2614,7 @@ const AdminDashboard = () => {
               {!corporateBookingsLoading && corporateBookings.length === 0 && <p className="admin-dashboard-list-empty">No corporate bookings. Create one in Create corporate invoice.</p>}
               {!corporateBookingsLoading && corporateBookings.length > 0 && (
                 <div className="admin-entry-cards">
-                  {corporateBookings.map((b) => (
+                  {filteredCorporateBookings.map((b) => (
                     <div key={b.id} className="admin-entry-card">
                       <div className="admin-entry-card-header">
                         <span className="admin-entry-card-id">#{b.id}</span>
@@ -2551,6 +2695,10 @@ const AdminDashboard = () => {
                   <div className="admin-form-group">
                     <label>Fare amount (₹) *</label>
                     <input type="number" min="0" step="0.01" value={corporateInvoiceForm.fare_amount} onChange={(e) => setCorporateInvoiceForm((f) => ({ ...f, fare_amount: e.target.value }))} required />
+                  </div>
+                  <div className="admin-form-group full-width">
+                    <label>Invoice number (optional)</label>
+                    <input type="text" value={corporateInvoiceForm.invoice_number} onChange={(e) => setCorporateInvoiceForm((f) => ({ ...f, invoice_number: e.target.value }))} placeholder="e.g. crp202502080001" />
                   </div>
                   <div className="admin-form-group">
                     <label>Travel date (optional)</label>
@@ -2731,7 +2879,7 @@ const AdminDashboard = () => {
         <div className="admin-modal-overlay" onClick={() => { setAssignBooking(null); setAssignDriverId(''); setAssignCabId(''); }}>
           <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
             <div className="admin-modal-header">
-              <h3>Assign driver & cab</h3>
+              <h3>{assignBooking.cab_id ? 'Reassign driver & cab' : 'Assign driver & cab'}</h3>
               <button type="button" className="admin-modal-close" onClick={() => { setAssignBooking(null); setAssignDriverId(''); setAssignCabId(''); }} aria-label="Close">×</button>
             </div>
             <form onSubmit={handleAssignSubmit} className="admin-modal-body">
@@ -2757,7 +2905,7 @@ const AdminDashboard = () => {
                 >
                   <option value="">Select cab</option>
                   {assignModalCabs.map((c) => (
-                    <option key={c.id} value={c.id}>{c.vehicle_number} {c.driver_name ? `(${c.driver_name})` : ''}</option>
+                    <option key={c.id} value={c.id}>{((c.name || '').trim() || c.vehicle_number || '—')}{c.vehicle_number && (c.name || '').trim() ? ` (${c.vehicle_number})` : ''}{c.driver_name ? ` – ${c.driver_name}` : ''}</option>
                   ))}
                 </select>
                 {false && assignDriverId && assignModalCabs.length === 0 && (
@@ -2766,7 +2914,7 @@ const AdminDashboard = () => {
               </div>
               <div className="admin-modal-actions">
                 <button type="button" className="admin-btn admin-btn-secondary" onClick={() => { setAssignBooking(null); setAssignDriverId(''); setAssignCabId(''); }}>Cancel</button>
-                <button type="submit" className="admin-btn admin-btn-primary" disabled={assignSubmitting || !assignCabId}>{assignSubmitting ? 'Assigning…' : 'Assign'}</button>
+                <button type="submit" className="admin-btn admin-btn-primary" disabled={assignSubmitting || !assignCabId}>{assignSubmitting ? (assignBooking.cab_id ? 'Reassigning…' : 'Assigning…') : (assignBooking.cab_id ? 'Reassign' : 'Assign')}</button>
               </div>
             </form>
           </div>

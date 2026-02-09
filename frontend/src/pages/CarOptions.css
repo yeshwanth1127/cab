@@ -457,19 +457,19 @@
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
 }
 
 .car-options-success-popup {
   position: relative;
   text-align: center;
-  padding: 28px 24px 24px;
-  background: linear-gradient(135deg, rgba(22, 163, 74, 0.15) 0%, rgba(22, 163, 74, 0.08) 100%);
-  border: 2px solid rgba(22, 163, 74, 0.35);
+  padding: 32px 28px 28px;
+  background: #ffffff;
   border-radius: 16px;
-  min-width: 280px;
+  min-width: 300px;
   max-width: 90vw;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.06);
 }
 
 .car-options-success-title {
@@ -489,16 +489,39 @@
   color: #16a34a;
 }
 
+.car-options-success-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  margin-top: 4px;
+}
+
 .car-options-success-link {
   display: inline-block;
   color: #16a34a;
   font-weight: 600;
   text-decoration: none;
-  margin-bottom: 8px;
 }
 
 .car-options-success-link:hover {
   text-decoration: underline;
+}
+
+.car-options-success-back {
+  padding: 10px 20px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #374151;
+  background: #f3f4f6;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.car-options-success-back:hover {
+  background: #e5e7eb;
 }
 
 .car-options-success-dismiss {
@@ -629,10 +652,22 @@
   margin: 0 0 12px;
 }
 
+.car-options-reconfirm-intro {
+  margin: 0 20px 12px;
+  font-size: 0.9rem;
+  color: #6b7280;
+}
+
+.car-options-reconfirm-details {
+  border-bottom: none;
+  padding: 8px 20px 16px;
+}
+
 .car-options-confirm-actions {
   display: flex;
   gap: 12px;
   margin-top: 20px;
+  padding: 0 20px 20px;
 }
 
 .car-options-confirm-cancel {

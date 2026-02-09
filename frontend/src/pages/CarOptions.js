@@ -26,6 +26,7 @@ const CarOptions = () => {
   const [confirmPassengerPhone, setConfirmPassengerPhone] = useState('');
   const [confirmSubmitting, setConfirmSubmitting] = useState(false);
   const [confirmError, setConfirmError] = useState('');
+  const [reconfirmData, setReconfirmData] = useState(null);
   const [successBookingId, setSuccessBookingId] = useState(null);
 
   useEffect(() => {
@@ -182,10 +183,11 @@ const CarOptions = () => {
 
   const handleCloseConfirm = () => {
     setConfirmModal(null);
+    setReconfirmData(null);
     setConfirmError('');
   };
 
-  const handleConfirmBooking = async (e) => {
+  const handleConfirmBooking = (e) => {
     e.preventDefault();
     if (!confirmModal?.cab || !confirmModal?.cabType) return;
     const name = (confirmPassengerName || '').trim();
@@ -194,20 +196,64 @@ const CarOptions = () => {
       setConfirmError('Please enter your name and phone number.');
       return;
     }
+    setConfirmError('');
+    let fareAmount = 0;
+    const summaryLines = [];
+    if (isAirportFlow) {
+      fareAmount = airportFares[confirmModal.cabType.id] ?? (confirmModal.cabType.baseFare || 0);
+      summaryLines.push({ label: 'From', value: bookingState.from_location || '—' });
+      summaryLines.push({ label: 'To', value: bookingState.to_location || '—' });
+    } else if (isOutstationFlow) {
+      fareAmount = outstationFares[confirmModal.cabType.id] ?? 0;
+      summaryLines.push({ label: 'From', value: bookingState.from_location || '—' });
+      summaryLines.push({ label: 'To', value: bookingState.to_location || '—' });
+      if (bookingState.trip_type === 'round_trip') {
+        summaryLines.push({ label: 'Days', value: String(bookingState.number_of_days || '—') });
+      }
+    } else {
+      const baseFare = Number(confirmModal.cabType.baseFare) || 0;
+      const packageRate = confirmModal.cabType.packageRates?.[selectedHours] != null
+        ? Number(confirmModal.cabType.packageRates[selectedHours])
+        : 0;
+      fareAmount = baseFare + packageRate;
+      summaryLines.push({ label: 'From', value: fromLocation || '—' });
+      summaryLines.push({ label: 'Package', value: `${selectedHours}h` });
+    }
+    summaryLines.push({ label: 'Cab type', value: confirmModal.cabType.name });
+    summaryLines.push({ label: 'Vehicle', value: confirmModal.cab.vehicle_number });
+    summaryLines.push({ label: 'Name', value: name });
+    summaryLines.push({ label: 'Phone', value: phone });
+    summaryLines.push({ label: 'Total', value: `₹${fareAmount}`, isTotal: true });
+    setReconfirmData({
+      cab: confirmModal.cab,
+      cabType: confirmModal.cabType,
+      passengerName: name,
+      passengerPhone: phone,
+      fareAmount,
+      summaryLines,
+    });
+  };
+
+  const handleReconfirmEdit = () => {
+    setReconfirmData(null);
+  };
+
+  const handleReconfirmSubmit = async () => {
+    if (!reconfirmData) return;
     setConfirmSubmitting(true);
     setConfirmError('');
     try {
+      const { cab, cabType, passengerName, passengerPhone, fareAmount } = reconfirmData;
       if (isAirportFlow) {
-        const fareAmount = airportFares[confirmModal.cabType.id] ?? (confirmModal.cabType.baseFare || 0);
         const payload = {
           service_type: 'airport',
           from_location: bookingState.from_location,
           to_location: bookingState.to_location,
-          passenger_name: name,
-          passenger_phone: phone,
+          passenger_name: passengerName,
+          passenger_phone: passengerPhone,
           fare_amount: fareAmount,
-          cab_id: confirmModal.cab.id,
-          cab_type_id: confirmModal.cabType.id,
+          cab_id: cab.id,
+          cab_type_id: cabType.id,
         };
         if (bookingState.from_lat != null && bookingState.from_lng != null) {
           payload.pickup_lat = bookingState.from_lat;
@@ -220,18 +266,18 @@ const CarOptions = () => {
         const res = await api.post('/bookings', payload);
         setSuccessBookingId(res.data?.id);
         setConfirmModal(null);
+        setReconfirmData(null);
       } else if (isOutstationFlow) {
-        const fareAmount = outstationFares[confirmModal.cabType.id] ?? 0;
         const payload = {
           service_type: 'outstation',
           trip_type: bookingState.trip_type || 'one_way',
           from_location: bookingState.from_location,
           to_location: bookingState.to_location,
-          passenger_name: name,
-          passenger_phone: phone,
+          passenger_name: passengerName,
+          passenger_phone: passengerPhone,
           fare_amount: fareAmount,
-          cab_id: confirmModal.cab.id,
-          cab_type_id: confirmModal.cabType.id,
+          cab_id: cab.id,
+          cab_type_id: cabType.id,
         };
         if (bookingState.from_lat != null && bookingState.from_lng != null) {
           payload.pickup_lat = bookingState.from_lat;
@@ -244,25 +290,24 @@ const CarOptions = () => {
         const res = await api.post('/bookings', payload);
         setSuccessBookingId(res.data?.id);
         setConfirmModal(null);
+        setReconfirmData(null);
       } else {
-        const baseFare = Number(confirmModal.cabType.baseFare) || 0;
-        const packageRate = confirmModal.cabType.packageRates?.[selectedHours] != null
-          ? Number(confirmModal.cabType.packageRates[selectedHours])
-          : 0;
-        const fareAmount = baseFare + packageRate;
         const res = await api.post('/bookings', {
           service_type: 'local',
           from_location: fromLocation,
           to_location: 'Local package',
-          passenger_name: name,
-          passenger_phone: phone,
+          passenger_name: passengerName,
+          passenger_phone: passengerPhone,
           fare_amount: fareAmount,
           number_of_hours: selectedHours,
-          cab_id: confirmModal.cab.id,
-          cab_type_id: confirmModal.cabType.id,
+          cab_id: cab.id,
+          cab_type_id: cabType.id,
+          pickup_lat: bookingState.from_lat ?? null,
+          pickup_lng: bookingState.from_lng ?? null,
         });
         setSuccessBookingId(res.data?.id);
         setConfirmModal(null);
+        setReconfirmData(null);
       }
     } catch (err) {
       console.error('Error creating booking:', err);
@@ -423,13 +468,22 @@ const CarOptions = () => {
                   <p className="car-options-success-id">
                     Your booking ID is <strong>#{successBookingId}</strong>
                   </p>
-                  <Link
-                    to="/check-booking"
-                    className="car-options-success-link"
-                    onClick={() => setSuccessBookingId(null)}
-                  >
-                    Check booking
-                  </Link>
+                  <div className="car-options-success-actions">
+                    <Link
+                      to="/check-booking"
+                      className="car-options-success-link"
+                      onClick={() => setSuccessBookingId(null)}
+                    >
+                      Check booking
+                    </Link>
+                    <button
+                      type="button"
+                      className="car-options-success-back"
+                      onClick={() => setSuccessBookingId(null)}
+                    >
+                      Back to booking
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -471,139 +525,171 @@ const CarOptions = () => {
       </div>
 
       {confirmModal?.cab && confirmModal?.cabType && (
-        <div className="car-options-confirm-overlay" onClick={handleCloseConfirm}>
+        <div className="car-options-confirm-overlay" onClick={reconfirmData ? undefined : handleCloseConfirm}>
           <div className="car-options-confirm-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="car-options-confirm-header">
-              <h3>Re-confirm booking</h3>
-              <button type="button" className="car-options-confirm-close" onClick={handleCloseConfirm} aria-label="Close">×</button>
-            </div>
-            <div className="car-options-confirm-fare">
-              {isAirportFlow ? (
-                <>
-                  <div className="car-options-confirm-row">
-                    <span>From</span>
-                    <span>{bookingState.from_location || '—'}</span>
-                  </div>
-                  <div className="car-options-confirm-row">
-                    <span>To</span>
-                    <span>{bookingState.to_location || '—'}</span>
-                  </div>
-                  <div className="car-options-confirm-row">
-                    <span>Cab type</span>
-                    <span>{confirmModal.cabType.name}</span>
-                  </div>
-                  <div className="car-options-confirm-row">
-                    <span>Vehicle</span>
-                    <span>{confirmModal.cab.vehicle_number}</span>
-                  </div>
-                  <div className="car-options-confirm-row car-options-confirm-total">
-                    <span>Total</span>
-                    <span>₹{airportFares[confirmModal.cabType.id] ?? (confirmModal.cabType.baseFare || 0)}</span>
-                  </div>
-                </>
-              ) : isOutstationFlow ? (
-                <>
-                  <div className="car-options-confirm-row">
-                    <span>From</span>
-                    <span>{bookingState.from_location || '—'}</span>
-                  </div>
-                  <div className="car-options-confirm-row">
-                    <span>To</span>
-                    <span>{bookingState.to_location || '—'}</span>
-                  </div>
-                  {bookingState.trip_type === 'round_trip' && (
-                    <div className="car-options-confirm-row">
-                      <span>Days</span>
-                      <span>{bookingState.number_of_days}</span>
+            {reconfirmData ? (
+              <>
+                <div className="car-options-confirm-header">
+                  <h3>Confirm your booking</h3>
+                  <button type="button" className="car-options-confirm-close" onClick={handleCloseConfirm} aria-label="Close">×</button>
+                </div>
+                <p className="car-options-reconfirm-intro">Please verify all details before confirming.</p>
+                <div className="car-options-confirm-fare car-options-reconfirm-details">
+                  {reconfirmData.summaryLines.map((line, idx) => (
+                    <div
+                      key={idx}
+                      className={`car-options-confirm-row ${line.isTotal ? 'car-options-confirm-total' : ''}`}
+                    >
+                      <span>{line.label}</span>
+                      <span>{line.value}</span>
                     </div>
+                  ))}
+                </div>
+                {confirmError && <p className="car-options-confirm-error">{confirmError}</p>}
+                <div className="car-options-confirm-actions">
+                  <button type="button" className="car-options-confirm-cancel" onClick={handleReconfirmEdit}>
+                    Edit
+                  </button>
+                  <button type="button" className="car-options-confirm-submit" disabled={confirmSubmitting} onClick={handleReconfirmSubmit}>
+                    {confirmSubmitting ? 'Booking…' : 'Confirm booking'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="car-options-confirm-header">
+                  <h3>Enter your details</h3>
+                  <button type="button" className="car-options-confirm-close" onClick={handleCloseConfirm} aria-label="Close">×</button>
+                </div>
+                <div className="car-options-confirm-fare">
+                  {isAirportFlow ? (
+                    <>
+                      <div className="car-options-confirm-row">
+                        <span>From</span>
+                        <span>{bookingState.from_location || '—'}</span>
+                      </div>
+                      <div className="car-options-confirm-row">
+                        <span>To</span>
+                        <span>{bookingState.to_location || '—'}</span>
+                      </div>
+                      <div className="car-options-confirm-row">
+                        <span>Cab type</span>
+                        <span>{confirmModal.cabType.name}</span>
+                      </div>
+                      <div className="car-options-confirm-row">
+                        <span>Vehicle</span>
+                        <span>{confirmModal.cab.vehicle_number}</span>
+                      </div>
+                      <div className="car-options-confirm-row car-options-confirm-total">
+                        <span>Total</span>
+                        <span>₹{airportFares[confirmModal.cabType.id] ?? (confirmModal.cabType.baseFare || 0)}</span>
+                      </div>
+                    </>
+                  ) : isOutstationFlow ? (
+                    <>
+                      <div className="car-options-confirm-row">
+                        <span>From</span>
+                        <span>{bookingState.from_location || '—'}</span>
+                      </div>
+                      <div className="car-options-confirm-row">
+                        <span>To</span>
+                        <span>{bookingState.to_location || '—'}</span>
+                      </div>
+                      {bookingState.trip_type === 'round_trip' && (
+                        <div className="car-options-confirm-row">
+                          <span>Days</span>
+                          <span>{bookingState.number_of_days}</span>
+                        </div>
+                      )}
+                      <div className="car-options-confirm-row">
+                        <span>Cab type</span>
+                        <span>{confirmModal.cabType.name}</span>
+                      </div>
+                      <div className="car-options-confirm-row">
+                        <span>Vehicle</span>
+                        <span>{confirmModal.cab.vehicle_number}</span>
+                      </div>
+                      <div className="car-options-confirm-row car-options-confirm-total">
+                        <span>Total</span>
+                        <span>₹{outstationFares[confirmModal.cabType.id] ?? 0}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="car-options-confirm-row">
+                        <span>From</span>
+                        <span>{fromLocation || '—'}</span>
+                      </div>
+                      <div className="car-options-confirm-row">
+                        <span>Package</span>
+                        <span>{selectedHours}h</span>
+                      </div>
+                      <div className="car-options-confirm-row">
+                        <span>Cab type</span>
+                        <span>{confirmModal.cabType.name}</span>
+                      </div>
+                      <div className="car-options-confirm-row">
+                        <span>Vehicle</span>
+                        <span>{confirmModal.cab.vehicle_number}</span>
+                      </div>
+                      {(Number(confirmModal.cabType.baseFare) || 0) > 0 && (
+                        <div className="car-options-confirm-row">
+                          <span>Base fare</span>
+                          <span>₹{confirmModal.cabType.baseFare}</span>
+                        </div>
+                      )}
+                      <div className="car-options-confirm-row">
+                        <span>Package ({selectedHours}h)</span>
+                        <span>₹{confirmModal.cabType.packageRates?.[selectedHours] != null ? confirmModal.cabType.packageRates[selectedHours] : '—'}</span>
+                      </div>
+                      {confirmModal.cabType.extraHourRate != null && (
+                        <div className="car-options-confirm-row">
+                          <span>Extra hour</span>
+                          <span>₹{confirmModal.cabType.extraHourRate}/hr</span>
+                        </div>
+                      )}
+                      <div className="car-options-confirm-row car-options-confirm-total">
+                        <span>Total</span>
+                        <span>₹{(Number(confirmModal.cabType.baseFare) || 0) + (confirmModal.cabType.packageRates?.[selectedHours] != null ? Number(confirmModal.cabType.packageRates[selectedHours]) : 0)}</span>
+                      </div>
+                    </>
                   )}
-                  <div className="car-options-confirm-row">
-                    <span>Cab type</span>
-                    <span>{confirmModal.cabType.name}</span>
+                </div>
+                <form onSubmit={handleConfirmBooking} className="car-options-confirm-form">
+                  <div className="car-options-confirm-field">
+                    <label htmlFor="car-confirm-name">Your name</label>
+                    <input
+                      id="car-confirm-name"
+                      type="text"
+                      value={confirmPassengerName}
+                      onChange={(e) => setConfirmPassengerName(e.target.value)}
+                      placeholder="Enter your name"
+                      required
+                    />
                   </div>
-                  <div className="car-options-confirm-row">
-                    <span>Vehicle</span>
-                    <span>{confirmModal.cab.vehicle_number}</span>
+                  <div className="car-options-confirm-field">
+                    <label htmlFor="car-confirm-phone">Phone number</label>
+                    <input
+                      id="car-confirm-phone"
+                      type="tel"
+                      value={confirmPassengerPhone}
+                      onChange={(e) => setConfirmPassengerPhone(e.target.value)}
+                      placeholder="Enter phone number"
+                      required
+                    />
                   </div>
-                  <div className="car-options-confirm-row car-options-confirm-total">
-                    <span>Total</span>
-                    <span>₹{outstationFares[confirmModal.cabType.id] ?? 0}</span>
+                  {confirmError && <p className="car-options-confirm-error">{confirmError}</p>}
+                  <div className="car-options-confirm-actions">
+                    <button type="button" className="car-options-confirm-cancel" onClick={handleCloseConfirm}>
+                      Cancel
+                    </button>
+                    <button type="submit" className="car-options-confirm-submit" disabled={confirmSubmitting}>
+                      Continue
+                    </button>
                   </div>
-                </>
-              ) : (
-                <>
-                  <div className="car-options-confirm-row">
-                    <span>From</span>
-                    <span>{fromLocation || '—'}</span>
-                  </div>
-                  <div className="car-options-confirm-row">
-                    <span>Package</span>
-                    <span>{selectedHours}h</span>
-                  </div>
-                  <div className="car-options-confirm-row">
-                    <span>Cab type</span>
-                    <span>{confirmModal.cabType.name}</span>
-                  </div>
-                  <div className="car-options-confirm-row">
-                    <span>Vehicle</span>
-                    <span>{confirmModal.cab.vehicle_number}</span>
-                  </div>
-                  {(Number(confirmModal.cabType.baseFare) || 0) > 0 && (
-                    <div className="car-options-confirm-row">
-                      <span>Base fare</span>
-                      <span>₹{confirmModal.cabType.baseFare}</span>
-                    </div>
-                  )}
-                  <div className="car-options-confirm-row">
-                    <span>Package ({selectedHours}h)</span>
-                    <span>₹{confirmModal.cabType.packageRates?.[selectedHours] != null ? confirmModal.cabType.packageRates[selectedHours] : '—'}</span>
-                  </div>
-                  {confirmModal.cabType.extraHourRate != null && (
-                    <div className="car-options-confirm-row">
-                      <span>Extra hour</span>
-                      <span>₹{confirmModal.cabType.extraHourRate}/hr</span>
-                    </div>
-                  )}
-                  <div className="car-options-confirm-row car-options-confirm-total">
-                    <span>Total</span>
-                    <span>₹{(Number(confirmModal.cabType.baseFare) || 0) + (confirmModal.cabType.packageRates?.[selectedHours] != null ? Number(confirmModal.cabType.packageRates[selectedHours]) : 0)}</span>
-                  </div>
-                </>
-              )}
-            </div>
-            <form onSubmit={handleConfirmBooking} className="car-options-confirm-form">
-              <div className="car-options-confirm-field">
-                <label htmlFor="car-confirm-name">Your name</label>
-                <input
-                  id="car-confirm-name"
-                  type="text"
-                  value={confirmPassengerName}
-                  onChange={(e) => setConfirmPassengerName(e.target.value)}
-                  placeholder="Enter your name"
-                  required
-                />
-              </div>
-              <div className="car-options-confirm-field">
-                <label htmlFor="car-confirm-phone">Phone number</label>
-                <input
-                  id="car-confirm-phone"
-                  type="tel"
-                  value={confirmPassengerPhone}
-                  onChange={(e) => setConfirmPassengerPhone(e.target.value)}
-                  placeholder="Enter phone number"
-                  required
-                />
-              </div>
-              {confirmError && <p className="car-options-confirm-error">{confirmError}</p>}
-              <div className="car-options-confirm-actions">
-                <button type="button" className="car-options-confirm-cancel" onClick={handleCloseConfirm}>
-                  Cancel
-                </button>
-                <button type="submit" className="car-options-confirm-submit" disabled={confirmSubmitting}>
-                  {confirmSubmitting ? 'Booking…' : 'Confirm'}
-                </button>
-              </div>
-            </form>
+                </form>
+              </>
+            )}
           </div>
         </div>
       )}

@@ -1,6 +1,11 @@
 import axios from 'axios';
 
-const apiBaseURL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const rawApiURL = process.env.REACT_APP_API_URL || '';
+const apiBaseURL = (typeof rawApiURL === 'string' && (rawApiURL.startsWith('http://') || rawApiURL.startsWith('https://')))
+  ? rawApiURL
+  : (typeof window !== 'undefined' && window.location)
+    ? window.location.origin + (rawApiURL.startsWith('/') ? rawApiURL : '/' + (rawApiURL || 'api').replace(/^\/?/, ''))
+    : rawApiURL || 'http://localhost:5000/api';
 
 const api = axios.create({
   baseURL: apiBaseURL,
@@ -20,8 +25,8 @@ function getBackendBaseURL() {
 }
 
 function shouldUseApiUploadsPath() {
-  if (typeof apiBaseURL !== 'string') return false;
-  if (apiBaseURL.startsWith('http://') || apiBaseURL.startsWith('https://')) return false;
+  if (typeof rawApiURL !== 'string') return true;
+  if (rawApiURL.startsWith('http://') || rawApiURL.startsWith('https://')) return false;
   return true;
 }
 

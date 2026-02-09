@@ -296,8 +296,8 @@ router.post('/invoice/create', [
     await ensureCorporateBookingsFareColumn();
     await ensureCorporateBookingsInvoiceNumberColumn();
 
-    const { company_name, name, phone_number, pickup_point, drop_point, service_type, fare_amount, travel_date, travel_time, with_gst } = req.body;
-    const invoice_number = await generateCorporateInvoiceNumber();
+    const { company_name, name, phone_number, pickup_point, drop_point, service_type, fare_amount, travel_date, travel_time, with_gst, invoice_number: bodyInvoiceNumber } = req.body;
+    const invoice_number = (bodyInvoiceNumber && String(bodyInvoiceNumber).trim()) ? String(bodyInvoiceNumber).trim() : await generateCorporateInvoiceNumber();
 
     const result = await db.runAsync(
       `INSERT INTO corporate_bookings (name, phone_number, company_name, pickup_point, drop_point, service_type, travel_date, travel_time, fare_amount, invoice_number, status)

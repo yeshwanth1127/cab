@@ -102,15 +102,15 @@ const HomePage = () => {
     }
   };
 
-  const BANGALORE_AIRPORT_NAME = 'Bangalore International Airport';
+  const AIRPORT_DROP_NAME = 'Kempegowda International Airport';
   const KIA_LAT = 13.1989;
   const KIA_LNG = 77.7068;
 
   const handleContinueToAirportCabSelection = () => {
     if (!airportLocationAddress.trim()) return;
     const isToAirport = (airportDirection || 'to_airport') === 'to_airport';
-    const fromAddress = isToAirport ? airportLocationAddress : BANGALORE_AIRPORT_NAME;
-    const toAddress = isToAirport ? BANGALORE_AIRPORT_NAME : airportLocationAddress;
+    const fromAddress = isToAirport ? airportLocationAddress : AIRPORT_DROP_NAME;
+    const toAddress = isToAirport ? AIRPORT_DROP_NAME : airportLocationAddress;
     const fromLat = isToAirport ? (airportLocation?.lat ?? null) : KIA_LAT;
     const fromLng = isToAirport ? (airportLocation?.lng ?? null) : KIA_LNG;
     const toLat = isToAirport ? KIA_LAT : (airportLocation?.lat ?? null);
@@ -281,7 +281,7 @@ const HomePage = () => {
                 </div>
                 <div className="home-form-group">
                   <label className="home-form-label">
-                    {(airportDirection || 'to_airport') === 'to_airport' ? 'Pickup location' : 'Drop location'}
+                    {(airportDirection || 'to_airport') === 'to_airport' ? 'Pickup location' : 'Pickup (airport)'}
                   </label>
                   <LocationInput
                     placeholder={(airportDirection || 'to_airport') === 'to_airport' ? 'Enter your pickup address' : 'Enter your drop address'}
@@ -291,7 +291,13 @@ const HomePage = () => {
                   />
                 </div>
                 {(airportDirection || 'to_airport') === 'to_airport' && (
-                  <p className="home-airport-destination-hint">Destination: Bangalore International Airport (distance & fare will be calculated automatically)</p>
+                  <div className="home-form-group">
+                    <label className="home-form-label">Drop location</label>
+                    <div className="home-airport-drop-display">
+                      <span className="home-airport-drop-name">{AIRPORT_DROP_NAME}</span>
+                      <p className="home-airport-destination-hint">Distance & fare will be calculated automatically</p>
+                    </div>
+                  </div>
                 )}
                 <button
                   type="button"
