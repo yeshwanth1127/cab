@@ -6,6 +6,50 @@ const { generateEventInvoicePDF } = require('../services/invoiceService');
 
 const router = express.Router();
 
+async function ensureEventTables() {
+  try {
+    await db.runAsync(`
+      CREATE TABLE IF NOT EXISTS event_bookings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        phone_number TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        pickup_point TEXT NOT NULL,
+        drop_point TEXT NOT NULL,
+        pickup_date TEXT NOT NULL,
+        pickup_time TEXT NOT NULL,
+        notes TEXT,
+        pickup_lat REAL,
+        pickup_lng REAL,
+        drop_lat REAL,
+        drop_lng REAL,
+        number_of_cars INTEGER DEFAULT 1,
+        status TEXT DEFAULT 'pending',
+        assigned_at DATETIME,
+        cab_id INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (cab_id) REFERENCES cabs(id) ON DELETE SET NULL
+      )
+    `);
+    await db.runAsync(`
+      CREATE TABLE IF NOT EXISTS event_booking_assignments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_booking_id INTEGER NOT NULL,
+        cab_id INTEGER,
+        driver_id INTEGER,
+        driver_name TEXT,
+        driver_phone TEXT,
+        FOREIGN KEY (event_booking_id) REFERENCES event_bookings(id) ON DELETE CASCADE,
+        FOREIGN KEY (cab_id) REFERENCES cabs(id) ON DELETE SET NULL,
+        FOREIGN KEY (driver_id) REFERENCES drivers(id) ON DELETE SET NULL
+      )
+    `);
+  } catch (e) {
+    // tables may already exist with different schema
+  }
+}
+
 router.post('/bookings', [
   body('name').notEmpty().withMessage('Name is required'),
   body('phone_number').notEmpty().withMessage('Phone number is required'),
@@ -16,6 +60,7 @@ router.post('/bookings', [
   body('pickup_time').notEmpty().withMessage('Pickup time is required'),
 ], async (req, res) => {
   try {
+    await ensureEventTables();
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
@@ -46,6 +91,7 @@ router.use(requireAdmin);
 
 router.get('/bookings', async (req, res) => {
   try {
+    await ensureEventTables();
     const bookings = await db.allAsync(
       `SELECT eb.*, c.vehicle_number, c.driver_name as cab_driver_name, c.driver_phone as cab_driver_phone, ct.name as cab_type_name
        FROM event_bookings eb

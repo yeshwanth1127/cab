@@ -701,13 +701,13 @@ const CarOptions = () => {
                     />
                   </div>
                   <div className="car-options-confirm-field">
-                    <label htmlFor="car-confirm-email">Email (optional)</label>
+                    <label htmlFor="car-confirm-email">Email</label>
                     <input
                       id="car-confirm-email"
                       type="email"
                       value={confirmPassengerEmail}
                       onChange={(e) => setConfirmPassengerEmail(e.target.value)}
-                      placeholder="Enter email for confirmation"
+                      placeholder="Enter email for confirmation and updates"
                     />
                   </div>
                   <div className="car-options-confirm-field">

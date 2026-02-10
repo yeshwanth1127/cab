@@ -766,13 +766,13 @@ const HomePage = () => {
                 />
               </div>
               <div className="home-confirm-field">
-                <label htmlFor="home-confirm-email">Email (optional)</label>
+                <label htmlFor="home-confirm-email">Email</label>
                 <input
                   id="home-confirm-email"
                   type="email"
                   value={confirmPassengerEmail}
                   onChange={(e) => setConfirmPassengerEmail(e.target.value)}
-                  placeholder="Enter email for confirmation"
+                  placeholder="Enter email for confirmation and updates"
                 />
               </div>
               <div className="home-confirm-field">

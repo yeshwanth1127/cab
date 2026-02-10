@@ -77,7 +77,7 @@ const AdminDashboard = () => {
   const [assignCabId, setAssignCabId] = useState('');
   const [assignSubmitting, setAssignSubmitting] = useState(false);
   const [driverModal, setDriverModal] = useState(null);
-  const [driverForm, setDriverForm] = useState({ name: '', phone: '', license_number: '', emergency_contact_name: '', emergency_contact_phone: '' });
+  const [driverForm, setDriverForm] = useState({ name: '', phone: '', email: '', license_number: '', emergency_contact_name: '', emergency_contact_phone: '' });
   const [driverSubmitting, setDriverSubmitting] = useState(false);
 
   const [createForm, setCreateForm] = useState({
@@ -457,7 +457,7 @@ const AdminDashboard = () => {
       fetchEventBookings();
     }
     if (activeTab === TABS.others) {
-      if (!driverModal) setDriverForm({ name: '', phone: '', license_number: '', emergency_contact_name: '', emergency_contact_phone: '' });
+      if (!driverModal) setDriverForm({ name: '', phone: '', email: '', license_number: '', emergency_contact_name: '', emergency_contact_phone: '' });
       fetchOthersCabTypes();
     }
   }, [activeTab, fetchStats, fetchBookings, fetchDrivers, fetchOthersCabTypes, fetchCorporateBookings, fetchCorporateCabs, fetchEventBookings]);
@@ -528,19 +528,25 @@ const AdminDashboard = () => {
     setAssignSubmitting(true);
     try {
       if (assignForCorporate) {
-        await api.put(`/corporate/bookings/${assignBooking.id}`, { cab_id: Number(assignCabId) });
+        const res = await api.put(`/corporate/bookings/${assignBooking.id}`, { cab_id: Number(assignCabId) });
         showToast(wasAlreadyAssigned ? 'Driver & cab reassigned.' : 'Driver & cab assigned.');
+        if (res.data?.n8nWarnings?.length) {
+          setTimeout(() => showToast(res.data.n8nWarnings.join(' '), 'error'), 600);
+        }
         setAssignBooking(null);
         setAssignForCorporate(false);
         setAssignDriverId('');
         setAssignCabId('');
         fetchCorporateBookings();
       } else {
-        await api.put(`/admin/bookings/${assignBooking.id}`, {
+        const res = await api.put(`/admin/bookings/${assignBooking.id}`, {
           cab_id: Number(assignCabId),
           booking_status: 'confirmed',
         });
         showToast(wasAlreadyAssigned ? 'Driver & cab reassigned.' : 'Driver & cab assigned.');
+        if (res.data?.n8nWarnings?.length) {
+          setTimeout(() => showToast(res.data.n8nWarnings.join(' '), 'error'), 600);
+        }
         setAssignBooking(null);
         setAssignDriverId('');
         setAssignCabId('');
@@ -771,6 +777,15 @@ const AdminDashboard = () => {
       a.remove();
       window.URL.revokeObjectURL(url);
       showToast('Invoice created and downloaded.');
+      const rawWarnings = response.headers['x-n8n-warnings'];
+      if (rawWarnings) {
+        try {
+          const invoiceWarnings = JSON.parse(rawWarnings);
+          if (Array.isArray(invoiceWarnings) && invoiceWarnings.length) {
+            setTimeout(() => showToast(invoiceWarnings.join(' '), 'error'), 600);
+          }
+        } catch (_) {}
+      }
       setInvoiceFromLocation(null);
       setInvoiceToLocation(null);
       setInvoiceForm((f) => ({ ...f, from_location: '', to_location: '', passenger_name: '', passenger_phone: '', passenger_email: '', fare_amount: '', number_of_hours: '', extra_stops: [] }));
@@ -1104,7 +1119,7 @@ const AdminDashboard = () => {
         showToast('Driver registered.');
       }
       setDriverModal(null);
-      setDriverForm({ name: '', phone: '', license_number: '', emergency_contact_name: '', emergency_contact_phone: '' });
+      setDriverForm({ name: '', phone: '', email: '', license_number: '', emergency_contact_name: '', emergency_contact_phone: '' });
       fetchDrivers();
     } catch (err) {
       const msg = err.response?.data?.error || (err.response?.data?.errors && err.response.data.errors.map((e) => e.msg).join('; ')) || 'Failed to save driver';
@@ -2498,7 +2513,7 @@ const AdminDashboard = () => {
               <h2>Driver Status</h2>
               <p className="admin-bookings-desc">Availability & rides – list and manage drivers.</p>
               <div className="admin-modal-actions" style={{ marginBottom: 16 }}>
-                <button type="button" className="admin-btn admin-btn-primary" onClick={() => { setDriverModal({}); setDriverForm({ name: '', phone: '', license_number: '', emergency_contact_name: '', emergency_contact_phone: '' }); }}>Add driver</button>
+                <button type="button" className="admin-btn admin-btn-primary" onClick={() => { setDriverModal({}); setDriverForm({ name: '', phone: '', email: '', license_number: '', emergency_contact_name: '', emergency_contact_phone: '' }); }}>Add driver</button>
               </div>
               {loading.drivers && <p className="admin-dashboard-list-loading">Loading…</p>}
               {!loading.drivers && (
@@ -2521,7 +2536,7 @@ const AdminDashboard = () => {
                           <td>{d.license_number || '—'}</td>
                           <td>{d.emergency_contact_name || '—'}</td>
                           <td className="actions">
-                            <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => { setDriverModal(d); setDriverForm({ name: d.name, phone: d.phone, license_number: d.license_number || '', emergency_contact_name: d.emergency_contact_name || '', emergency_contact_phone: d.emergency_contact_phone || '' }); }}>Edit</button>
+                            <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => { setDriverModal(d); setDriverForm({ name: d.name, phone: d.phone, email: d.email || '', license_number: d.license_number || '', emergency_contact_name: d.emergency_contact_name || '', emergency_contact_phone: d.emergency_contact_phone || '' }); }}>Edit</button>
                             <button type="button" className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => handleDeleteDriver(d.id)}>Delete</button>
                           </td>
                         </tr>
@@ -2545,7 +2560,7 @@ const AdminDashboard = () => {
                 </button>
                 <div className="admin-rate-meters-block-body">
                   <div className="admin-modal-actions" style={{ marginBottom: 16 }}>
-                    <button type="button" className="admin-btn admin-btn-primary" onClick={() => { setDriverModal({}); setDriverForm({ name: '', phone: '', license_number: '', emergency_contact_name: '', emergency_contact_phone: '' }); }}>Add driver</button>
+                    <button type="button" className="admin-btn admin-btn-primary" onClick={() => { setDriverModal({}); setDriverForm({ name: '', phone: '', email: '', license_number: '', emergency_contact_name: '', emergency_contact_phone: '' }); }}>Add driver</button>
                   </div>
                   {loading.drivers && <p className="admin-dashboard-list-loading">Loading drivers…</p>}
                   {!loading.drivers && (
@@ -2571,7 +2586,7 @@ const AdminDashboard = () => {
                               <td>{d.license_number || '—'}</td>
                               <td>{d.emergency_contact_name || '—'}</td>
                               <td className="actions">
-                                <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => { setDriverModal(d); setDriverForm({ name: d.name, phone: d.phone, license_number: d.license_number || '', emergency_contact_name: d.emergency_contact_name || '', emergency_contact_phone: d.emergency_contact_phone || '' }); }}>Edit</button>
+                                <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => { setDriverModal(d); setDriverForm({ name: d.name, phone: d.phone, email: d.email || '', license_number: d.license_number || '', emergency_contact_name: d.emergency_contact_name || '', emergency_contact_phone: d.emergency_contact_phone || '' }); }}>Edit</button>
                                 <button type="button" className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => handleDeleteDriver(d.id)}>Delete</button>
                               </td>
                             </tr>
@@ -3577,6 +3592,10 @@ const AdminDashboard = () => {
                 <div className="admin-form-group">
                   <label>Phone</label>
                   <input type="tel" value={driverForm.phone} onChange={(e) => setDriverForm((f) => ({ ...f, phone: e.target.value }))} required />
+                </div>
+                <div className="admin-form-group">
+                  <label>Email</label>
+                  <input type="email" value={driverForm.email || ''} onChange={(e) => setDriverForm((f) => ({ ...f, email: e.target.value }))} placeholder="e.g. driver@example.com" />
                 </div>
                 <div className="admin-form-group">
                   <label>License number</label>

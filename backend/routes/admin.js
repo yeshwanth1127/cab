@@ -222,8 +222,8 @@ router.put('/bookings/:id', async (req, res) => {
     if (updates.length === 0) {
 
       const updated = await db.getAsync(
-        `SELECT b.*, c.vehicle_number, c.driver_name as driver_name, c.driver_phone as driver_phone, ct.name as cab_type_name
-         FROM bookings b LEFT JOIN cabs c ON b.cab_id = c.id LEFT JOIN cab_types ct ON b.cab_type_id = ct.id WHERE b.id = ?`,
+        `SELECT b.*, c.vehicle_number, c.driver_name as driver_name, c.driver_phone as driver_phone, d.email as driver_email, ct.name as cab_type_name
+         FROM bookings b LEFT JOIN cabs c ON b.cab_id = c.id LEFT JOIN drivers d ON c.driver_id = d.id LEFT JOIN cab_types ct ON b.cab_type_id = ct.id WHERE b.id = ?`,
         [id]
       );
       return res.json(updated);
@@ -249,21 +249,39 @@ router.put('/bookings/:id', async (req, res) => {
     }
 
     const withCab = await db.getAsync(
-      `SELECT b.*, c.vehicle_number, c.driver_name as driver_name, c.driver_phone as driver_phone, ct.name as cab_type_name
-       FROM bookings b LEFT JOIN cabs c ON b.cab_id = c.id LEFT JOIN cab_types ct ON b.cab_type_id = ct.id WHERE b.id = ?`,
+      `SELECT b.*, c.vehicle_number, c.driver_name as driver_name, c.driver_phone as driver_phone, c.driver_id as cab_driver_id,
+        d.email as driver_email, ct.name as cab_type_name
+       FROM bookings b LEFT JOIN cabs c ON b.cab_id = c.id LEFT JOIN drivers d ON c.driver_id = d.id LEFT JOIN cab_types ct ON b.cab_type_id = ct.id WHERE b.id = ?`,
       [id]
     );
+    const n8nWarnings = [];
     if (cab_id) {
+      const driverEmail = (withCab.driver_email != null && String(withCab.driver_email).trim()) ? String(withCab.driver_email).trim() : '';
       triggerDriverInfo({
         bookingId: 'NC' + id,
         customerEmail: withCab.passenger_email || '',
-        driverEmail: withCab.driver_email || '',
+        driverEmail,
         driverName: withCab.driver_name || '',
         driverPhone: withCab.driver_phone || '',
         cabNumber: withCab.vehicle_number || '',
       });
+      if (!(withCab.passenger_email && String(withCab.passenger_email).trim())) {
+        n8nWarnings.push('Customer email is missing — customer will not receive driver info email.');
+      }
+      if (!(withCab.driver_name && String(withCab.driver_name).trim())) {
+        n8nWarnings.push('Driver name is missing.');
+      }
+      if (!(withCab.driver_phone && String(withCab.driver_phone).trim())) {
+        n8nWarnings.push('Driver phone is missing.');
+      }
+      if (!(withCab.vehicle_number && String(withCab.vehicle_number).trim())) {
+        n8nWarnings.push('Cab number is missing.');
+      }
+      if (!driverEmail) {
+        n8nWarnings.push('Driver email is missing — driver will not receive n8n payload.');
+      }
     }
-    res.json(withCab);
+    res.json({ ...withCab, n8nWarnings: n8nWarnings.length ? n8nWarnings : undefined });
   } catch (error) {
     console.error('Error updating booking:', error);
     res.status(500).json({ error: 'Server error' });
@@ -273,6 +291,14 @@ router.put('/bookings/:id', async (req, res) => {
 async function ensureCabsCorporateOnlyColumn() {
   try {
     await db.runAsync('ALTER TABLE cabs ADD COLUMN corporate_only INTEGER DEFAULT 0');
+  } catch (e) {
+    // column may already exist
+  }
+}
+
+async function ensureDriversEmailColumn() {
+  try {
+    await db.runAsync('ALTER TABLE drivers ADD COLUMN email TEXT');
   } catch (e) {
     // column may already exist
   }
@@ -309,6 +335,7 @@ router.get('/cabs', async (req, res) => {
 
 router.get('/drivers', async (req, res) => {
   try {
+    await ensureDriversEmailColumn();
     const drivers = await db.allAsync(
       'SELECT * FROM drivers WHERE is_active = 1 ORDER BY name'
     );
@@ -324,27 +351,30 @@ router.post('/drivers', [
   body('phone').notEmpty().trim().withMessage('phone is required'),
 ], async (req, res) => {
   try {
+    await ensureDriversEmailColumn();
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       const msg = errors.array().map((e) => e.msg).join('; ');
       return res.status(400).json({ error: msg, errors: errors.array() });
     }
-    const { name, phone, license_number, emergency_contact_name, emergency_contact_phone } = req.body;
+    const { name, phone, license_number, emergency_contact_name, emergency_contact_phone, email } = req.body;
     const phoneTrim = String(phone).trim();
     const nameTrim = String(name).trim();
+    const emailVal = (email != null && String(email).trim()) ? String(email).trim() : null;
     const existing = await db.getAsync('SELECT id FROM drivers WHERE phone = ?', [phoneTrim]);
     if (existing) {
       return res.status(400).json({ error: 'A driver with this phone number already exists.' });
     }
     const result = await db.runAsync(
-      `INSERT INTO drivers (name, phone, license_number, emergency_contact_name, emergency_contact_phone)
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO drivers (name, phone, license_number, emergency_contact_name, emergency_contact_phone, email)
+       VALUES (?, ?, ?, ?, ?, ?)`,
       [
         nameTrim,
         phoneTrim,
         license_number != null ? String(license_number).trim() : null,
         emergency_contact_name != null ? String(emergency_contact_name).trim() : null,
         emergency_contact_phone != null ? String(emergency_contact_phone).trim() : null,
+        emailVal,
       ]
     );
     const driver = await db.getAsync('SELECT * FROM drivers WHERE id = ?', [result.lastID]);
@@ -357,8 +387,9 @@ router.post('/drivers', [
 
 router.put('/drivers/:id', async (req, res) => {
   try {
+    await ensureDriversEmailColumn();
     const { id } = req.params;
-    const { name, phone, license_number, emergency_contact_name, emergency_contact_phone } = req.body;
+    const { name, phone, license_number, emergency_contact_name, emergency_contact_phone, email } = req.body;
 
     const existing = await db.getAsync('SELECT * FROM drivers WHERE id = ?', [id]);
     if (!existing) {
@@ -386,6 +417,10 @@ router.put('/drivers/:id', async (req, res) => {
     if (emergency_contact_phone !== undefined) {
       updates.push('emergency_contact_phone = ?');
       values.push(emergency_contact_phone);
+    }
+    if (email !== undefined) {
+      updates.push('email = ?');
+      values.push((email != null && String(email).trim()) ? String(email).trim() : null);
     }
     if (updates.length === 0) {
       return res.json(existing);
@@ -524,12 +559,24 @@ router.post('/invoice/create', [
     const pdfUrl = baseUrl && pdfSecret
       ? `${baseUrl}/api/invoices/${newBooking.id}/pdf?token=${encodeURIComponent(pdfSecret)}&with_gst=${withGST}`
       : '';
+    const customerEmailVal = passenger_email && String(passenger_email).trim() ? String(passenger_email).trim() : '';
     triggerInvoiceGenerated({
-      customerEmail: passenger_email && String(passenger_email).trim() ? String(passenger_email).trim() : '',
+      customerEmail: customerEmailVal,
       invoiceId: newBooking.invoice_number || 'INV' + newBooking.id,
       amount: '₹' + Number(fare_amount),
       pdfUrl,
     });
+
+    const invoiceWarnings = [];
+    if (!customerEmailVal) {
+      invoiceWarnings.push('Customer email is missing — invoice email will not be sent.');
+    }
+    if (!pdfUrl) {
+      invoiceWarnings.push('PDF link not configured (set BASE_URL and INVOICE_PDF_SECRET) — invoice email may not include link.');
+    }
+    if (invoiceWarnings.length) {
+      res.setHeader('X-N8n-Warnings', JSON.stringify(invoiceWarnings));
+    }
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="invoice-${newBooking.id}${withGST ? '-with-gst' : ''}.pdf"`);

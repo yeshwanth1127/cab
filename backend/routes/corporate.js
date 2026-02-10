@@ -325,6 +325,7 @@ router.put('/bookings/:id', [
       [id]
     );
 
+    const n8nWarnings = [];
     if (req.body.cab_id) {
       const cab = await db.getAsync('SELECT vehicle_number, driver_name, driver_phone FROM cabs WHERE id = ?', [req.body.cab_id]);
       if (cab) {
@@ -336,10 +337,14 @@ router.put('/bookings/:id', [
           driverPhone: cab.driver_phone || '',
           cabNumber: cab.vehicle_number || '',
         });
+        n8nWarnings.push('Customer email is not stored for corporate bookings — customer will not receive driver info email.');
+        if (!(cab.driver_name && String(cab.driver_name).trim())) n8nWarnings.push('Driver name is missing.');
+        if (!(cab.driver_phone && String(cab.driver_phone).trim())) n8nWarnings.push('Driver phone is missing.');
+        if (!(cab.vehicle_number && String(cab.vehicle_number).trim())) n8nWarnings.push('Cab number is missing.');
       }
     }
 
-    res.json(updated);
+    res.json({ ...updated, n8nWarnings: n8nWarnings.length ? n8nWarnings : undefined });
   } catch (error) {
     console.error('Error updating corporate booking:', error);
     res.status(500).json({ error: 'Server error' });
