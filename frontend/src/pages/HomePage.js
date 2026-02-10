@@ -29,6 +29,8 @@ const HomePage = () => {
   const [outstationTo, setOutstationTo] = useState(null);
   const [outstationRoundTripDays, setOutstationRoundTripDays] = useState('');
   const [outstationMultiStops, setOutstationMultiStops] = useState([null, null]);
+  const [outstationPickup, setOutstationPickup] = useState(null);
+  const [outstationStops, setOutstationStops] = useState([null, null]);
   const [localOffers, setLocalOffers] = useState([]);
   const [localOffersLoading, setLocalOffersLoading] = useState(false);
   const [localOffersError, setLocalOffersError] = useState('');
@@ -42,6 +44,7 @@ const HomePage = () => {
   const [successBookingId, setSuccessBookingId] = useState(null);
   const [localLocationError, setLocalLocationError] = useState('');
   const [travelDatetime, setTravelDatetime] = useState('');
+  const [outstationReturnDatetime, setOutstationReturnDatetime] = useState('');
 
   const fromAddress = fromLocation?.address || '';
 
@@ -69,6 +72,9 @@ const HomePage = () => {
     setOutstationTo(null);
     setOutstationRoundTripDays('');
     setOutstationMultiStops([null, null]);
+    setOutstationPickup(null);
+    setOutstationStops([null, null]);
+    setOutstationReturnDatetime('');
     setLocalOffers([]);
     setLocalOffersError('');
     setTravelDatetime('');
@@ -92,6 +98,7 @@ const HomePage = () => {
           to_lat: outstationTo?.lat ?? null,
           to_lng: outstationTo?.lng ?? null,
           travel_datetime: travelDatetime || null,
+          return_datetime: outstationReturnDatetime || null,
         },
       });
     } else if (outstationTripType === 'round_trip') {
@@ -106,19 +113,24 @@ const HomePage = () => {
           to_location: pickupAddr,
           number_of_days: days,
           travel_datetime: travelDatetime || null,
+          return_datetime: outstationReturnDatetime || null,
         },
       });
     } else {
-      const stops = outstationMultiStops.map((s) => s?.address || '').filter(Boolean);
-      if (stops.length < 1) return;
+      const pickupAddr = (outstationPickup?.address || '').trim();
+      const stopLocations = outstationStops.filter((s) => s && (s.address || '').trim());
+      if (!pickupAddr || stopLocations.length === 0) return;
+      const allStops = [outstationPickup, ...stopLocations];
+      const stopAddresses = allStops.map((loc) => (loc?.address || '').trim());
       navigate('/car-options', {
         state: {
           service_type: 'outstation',
           trip_type: 'multiple_stops',
-          from_location: stops[0],
-          to_location: stops.length > 1 ? stops[stops.length - 1] : stops[0],
-          stops: stops,
+          from_location: stopAddresses[0],
+          to_location: stopAddresses[stopAddresses.length - 1],
+          stops: stopAddresses,
           travel_datetime: travelDatetime || null,
+          return_datetime: outstationReturnDatetime || null,
         },
       });
     }
@@ -434,11 +446,20 @@ const HomePage = () => {
                 {outstationTripType === 'multiple_stops' && (
                   <>
                     <div className="home-form-group">
-                      <label className="home-form-label">Destination 1</label>
+                      <label className="home-form-label">Pickup location</label>
                       <LocationInput
-                        placeholder="Enter first destination"
-                        value={outstationMultiStops[0] || null}
-                        onSelect={(loc) => setOutstationMultiStops((prev) => {
+                        placeholder="Enter pickup location"
+                        value={outstationPickup}
+                        onSelect={setOutstationPickup}
+                        label="Pickup"
+                      />
+                    </div>
+                    <div className="home-form-group">
+                      <label className="home-form-label">Stop 1 (optional)</label>
+                      <LocationInput
+                        placeholder="Enter first stop or destination"
+                        value={outstationStops[0] || null}
+                        onSelect={(loc) => setOutstationStops((prev) => {
                           const next = [...prev];
                           next[0] = loc;
                           return next;
@@ -447,11 +468,11 @@ const HomePage = () => {
                       />
                     </div>
                     <div className="home-form-group">
-                      <label className="home-form-label">Destination 2 (optional)</label>
+                      <label className="home-form-label">Stop 2 (optional)</label>
                       <LocationInput
-                        placeholder="Enter second destination"
-                        value={outstationMultiStops[1] || null}
-                        onSelect={(loc) => setOutstationMultiStops((prev) => {
+                        placeholder="Enter second stop"
+                        value={outstationStops[1] || null}
+                        onSelect={(loc) => setOutstationStops((prev) => {
                           const next = [...prev];
                           next[1] = loc;
                           return next;
@@ -459,13 +480,13 @@ const HomePage = () => {
                         label="Stop 2"
                       />
                     </div>
-                    {outstationMultiStops.slice(2).map((stop, idx) => (
+                    {outstationStops.slice(2).map((stop, idx) => (
                       <div key={idx} className="home-form-group">
                         <label className="home-form-label">Stop {idx + 3}</label>
                         <LocationInput
                           placeholder="Enter destination"
                           value={stop || null}
-                          onSelect={(loc) => setOutstationMultiStops((prev) => {
+                          onSelect={(loc) => setOutstationStops((prev) => {
                             const next = [...prev];
                             next[idx + 2] = loc;
                             return next;
@@ -478,7 +499,7 @@ const HomePage = () => {
                       <button
                         type="button"
                         className="home-add-stop-btn"
-                        onClick={() => setOutstationMultiStops((prev) => [...prev, null])}
+                        onClick={() => setOutstationStops((prev) => [...prev, null])}
                       >
                         + Add stop
                       </button>
@@ -496,6 +517,16 @@ const HomePage = () => {
                     className="home-flow-datetime-picker"
                   />
                 </div>
+                <div className="home-form-group">
+                  <label className="home-form-label">Return date (optional)</label>
+                  <DateTimePicker
+                    value={outstationReturnDatetime}
+                    onChange={setOutstationReturnDatetime}
+                    placeholder="Select return date and time"
+                    min={new Date().toISOString().slice(0, 16)}
+                    className="home-flow-datetime-picker"
+                  />
+                </div>
                 <button
                   type="button"
                   className="home-continue-btn"
@@ -504,7 +535,7 @@ const HomePage = () => {
                       ? !(outstationFrom?.address || '').trim() || !(outstationTo?.address || '').trim()
                       : outstationTripType === 'round_trip'
                         ? !(outstationFrom?.address || '').trim() || !(Number(outstationRoundTripDays) >= 1)
-                        : !(outstationMultiStops[0]?.address || '').trim()
+                        : !(outstationPickup?.address || '').trim() || outstationStops.every((s) => !(s?.address || '').trim())
                   }
                   onClick={handleContinueToOutstationCabSelection}
                 >

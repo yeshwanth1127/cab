@@ -216,6 +216,14 @@ const CarOptions = () => {
       if (bookingState.trip_type === 'round_trip') {
         summaryLines.push({ label: 'Days', value: String(bookingState.number_of_days || '—') });
       }
+      if (bookingState.return_datetime) {
+        try {
+          const rd = new Date(bookingState.return_datetime);
+          summaryLines.push({ label: 'Return date', value: rd.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) });
+        } catch (_) {
+          summaryLines.push({ label: 'Return date', value: bookingState.return_datetime });
+        }
+      }
     } else {
       const baseFare = Number(confirmModal.cabType.baseFare) || 0;
       const packageRate = confirmModal.cabType.packageRates?.[selectedHours] != null
@@ -298,6 +306,7 @@ const CarOptions = () => {
           cab_id: cab?.id ?? null,
           cab_type_id: cabType.id,
           travel_date: travelDatetime || null,
+          return_date: bookingState.return_datetime || null,
         };
         if (bookingState.from_lat != null && bookingState.from_lng != null) {
           payload.pickup_lat = bookingState.from_lat;

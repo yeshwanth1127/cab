@@ -25,6 +25,7 @@ async function ensureBookingsColumns() {
     ['trip_type', 'TEXT'],
     ['invoice_number', 'TEXT'],
     ['travel_date', 'DATETIME'],
+    ['"return_date"', 'DATETIME'],
   ];
   for (const [col, type] of columns) {
     try {
@@ -93,10 +94,19 @@ router.get('/bookings', async (req, res) => {
   try {
     await ensureBookingsColumns();
     const bookings = await db.allAsync(
-      `SELECT b.*, c.vehicle_number, c.driver_name as driver_name, c.driver_phone as driver_phone,
+      `SELECT b.id, b.user_id, b.cab_id, b.cab_type_id, b.car_option_id, b.from_location, b.to_location,
+              b.distance_km, b.estimated_time_minutes, b.fare_amount, b.booking_status, b.booking_date,
+              b.travel_date, b.passenger_name, b.passenger_phone, b.passenger_email, b.notes,
+              b.service_type, b.number_of_hours, b.trip_type, b.pickup_lat, b.pickup_lng,
+              b.destination_lat, b.destination_lng, b.maps_link, b.maps_link_drop, b.assigned_at, b.invoice_number,
+              b."return_date",
+              c.vehicle_number,
+              COALESCE(c.driver_name, d.name) as driver_name,
+              COALESCE(c.driver_phone, d.phone) as driver_phone,
               ct.name as cab_type_name
        FROM bookings b
        LEFT JOIN cabs c ON b.cab_id = c.id
+       LEFT JOIN drivers d ON d.id = COALESCE(c.driver_id, (SELECT id FROM drivers d2 WHERE d2.email = c.driver_email LIMIT 1))
        LEFT JOIN cab_types ct ON b.cab_type_id = ct.id
        ORDER BY b.id DESC`
     );
@@ -135,6 +145,7 @@ router.post('/bookings', [
       destination_lat,
       destination_lng,
       travel_date,
+      return_date,
     } = req.body;
 
     const invoiceNumber = await generateDefaultInvoiceNumber();
@@ -143,8 +154,8 @@ router.post('/bookings', [
         from_location, to_location, distance_km, estimated_time_minutes, fare_amount,
         passenger_name, passenger_phone, cab_id, cab_type_id,
         service_type, number_of_hours, pickup_lat, pickup_lng, destination_lat, destination_lng,
-        invoice_number, travel_date
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        invoice_number, travel_date, "return_date"
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         from_location,
         to_location,
@@ -163,6 +174,7 @@ router.post('/bookings', [
         destination_lng != null ? Number(destination_lng) : null,
         invoiceNumber,
         travel_date || null,
+        return_date || null,
       ]
     );
     let newBooking = await db.getAsync('SELECT * FROM bookings WHERE id = ?', [result.lastID]);
@@ -184,7 +196,7 @@ router.post('/bookings', [
 router.put('/bookings/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { booking_status, cab_id, invoice_number } = req.body;
+    const { booking_status, cab_id, driver_id, invoice_number } = req.body;
 
     const existing = await db.getAsync('SELECT * FROM bookings WHERE id = ?', [id]);
     if (!existing) {
@@ -219,11 +231,18 @@ router.put('/bookings/:id', async (req, res) => {
       values.push(invoice_number ? String(invoice_number).trim() : null);
     }
 
-    if (updates.length === 0) {
+    if (updates.length === 0 && driver_id == null) {
 
       const updated = await db.getAsync(
-        `SELECT b.*, c.vehicle_number, c.driver_name as driver_name, c.driver_phone as driver_phone, d.email as driver_email, ct.name as cab_type_name
-         FROM bookings b LEFT JOIN cabs c ON b.cab_id = c.id LEFT JOIN drivers d ON c.driver_id = d.id LEFT JOIN cab_types ct ON b.cab_type_id = ct.id WHERE b.id = ?`,
+        `SELECT b.*, c.vehicle_number,
+         COALESCE(c.driver_name, d.name) as driver_name,
+         COALESCE(c.driver_phone, d.phone) as driver_phone,
+         ct.name as cab_type_name
+         FROM bookings b
+         LEFT JOIN cabs c ON b.cab_id = c.id
+         LEFT JOIN drivers d ON d.id = COALESCE(c.driver_id, (SELECT id FROM drivers d2 WHERE d2.email = c.driver_email LIMIT 1))
+         LEFT JOIN cab_types ct ON b.cab_type_id = ct.id
+         WHERE b.id = ?`,
         [id]
       );
       return res.json(updated);
@@ -236,6 +255,16 @@ router.put('/bookings/:id', async (req, res) => {
     );
 
     const updated = await db.getAsync('SELECT * FROM bookings WHERE id = ?', [id]);
+    const effectiveCabId = cab_id !== undefined ? (cab_id || updated.cab_id) : updated.cab_id;
+    if (effectiveCabId && driver_id != null && driver_id !== '') {
+      const driver = await db.getAsync('SELECT id, name, phone, email FROM drivers WHERE id = ?', [driver_id]);
+      if (driver) {
+        await db.runAsync(
+          `UPDATE cabs SET driver_id = ?, driver_name = ?, driver_phone = ?, driver_email = ? WHERE id = ?`,
+          [driver_id, driver.name || null, driver.phone || null, driver.email || null, effectiveCabId]
+        );
+      }
+    }
     const { pickup, drop: dropLink } = generateGoogleMapsLink(updated);
     try {
       if (pickup) {
@@ -248,42 +277,139 @@ router.put('/bookings/:id', async (req, res) => {
 
     }
 
+    await ensureDriversEmailColumn();
+    await ensureCabsDriverEmailColumn();
     const withCab = await db.getAsync(
-      `SELECT b.*, c.vehicle_number, c.driver_name as driver_name, c.driver_phone as driver_phone, c.driver_id as cab_driver_id,
-        d.email as driver_email, ct.name as cab_type_name
-       FROM bookings b LEFT JOIN cabs c ON b.cab_id = c.id LEFT JOIN drivers d ON c.driver_id = d.id LEFT JOIN cab_types ct ON b.cab_type_id = ct.id WHERE b.id = ?`,
+      `SELECT b.*, c.vehicle_number,
+        COALESCE(c.driver_name, d.name) as driver_name,
+        COALESCE(c.driver_phone, d.phone) as driver_phone,
+        COALESCE(d.email, c.driver_email) as driver_email,
+        ct.name as cab_type_name
+       FROM bookings b
+       LEFT JOIN cabs c ON b.cab_id = c.id
+       LEFT JOIN drivers d ON d.id = COALESCE(c.driver_id, (SELECT id FROM drivers d2 WHERE d2.email = c.driver_email LIMIT 1))
+       LEFT JOIN cab_types ct ON b.cab_type_id = ct.id
+       WHERE b.id = ?`,
       [id]
     );
+    if (process.env.DEBUG_N8N_WARNINGS && withCab) {
+      console.log('assign booking row keys:', Object.keys(withCab).sort().join(', '));
+      console.log('assign driver_name/driver_phone/driver_email/vehicle_number:', [withCab.driver_name, withCab.driver_phone, withCab.driver_email, withCab.vehicle_number]);
+    }
     const n8nWarnings = [];
     if (cab_id) {
-      const driverEmail = (withCab.driver_email != null && String(withCab.driver_email).trim()) ? String(withCab.driver_email).trim() : '';
+      // Read from row by key; try exact keys then case-insensitive match (some DB drivers return different casing)
+      const pick = (row, ...preferredKeys) => {
+        if (!row || typeof row !== 'object') return '';
+        for (const k of preferredKeys) {
+          const v = row[k];
+          if (v != null && String(v).trim() !== '') return String(v).trim();
+        }
+        const target = preferredKeys[0].toLowerCase();
+        for (const key of Object.keys(row)) {
+          if (key.toLowerCase() === target) {
+            const v = row[key];
+            if (v != null && String(v).trim() !== '') return String(v).trim();
+            break;
+          }
+        }
+        return '';
+      };
+      const driverName = pick(withCab, 'driver_name', 'DRIVER_NAME');
+      const driverPhone = pick(withCab, 'driver_phone', 'DRIVER_PHONE');
+      const cabNumber = pick(withCab, 'vehicle_number', 'VEHICLE_NUMBER');
+      const customerEmailVal = pick(withCab, 'passenger_email', 'PASSENGER_EMAIL');
+      const driverEmail = pick(withCab, 'driver_email', 'DRIVER_EMAIL');
+      const pickup = pick(withCab, 'from_location', 'FROM_LOCATION');
+      const drop = pick(withCab, 'to_location', 'TO_LOCATION');
+      const pickupTime = pick(withCab, 'travel_date', 'TRAVEL_DATE') || pick(withCab, 'booking_date', 'BOOKING_DATE');
       triggerDriverInfo({
         bookingId: 'NC' + id,
-        customerEmail: withCab.passenger_email || '',
+        customerEmail: customerEmailVal,
         driverEmail,
-        driverName: withCab.driver_name || '',
-        driverPhone: withCab.driver_phone || '',
-        cabNumber: withCab.vehicle_number || '',
+        driverName,
+        driverPhone,
+        cabNumber,
+        pickup,
+        drop,
+        pickupTime,
+        sendDriverInfoToCustomer: true,
+        sendTripToDriver: false,
       });
-      if (!(withCab.passenger_email && String(withCab.passenger_email).trim())) {
-        n8nWarnings.push('Customer email is missing — customer will not receive driver info email.');
-      }
-      if (!(withCab.driver_name && String(withCab.driver_name).trim())) {
-        n8nWarnings.push('Driver name is missing.');
-      }
-      if (!(withCab.driver_phone && String(withCab.driver_phone).trim())) {
-        n8nWarnings.push('Driver phone is missing.');
-      }
-      if (!(withCab.vehicle_number && String(withCab.vehicle_number).trim())) {
-        n8nWarnings.push('Cab number is missing.');
-      }
-      if (!driverEmail) {
-        n8nWarnings.push('Driver email is missing — driver will not receive n8n payload.');
-      }
+      if (!customerEmailVal) n8nWarnings.push('Customer email is missing — customer will not receive driver info email.');
+      if (!cabNumber) n8nWarnings.push('Cab number is missing.');
     }
     res.json({ ...withCab, n8nWarnings: n8nWarnings.length ? n8nWarnings : undefined });
   } catch (error) {
     console.error('Error updating booking:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/bookings/:id/send-driver-email', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await ensureDriversEmailColumn();
+    await ensureCabsDriverEmailColumn();
+    const withCab = await db.getAsync(
+      `SELECT b.*, c.vehicle_number,
+        COALESCE(c.driver_name, d.name) as driver_name,
+        COALESCE(c.driver_phone, d.phone) as driver_phone,
+        COALESCE(d.email, c.driver_email) as driver_email
+       FROM bookings b
+       LEFT JOIN cabs c ON b.cab_id = c.id
+       LEFT JOIN drivers d ON d.email = c.driver_email
+       WHERE b.id = ?`,
+      [id]
+    );
+    if (!withCab) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+    if (!withCab.cab_id) {
+      return res.status(400).json({ error: 'No cab assigned to this booking' });
+    }
+    const pick = (row, ...preferredKeys) => {
+      if (!row || typeof row !== 'object') return '';
+      for (const k of preferredKeys) {
+        const v = row[k];
+        if (v != null && String(v).trim() !== '') return String(v).trim();
+      }
+      const target = preferredKeys[0].toLowerCase();
+      for (const key of Object.keys(row)) {
+        if (key.toLowerCase() === target) {
+          const v = row[key];
+          if (v != null && String(v).trim() !== '') return String(v).trim();
+          break;
+        }
+      }
+      return '';
+    };
+    const driverEmail = pick(withCab, 'driver_email', 'DRIVER_EMAIL');
+    if (!driverEmail) {
+      return res.json({ ok: true, message: 'No driver email configured on this cab; email not sent.' });
+    }
+    const driverName = pick(withCab, 'driver_name', 'DRIVER_NAME');
+    const driverPhone = pick(withCab, 'driver_phone', 'DRIVER_PHONE');
+    const cabNumber = pick(withCab, 'vehicle_number', 'VEHICLE_NUMBER');
+    const pickup = pick(withCab, 'from_location', 'FROM_LOCATION');
+    const drop = pick(withCab, 'to_location', 'TO_LOCATION');
+    const pickupTime = pick(withCab, 'travel_date', 'TRAVEL_DATE') || pick(withCab, 'booking_date', 'BOOKING_DATE');
+    triggerDriverInfo({
+      bookingId: 'NC' + id,
+      customerEmail: '',
+      driverEmail,
+      driverName,
+      driverPhone,
+      cabNumber,
+      pickup,
+      drop,
+      pickupTime,
+      sendDriverInfoToCustomer: false,
+      sendTripToDriver: true,
+    });
+    res.json({ ok: true, message: 'Trip email sent to driver' });
+  } catch (error) {
+    console.error('Error sending driver email:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -304,11 +430,20 @@ async function ensureDriversEmailColumn() {
   }
 }
 
+async function ensureCabsDriverEmailColumn() {
+  try {
+    await db.runAsync('ALTER TABLE cabs ADD COLUMN driver_email TEXT');
+  } catch (e) {
+    // column may already exist
+  }
+}
+
 router.get('/cabs', async (req, res) => {
   try {
     await ensureCabsCorporateOnlyColumn();
+    await ensureCabsDriverEmailColumn();
     const rows = await db.allAsync(
-      `SELECT c.id, c.vehicle_number, c.name, c.driver_id, c.driver_name, c.driver_phone, c.cab_type_id, c.corporate_only, ct.name as cab_type_name, ct.service_type as cab_type_service_type
+      `SELECT c.id, c.vehicle_number, c.name, c.driver_id, c.driver_name, c.driver_phone, c.driver_email, c.cab_type_id, c.corporate_only, ct.name as cab_type_name, ct.service_type as cab_type_service_type
        FROM cabs c
        LEFT JOIN cab_types ct ON c.cab_type_id = ct.id
        WHERE c.is_active = 1
@@ -321,6 +456,7 @@ router.get('/cabs', async (req, res) => {
       driver_id: r.driver_id ?? r.DRIVER_ID ?? null,
       driver_name: r.driver_name ?? r.DRIVER_NAME ?? '',
       driver_phone: r.driver_phone ?? r.DRIVER_PHONE ?? '',
+      driver_email: r.driver_email ?? r.DRIVER_EMAIL ?? '',
       cab_type_id: r.cab_type_id ?? r.CAB_TYPE_ID,
       cab_type_name: r.cab_type_name ?? r.CAB_TYPE_NAME ?? '—',
       cab_type_service_type: r.cab_type_service_type ?? r.CAB_TYPE_SERVICE_TYPE ?? null,
@@ -342,6 +478,55 @@ router.get('/drivers', async (req, res) => {
     res.json(drivers || []);
   } catch (error) {
     console.error('Error fetching drivers:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.get('/driver-history', async (req, res) => {
+  try {
+    await ensureBookingsColumns();
+    await ensureDriversEmailColumn();
+    const drivers = await db.allAsync(
+      'SELECT * FROM drivers WHERE is_active = 1 ORDER BY name'
+    );
+    const bookingRows = await db.allAsync(
+      `SELECT b.id, b.from_location, b.to_location, b.booking_status, b.travel_date, b.booking_date,
+              b.passenger_name, b.passenger_phone, b.fare_amount, b.invoice_number,
+              COALESCE(c.driver_id, (SELECT id FROM drivers WHERE email = c.driver_email LIMIT 1)) as driver_id,
+              c.vehicle_number, ct.name as cab_type_name
+       FROM bookings b
+       INNER JOIN cabs c ON b.cab_id = c.id
+       LEFT JOIN cab_types ct ON b.cab_type_id = ct.id
+       WHERE b.booking_status = 'completed'
+       ORDER BY b.travel_date DESC, b.id DESC`
+    );
+    const byDriverId = {};
+    for (const d of drivers || []) {
+      const id = d.id ?? d.ID;
+      byDriverId[id] = { driver: d, bookings: [] };
+    }
+    for (const row of bookingRows || []) {
+      const driverId = row.driver_id ?? row.DRIVER_ID;
+      if (driverId && byDriverId[driverId]) {
+        byDriverId[driverId].bookings.push({
+          id: row.id ?? row.ID,
+          from_location: row.from_location ?? row.FROM_LOCATION,
+          to_location: row.to_location ?? row.TO_LOCATION,
+          booking_status: row.booking_status ?? row.BOOKING_STATUS,
+          travel_date: row.travel_date ?? row.TRAVEL_DATE,
+          booking_date: row.booking_date ?? row.BOOKING_DATE,
+          passenger_name: row.passenger_name ?? row.PASSENGER_NAME,
+          passenger_phone: row.passenger_phone ?? row.PASSENGER_PHONE,
+          fare_amount: row.fare_amount ?? row.FARE_AMOUNT,
+          invoice_number: row.invoice_number ?? row.INVOICE_NUMBER,
+          vehicle_number: row.vehicle_number ?? row.VEHICLE_NUMBER,
+          cab_type_name: row.cab_type_name ?? row.CAB_TYPE_NAME,
+        });
+      }
+    }
+    res.json(Object.values(byDriverId));
+  } catch (error) {
+    console.error('Error fetching driver history:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

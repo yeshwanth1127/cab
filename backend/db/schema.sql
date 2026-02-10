@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS cabs (
     vehicle_number TEXT UNIQUE NOT NULL,
     driver_name TEXT,
     driver_phone TEXT,
+    driver_email TEXT,
     driver_id INTEGER,
     is_available INTEGER DEFAULT 1,
     is_active INTEGER DEFAULT 1,
@@ -37,6 +38,7 @@ CREATE TABLE IF NOT EXISTS drivers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     phone TEXT NOT NULL,
+    email TEXT,
     license_number TEXT,
     photo_url TEXT,
     emergency_contact_name TEXT,
@@ -189,6 +191,41 @@ CREATE TABLE IF NOT EXISTS manager_permissions (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(user_id, section_key),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS event_bookings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    phone_number TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    pickup_point TEXT NOT NULL,
+    drop_point TEXT NOT NULL,
+    pickup_date TEXT NOT NULL,
+    pickup_time TEXT NOT NULL,
+    notes TEXT,
+    pickup_lat REAL,
+    pickup_lng REAL,
+    drop_lat REAL,
+    drop_lng REAL,
+    number_of_cars INTEGER DEFAULT 1,
+    status TEXT DEFAULT 'pending',
+    assigned_at DATETIME,
+    cab_id INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (cab_id) REFERENCES cabs(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS event_booking_assignments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_booking_id INTEGER NOT NULL,
+    cab_id INTEGER,
+    driver_id INTEGER,
+    driver_name TEXT,
+    driver_phone TEXT,
+    FOREIGN KEY (event_booking_id) REFERENCES event_bookings(id) ON DELETE CASCADE,
+    FOREIGN KEY (cab_id) REFERENCES cabs(id) ON DELETE SET NULL,
+    FOREIGN KEY (driver_id) REFERENCES drivers(id) ON DELETE SET NULL
 );
 
 INSERT OR IGNORE INTO cab_types (name, description, base_fare, per_km_rate, per_minute_rate, capacity) VALUES

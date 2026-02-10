@@ -71,11 +71,15 @@ const AdminDashboard = () => {
   const [downloadInvoiceModal, setDownloadInvoiceModal] = useState({ open: false, booking: null, withGst: true });
   const [downloadInvoiceNumber, setDownloadInvoiceNumber] = useState('');
   const [downloadInvoiceSubmitting, setDownloadInvoiceSubmitting] = useState(false);
+  const [corporateDownloadModal, setCorporateDownloadModal] = useState({ open: false, booking: null, mode: null });
+  const [corporateDownloadInvoiceNumber, setCorporateDownloadInvoiceNumber] = useState('');
+  const [corporateDownloadSubmitting, setCorporateDownloadSubmitting] = useState(false);
   const [assignBooking, setAssignBooking] = useState(null);
   const [assignForCorporate, setAssignForCorporate] = useState(false);
   const [assignDriverId, setAssignDriverId] = useState('');
   const [assignCabId, setAssignCabId] = useState('');
   const [assignSubmitting, setAssignSubmitting] = useState(false);
+  const [sendDriverEmailId, setSendDriverEmailId] = useState(null);
   const [driverModal, setDriverModal] = useState(null);
   const [driverForm, setDriverForm] = useState({ name: '', phone: '', email: '', license_number: '', emergency_contact_name: '', emergency_contact_phone: '' });
   const [driverSubmitting, setDriverSubmitting] = useState(false);
@@ -127,8 +131,10 @@ const AdminDashboard = () => {
   const [othersCabTypesLoading, setOthersCabTypesLoading] = useState(false);
   const [othersAddCabModalOpen, setOthersAddCabModalOpen] = useState(false);
   const [othersEditingCabId, setOthersEditingCabId] = useState(null);
-  const [othersAddCabForm, setOthersAddCabForm] = useState({ cab_type_id: '', name: '', vehicle_number: '' });
+  const [othersAddCabForm, setOthersAddCabForm] = useState({ cab_type_id: '', name: '', vehicle_number: '', driver_name: '', driver_phone: '', driver_email: '' });
   const [othersAddCabSubmitting, setOthersAddCabSubmitting] = useState(false);
+  const [driverHistory, setDriverHistory] = useState([]);
+  const [driverHistoryLoading, setDriverHistoryLoading] = useState(false);
 
   const [tabFilter, setTabFilter] = useState({ search: '', serviceType: '', dateFrom: '', dateTo: '' });
 
@@ -307,6 +313,24 @@ const AdminDashboard = () => {
     }
   }, [logout, navigate, showToast]);
 
+  const fetchDriverHistory = useCallback(async () => {
+    setDriverHistoryLoading(true);
+    try {
+      const res = await api.get('/admin/driver-history');
+      setDriverHistory(Array.isArray(res.data) ? res.data : []);
+    } catch (err) {
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        logout();
+        navigate('/admin/login');
+        return;
+      }
+      showToast(err.response?.data?.error || 'Failed to load driver history', 'error');
+      setDriverHistory([]);
+    } finally {
+      setDriverHistoryLoading(false);
+    }
+  }, [logout, navigate, showToast]);
+
   const fetchRateMeterCabTypes = useCallback(async () => {
     setRateMeterLoading((l) => ({ ...l, cabTypes: true }));
     try {
@@ -450,6 +474,10 @@ const AdminDashboard = () => {
       fetchBookings();
     } else if (activeTab === TABS.driverStatus || activeTab === TABS.others) {
       fetchDrivers();
+      if (activeTab === TABS.driverStatus) {
+        fetchBookings();
+        fetchDriverHistory();
+      }
     } else if ([TABS.corporateBookings, TABS.corporateInvoices, TABS.createCorporateInvoice].includes(activeTab)) {
       fetchCorporateBookings();
       fetchCorporateCabs();
@@ -459,8 +487,9 @@ const AdminDashboard = () => {
     if (activeTab === TABS.others) {
       if (!driverModal) setDriverForm({ name: '', phone: '', email: '', license_number: '', emergency_contact_name: '', emergency_contact_phone: '' });
       fetchOthersCabTypes();
+      fetchDriverHistory();
     }
-  }, [activeTab, fetchStats, fetchBookings, fetchDrivers, fetchOthersCabTypes, fetchCorporateBookings, fetchCorporateCabs, fetchEventBookings]);
+  }, [activeTab, fetchStats, fetchBookings, fetchDrivers, fetchOthersCabTypes, fetchDriverHistory, fetchCorporateBookings, fetchCorporateCabs, fetchEventBookings]);
 
   useEffect(() => {
     if (activeTab !== TABS.dashboard || !bookings || bookings.length === 0) {
@@ -484,8 +513,9 @@ const AdminDashboard = () => {
   }, [assignBooking]);
 
   useEffect(() => {
-    if (assignBooking && cabs.length > 0 && assignBooking.cab_id) {
-      const cab = cabs.find((c) => Number(c.id) === Number(assignBooking.cab_id));
+    if (assignBooking && cabs.length > 0 && assignBooking.cab_id != null) {
+      const cabId = Number(assignBooking.cab_id);
+      const cab = cabs.find((c) => Number(c.id) === cabId);
       if (cab && cab.driver_id != null && assignDriverId === '') {
         setAssignDriverId(String(cab.driver_id));
       }
@@ -539,10 +569,12 @@ const AdminDashboard = () => {
         setAssignCabId('');
         fetchCorporateBookings();
       } else {
-        const res = await api.put(`/admin/bookings/${assignBooking.id}`, {
+        const payload = {
           cab_id: Number(assignCabId),
           booking_status: 'confirmed',
-        });
+        };
+        if (assignDriverId) payload.driver_id = Number(assignDriverId);
+        const res = await api.put(`/admin/bookings/${assignBooking.id}`, payload);
         showToast(wasAlreadyAssigned ? 'Driver & cab reassigned.' : 'Driver & cab assigned.');
         if (res.data?.n8nWarnings?.length) {
           setTimeout(() => showToast(res.data.n8nWarnings.join(' '), 'error'), 600);
@@ -551,6 +583,8 @@ const AdminDashboard = () => {
         setAssignDriverId('');
         setAssignCabId('');
         fetchBookings();
+        fetchDrivers();
+        fetchDriverHistory();
       }
     } catch (err) {
       showToast(err.response?.data?.error || 'Failed to assign', 'error');
@@ -562,8 +596,26 @@ const AdminDashboard = () => {
   const openAssignModal = (booking, isCorporate = false) => {
     setAssignBooking(booking);
     setAssignForCorporate(!!isCorporate);
-    setAssignCabId(booking.cab_id ? String(booking.cab_id) : '');
+    const cabId = booking.cab_id != null && booking.cab_id !== '' ? String(booking.cab_id) : '';
+    setAssignCabId(cabId);
     setAssignDriverId('');
+  };
+
+  const handleSendDriverEmail = async (booking, isCorporate = false) => {
+    if (!booking?.id) return;
+    const key = isCorporate ? `corporate-${booking.id}` : booking.id;
+    setSendDriverEmailId(key);
+    try {
+      const path = isCorporate
+        ? `/corporate/bookings/${booking.id}/send-driver-email`
+        : `/admin/bookings/${booking.id}/send-driver-email`;
+      await api.post(path);
+      showToast('Email sent to driver.');
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to send email to driver', 'error');
+    } finally {
+      setSendDriverEmailId(null);
+    }
   };
 
   const closeAssignModal = () => {
@@ -580,6 +632,9 @@ const AdminDashboard = () => {
       await api.put(`/admin/bookings/${bookingId}`, { booking_status: newStatus });
       showToast(newStatus === 'confirmed' ? 'Booking confirmed.' : newStatus === 'completed' ? 'Trip marked completed.' : 'Booking cancelled.');
       fetchBookings();
+      if (newStatus === 'completed') {
+        fetchDriverHistory();
+      }
       if (detailBooking && detailBooking.id === bookingId) {
         setDetailBooking((prev) => (prev ? { ...prev, booking_status: newStatus } : null));
       }
@@ -830,6 +885,15 @@ const AdminDashboard = () => {
     return typeof data?.error === 'string' ? data.error : 'Failed to download invoice';
   };
 
+  const openCorporateDownloadModal = (booking) => {
+    setCorporateDownloadModal({ open: true, booking, mode: 'single' });
+    setCorporateDownloadInvoiceNumber(booking?.invoice_number || '');
+  };
+
+  const openCorporateDownloadAllModal = () => {
+    setCorporateDownloadModal({ open: true, booking: null, mode: 'all' });
+  };
+
   const handleCorporateInvoiceDownload = async (bookingId) => {
     try {
       const response = await api.get(`/corporate/bookings/${bookingId}/invoice`, { responseType: 'blob' });
@@ -837,7 +901,9 @@ const AdminDashboard = () => {
         const url = window.URL.createObjectURL(response.data);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `corporate-invoice-${bookingId}.pdf`;
+        const contentDisp = response.headers['content-disposition'];
+        const filename = contentDisp?.match(/filename="?([^"]+)"?/)?.[1] || `corporate-invoice-${bookingId}.pdf`;
+        a.download = filename;
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -857,6 +923,32 @@ const AdminDashboard = () => {
         msg = err.message;
       }
       showToast(msg, 'error');
+    }
+  };
+
+  const handleCorporateDownloadModalConfirm = async () => {
+    const { booking, mode } = corporateDownloadModal;
+    if (mode === 'all') {
+      setCorporateDownloadModal({ open: false, booking: null, mode: null });
+      await handleCorporateDownloadAll();
+      return;
+    }
+    if (mode === 'single' && booking) {
+      setCorporateDownloadSubmitting(true);
+      try {
+        const invNum = corporateDownloadInvoiceNumber.trim();
+        if (invNum) {
+          await api.put(`/corporate/bookings/${booking.id}`, { invoice_number: invNum });
+          setCorporateBookings((prev) => prev.map((x) => (x.id === booking.id ? { ...x, invoice_number: invNum } : x)));
+        }
+        await handleCorporateInvoiceDownload(booking.id);
+        setCorporateDownloadModal({ open: false, booking: null, mode: null });
+      } catch (err) {
+        const msg = err.response?.data?.error || err.message || 'Failed to update or download';
+        showToast(msg, 'error');
+      } finally {
+        setCorporateDownloadSubmitting(false);
+      }
     }
   };
 
@@ -1131,7 +1223,7 @@ const AdminDashboard = () => {
 
   const handleOthersAddCabSubmit = async (e) => {
     e.preventDefault();
-    const { cab_type_id, name, vehicle_number } = othersAddCabForm;
+    const { cab_type_id, name, vehicle_number, driver_name, driver_phone, driver_email } = othersAddCabForm;
     if (!cab_type_id || !vehicle_number?.trim()) {
       showToast('Cab type and vehicle number are required.', 'error');
       return;
@@ -1143,8 +1235,9 @@ const AdminDashboard = () => {
           cab_type_id: Number(cab_type_id),
           vehicle_number: vehicle_number.trim(),
           name: (name || '').trim() || null,
-          driver_name: '',
-          driver_phone: '',
+          driver_name: (driver_name || '').trim() || null,
+          driver_phone: (driver_phone || '').trim() || null,
+          driver_email: (driver_email || '').trim() || null,
         });
         showToast('Cab updated.');
       } else {
@@ -1152,14 +1245,15 @@ const AdminDashboard = () => {
           cab_type_id: Number(cab_type_id),
           vehicle_number: vehicle_number.trim(),
           name: (name || '').trim() || null,
-          driver_name: '',
-          driver_phone: '',
+          driver_name: (driver_name || '').trim() || null,
+          driver_phone: (driver_phone || '').trim() || null,
+          driver_email: (driver_email || '').trim() || null,
         });
         showToast('Cab added.');
       }
       setOthersAddCabModalOpen(false);
       setOthersEditingCabId(null);
-      setOthersAddCabForm({ cab_type_id: '', name: '', vehicle_number: '' });
+      setOthersAddCabForm({ cab_type_id: '', name: '', vehicle_number: '', driver_name: '', driver_phone: '', driver_email: '' });
       fetchDrivers();
     } catch (err) {
       showToast(err.response?.data?.error || 'Failed to save cab', 'error');
@@ -1476,6 +1570,18 @@ const AdminDashboard = () => {
   const filteredCancelledBookingsList = cancelledBookingsList.filter(filterBooking);
   const filteredDrivers = (drivers || []).filter(filterDriver);
   const filteredCabs = (cabs || []).filter(filterCab);
+
+  const driverAssignedBookingsMap = React.useMemo(() => {
+    const map = {};
+    (drivers || []).forEach((d) => {
+      const cabIds = (cabs || []).filter((c) => c.driver_id != null && Number(c.driver_id) === Number(d.id)).map((c) => c.id);
+      const assigned = (bookings || []).filter(
+        (b) => b.cab_id != null && cabIds.includes(Number(b.cab_id)) && ['pending', 'confirmed', 'in_progress'].includes(b.booking_status)
+      );
+      map[d.id] = assigned;
+    });
+    return map;
+  }, [drivers, cabs, bookings]);
   const filteredCorporateBookings = (corporateBookings || []).filter(filterCorporate);
 
   const filterEventBooking = (b) => {
@@ -1558,7 +1664,7 @@ const AdminDashboard = () => {
                 <div className="admin-entry-card-row"><span className="key">From</span><span className="value">{b.from_location || '—'}</span></div>
                 <div className="admin-entry-card-row"><span className="key">To</span><span className="value">{b.to_location || '—'}</span></div>
                 <div className="admin-entry-card-row"><span className="key">Passenger</span><span className="value">{b.passenger_name || '—'}</span></div>
-                <div className="admin-entry-card-row"><span className="key">Driver / Cab</span><span className="value">{b.driver_name ? `${b.driver_name} / ${b.vehicle_number || '—'}` : '—'}</span></div>
+                <div className="admin-entry-card-row"><span className="key">Cab / Driver</span><span className="value">{(b.vehicle_number || b.driver_name || b.cab_id) ? [b.vehicle_number && `Cab: ${b.vehicle_number}`, b.driver_name && `Driver: ${b.driver_name}`].filter(Boolean).join(' · ') || (b.cab_id ? `Cab #${b.cab_id}` : '—') : '—'}</span></div>
               </div>
               <div className="admin-entry-card-actions">
                 <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setDetailBooking(b)}>View</button>
@@ -1578,6 +1684,7 @@ const AdminDashboard = () => {
                   </>
                 )}
                 <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => openAssignModal(b, false)}>{b.cab_id ? 'Reassign' : 'Assign'}</button>
+                {b.cab_id && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendDriverEmail(b)} disabled={sendDriverEmailId === b.id}>{sendDriverEmailId === b.id ? '…' : 'Send email to driver'}</button>}
                 {b.maps_link && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link)}>Copy pickup map</button>}
                 {b.maps_link_drop && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link_drop)}>Copy drop map</button>}
                 {(b.driver_phone || b.driver_name) && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendWhatsApp(b)}>WhatsApp</button>}
@@ -1978,7 +2085,7 @@ const AdminDashboard = () => {
                           <div className="admin-entry-card-row"><span className="key">From</span><span className="value">{b.from_location || '—'}</span></div>
                           <div className="admin-entry-card-row"><span className="key">To</span><span className="value">{b.to_location || '—'}</span></div>
                           <div className="admin-entry-card-row"><span className="key">Passenger</span><span className="value">{b.passenger_name || '—'}</span></div>
-                          <div className="admin-entry-card-row"><span className="key">Driver / Cab</span><span className="value">{b.driver_name ? `${b.driver_name} / ${b.vehicle_number || '—'}` : '—'}</span></div>
+                          <div className="admin-entry-card-row"><span className="key">Cab / Driver</span><span className="value">{(b.vehicle_number || b.driver_name || b.cab_id) ? [b.vehicle_number && `Cab: ${b.vehicle_number}`, b.driver_name && `Driver: ${b.driver_name}`].filter(Boolean).join(' · ') || (b.cab_id ? `Cab #${b.cab_id}` : '—') : '—'}</span></div>
                         </div>
                         <div className="admin-entry-card-actions">
                           <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setDetailBooking(b)}>View</button>
@@ -1998,6 +2105,7 @@ const AdminDashboard = () => {
                             </>
                           )}
                           <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => openAssignModal(b, false)}>{b.cab_id ? 'Reassign' : 'Assign'}</button>
+                          {b.cab_id && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendDriverEmail(b)} disabled={sendDriverEmailId === b.id}>{sendDriverEmailId === b.id ? '…' : 'Send email to driver'}</button>}
                           {b.maps_link && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link)}>Copy pickup map</button>}
                           {b.maps_link_drop && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link_drop)}>Copy drop map</button>}
                           {(b.driver_phone || b.driver_name) && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendWhatsApp(b)}>WhatsApp</button>}
@@ -2511,7 +2619,7 @@ const AdminDashboard = () => {
           {activeTab === TABS.driverStatus && (
             <div className="admin-tab-section">
               <h2>Driver Status</h2>
-              <p className="admin-bookings-desc">Availability & rides – list and manage drivers.</p>
+              <p className="admin-bookings-desc">Availability & rides – list and manage drivers. Assigned booking(s) show current trips (pending, confirmed, in progress).</p>
               <div className="admin-modal-actions" style={{ marginBottom: 16 }}>
                 <button type="button" className="admin-btn admin-btn-primary" onClick={() => { setDriverModal({}); setDriverForm({ name: '', phone: '', email: '', license_number: '', emergency_contact_name: '', emergency_contact_phone: '' }); }}>Add driver</button>
               </div>
@@ -2523,24 +2631,39 @@ const AdminDashboard = () => {
                       <tr>
                         <th>Name</th>
                         <th>Phone</th>
+                        <th>Email</th>
+                        <th>Assigned to booking(s)</th>
                         <th>License</th>
                         <th>Emergency</th>
                         <th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredDrivers.map((d) => (
-                        <tr key={d.id}>
-                          <td>{d.name}</td>
-                          <td>{d.phone}</td>
-                          <td>{d.license_number || '—'}</td>
-                          <td>{d.emergency_contact_name || '—'}</td>
-                          <td className="actions">
-                            <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => { setDriverModal(d); setDriverForm({ name: d.name, phone: d.phone, email: d.email || '', license_number: d.license_number || '', emergency_contact_name: d.emergency_contact_name || '', emergency_contact_phone: d.emergency_contact_phone || '' }); }}>Edit</button>
-                            <button type="button" className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => handleDeleteDriver(d.id)}>Delete</button>
-                          </td>
-                        </tr>
-                      ))}
+                      {filteredDrivers.map((d) => {
+                        const assignedList = driverAssignedBookingsMap[d.id] || [];
+                        return (
+                          <tr key={d.id}>
+                            <td>{d.name}</td>
+                            <td>{d.phone}</td>
+                            <td>{d.email || '—'}</td>
+                            <td>
+                              {assignedList.length === 0 ? '—' : assignedList.map((b) => (
+                                <span key={b.id} style={{ display: 'inline-block', marginRight: 8, marginBottom: 4 }}>
+                                  <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setDetailBooking(b)}>
+                                    Booking #{b.id}
+                                  </button>
+                                </span>
+                              ))}
+                            </td>
+                            <td>{d.license_number || '—'}</td>
+                            <td>{d.emergency_contact_name || '—'}</td>
+                            <td className="actions">
+                              <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => { setDriverModal(d); setDriverForm({ name: d.name, phone: d.phone, email: d.email || '', license_number: d.license_number || '', emergency_contact_name: d.emergency_contact_name || '', emergency_contact_phone: d.emergency_contact_phone || '' }); }}>Edit</button>
+                              <button type="button" className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => handleDeleteDriver(d.id)}>Delete</button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -2570,6 +2693,7 @@ const AdminDashboard = () => {
                           <tr>
                             <th>Name</th>
                             <th>Phone</th>
+                            <th>Email</th>
                             <th>License</th>
                             <th>Emergency</th>
                             <th>Actions</th>
@@ -2577,12 +2701,13 @@ const AdminDashboard = () => {
                         </thead>
                         <tbody>
                           {(drivers || []).length === 0 && (
-                            <tr><td colSpan={5} className="admin-dashboard-list-empty">No drivers yet. Click “Add driver” to register.</td></tr>
+                            <tr><td colSpan={6} className="admin-dashboard-list-empty">No drivers yet. Click “Add driver” to register.</td></tr>
                           )}
                           {filteredDrivers.map((d) => (
                             <tr key={d.id}>
                               <td>{d.name}</td>
                               <td>{d.phone}</td>
+                              <td>{d.email || '—'}</td>
                               <td>{d.license_number || '—'}</td>
                               <td>{d.emergency_contact_name || '—'}</td>
                               <td className="actions">
@@ -2605,7 +2730,7 @@ const AdminDashboard = () => {
                 </button>
                 <div className="admin-rate-meters-block-body">
                   <div className="admin-modal-actions" style={{ marginBottom: 16 }}>
-                    <button type="button" className="admin-btn admin-btn-primary" onClick={() => { setOthersEditingCabId(null); setOthersAddCabModalOpen(true); setOthersAddCabForm({ cab_type_id: '', name: '', vehicle_number: '' }); }}>Add cab</button>
+                    <button type="button" className="admin-btn admin-btn-primary" onClick={() => { setOthersEditingCabId(null); setOthersAddCabModalOpen(true); setOthersAddCabForm({ cab_type_id: '', name: '', vehicle_number: '', driver_name: '', driver_phone: '', driver_email: '' }); }}>Add cab</button>
                   </div>
                   {loading.drivers && <p className="admin-dashboard-list-loading">Loading cabs…</p>}
                   {!loading.drivers && (
@@ -2615,27 +2740,85 @@ const AdminDashboard = () => {
                           <tr>
                             <th>Vehicle number</th>
                             <th>Driver</th>
+                            <th>Driver email</th>
                             <th>Cab type</th>
                             <th>Actions</th>
                           </tr>
                         </thead>
                         <tbody>
                           {(cabs || []).length === 0 && (
-                            <tr><td colSpan={4} className="admin-dashboard-list-empty">No cabs yet. Click "Add cab" and enter vehicle number and cab type.</td></tr>
+                            <tr><td colSpan={5} className="admin-dashboard-list-empty">No cabs yet. Click "Add cab" and enter vehicle number and cab type.</td></tr>
                           )}
                           {filteredCabs.map((c) => (
                             <tr key={c.id}>
                               <td>{c.name?.trim() || c.vehicle_number}</td>
                               <td>{c.driver_name || '—'} {c.driver_phone ? `(${c.driver_phone})` : ''}</td>
+                              <td>{c.driver_email || '—'}</td>
                               <td>{c.cab_type_name || '—'}{c.cab_type_service_type ? ` (${(c.cab_type_service_type || '').charAt(0).toUpperCase() + (c.cab_type_service_type || '').slice(1).toLowerCase()})` : ''}</td>
                               <td className="actions">
-                                <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => { setOthersEditingCabId(c.id); setOthersAddCabForm({ cab_type_id: String(c.cab_type_id || ''), name: c.name || '', vehicle_number: c.vehicle_number || '' }); setOthersAddCabModalOpen(true); }}>Edit</button>
+                                <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => { setOthersEditingCabId(c.id); setOthersAddCabForm({ cab_type_id: String(c.cab_type_id || ''), name: c.name || '', vehicle_number: c.vehicle_number || '', driver_name: c.driver_name || '', driver_phone: c.driver_phone || '', driver_email: c.driver_email || '' }); setOthersAddCabModalOpen(true); }}>Edit</button>
                                 <button type="button" className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => deleteOthersCab(c.id)}>Delete</button>
                               </td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="admin-rate-meters-block admin-others-col open">
+                <button type="button" className="admin-rate-meters-block-btn" style={{ pointerEvents: 'none' }}>
+                  <span>Driver history</span>
+                  <span className="admin-rate-meters-block-meta">Previous bookings per driver</span>
+                </button>
+                <div className="admin-rate-meters-block-body">
+                  {driverHistoryLoading && <p className="admin-dashboard-list-loading">Loading driver history…</p>}
+                  {!driverHistoryLoading && (!driverHistory || driverHistory.length === 0) && (
+                    <p className="admin-dashboard-list-empty">No drivers or no bookings yet.</p>
+                  )}
+                  {!driverHistoryLoading && driverHistory && driverHistory.length > 0 && (
+                    <div className="admin-driver-history-list">
+                      {driverHistory.map(({ driver, bookings: driverBookings }) => (
+                        <div key={driver.id} className="admin-driver-history-driver">
+                          <h4 className="admin-driver-history-driver-name">
+                            {driver.name}
+                            {driver.phone && <span className="admin-driver-history-driver-phone"> — {driver.phone}</span>}
+                            <span className="admin-driver-history-count"> ({driverBookings.length} booking{driverBookings.length !== 1 ? 's' : ''})</span>
+                          </h4>
+                          {driverBookings.length === 0 ? (
+                            <p className="admin-dashboard-list-empty">No previous bookings.</p>
+                          ) : (
+                            <div className="admin-table-wrap">
+                              <table className="admin-table">
+                                <thead>
+                                  <tr>
+                                    <th>Date</th>
+                                    <th>From → To</th>
+                                    <th>Passenger</th>
+                                    <th>Fare</th>
+                                    <th>Status</th>
+                                    <th>Invoice</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {driverBookings.map((b) => (
+                                    <tr key={b.id}>
+                                      <td>{(b.travel_date || b.booking_date) ? new Date(b.travel_date || b.booking_date).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : '—'}</td>
+                                      <td>{[b.from_location, b.to_location].filter(Boolean).join(' → ') || '—'}</td>
+                                      <td>{b.passenger_name || '—'}</td>
+                                      <td>{b.fare_amount != null ? `₹${Number(b.fare_amount).toLocaleString()}` : '—'}</td>
+                                      <td>{b.booking_status || '—'}</td>
+                                      <td>{b.invoice_number || '—'}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -2677,6 +2860,18 @@ const AdminDashboard = () => {
                   <label>Vehicle number</label>
                   <input type="text" value={othersAddCabForm.vehicle_number} onChange={(e) => setOthersAddCabForm((f) => ({ ...f, vehicle_number: e.target.value }))} required />
                 </div>
+                <div className="admin-form-group">
+                  <label>Driver email</label>
+                  <input type="email" value={othersAddCabForm.driver_email} onChange={(e) => setOthersAddCabForm((f) => ({ ...f, driver_email: e.target.value }))} placeholder="Same as in Others → Drivers (for trip emails)" />
+                </div>
+                <div className="admin-form-group">
+                  <label>Driver name</label>
+                  <input type="text" value={othersAddCabForm.driver_name} onChange={(e) => setOthersAddCabForm((f) => ({ ...f, driver_name: e.target.value }))} placeholder="Optional" />
+                </div>
+                <div className="admin-form-group">
+                  <label>Driver phone</label>
+                  <input type="text" value={othersAddCabForm.driver_phone} onChange={(e) => setOthersAddCabForm((f) => ({ ...f, driver_phone: e.target.value }))} placeholder="Optional" />
+                </div>
               </div>
               <div className="admin-modal-actions">
                 <button type="button" className="admin-btn admin-btn-secondary" onClick={() => setOthersAddCabModalOpen(false)}>Cancel</button>
@@ -2717,6 +2912,50 @@ const AdminDashboard = () => {
         </div>
       )}
 
+      {corporateDownloadModal.open && corporateDownloadModal.mode && (
+        <div className="admin-modal-overlay" onClick={() => !corporateDownloadSubmitting && !corporateDownloadAllLoading && setCorporateDownloadModal({ open: false, booking: null, mode: null })}>
+          <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="admin-modal-header">
+              <h3>{corporateDownloadModal.mode === 'all' ? 'Download all corporate invoices' : 'Download corporate invoice'}</h3>
+              <button type="button" className="admin-modal-close" onClick={() => !corporateDownloadSubmitting && !corporateDownloadAllLoading && setCorporateDownloadModal({ open: false, booking: null, mode: null })} aria-label="Close">×</button>
+            </div>
+            <div className="admin-modal-body">
+              {corporateDownloadModal.mode === 'all' ? (
+                <>
+                  <p className="admin-bookings-desc" style={{ marginBottom: 16 }}>Each invoice in the ZIP will use its current invoice number (or an auto-generated one if missing).</p>
+                  <div className="admin-modal-actions">
+                    <button type="button" className="admin-btn admin-btn-secondary" onClick={() => setCorporateDownloadModal({ open: false, booking: null, mode: null })} disabled={corporateDownloadAllLoading}>Cancel</button>
+                    <button type="button" className="admin-btn admin-btn-primary" onClick={handleCorporateDownloadModalConfirm} disabled={corporateDownloadAllLoading}>
+                      {corporateDownloadAllLoading ? 'Preparing…' : 'Download ZIP'}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="admin-bookings-desc" style={{ marginBottom: 12 }}>Default invoice number for this booking. Change it if you want a different number on the PDF.</p>
+                  <div className="admin-form-group full-width">
+                    <label>Invoice number</label>
+                    <input
+                      type="text"
+                      value={corporateDownloadInvoiceNumber}
+                      onChange={(e) => setCorporateDownloadInvoiceNumber(e.target.value)}
+                      placeholder={corporateDownloadModal.booking ? (corporateDownloadModal.booking.invoice_number || 'Leave blank to auto-generate') : ''}
+                      style={{ width: '100%', padding: '8px 12px', border: '1px solid #bbf7d0', borderRadius: 6 }}
+                    />
+                  </div>
+                  <div className="admin-modal-actions">
+                    <button type="button" className="admin-btn admin-btn-secondary" onClick={() => !corporateDownloadSubmitting && setCorporateDownloadModal({ open: false, booking: null, mode: null })} disabled={corporateDownloadSubmitting}>Cancel</button>
+                    <button type="button" className="admin-btn admin-btn-primary" onClick={handleCorporateDownloadModalConfirm} disabled={corporateDownloadSubmitting}>
+                      {corporateDownloadSubmitting ? 'Downloading…' : 'Download'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
           {activeTab === TABS.billing && (
             <div className="admin-tab-section admin-dashboard-box">
               <h2 className="admin-dashboard-box-heading">Billing – Confirmed bookings</h2>
@@ -2738,7 +2977,7 @@ const AdminDashboard = () => {
                         <div className="admin-entry-card-row"><span className="key">From</span><span className="value">{b.from_location || '—'}</span></div>
                         <div className="admin-entry-card-row"><span className="key">To</span><span className="value">{b.to_location || '—'}</span></div>
                         <div className="admin-entry-card-row"><span className="key">Passenger</span><span className="value">{b.passenger_name || '—'}</span></div>
-                        <div className="admin-entry-card-row"><span className="key">Driver / Cab</span><span className="value">{b.driver_name ? `${b.driver_name} / ${b.vehicle_number || '—'}` : '—'}</span></div>
+                        <div className="admin-entry-card-row"><span className="key">Cab / Driver</span><span className="value">{(b.vehicle_number || b.driver_name || b.cab_id) ? [b.vehicle_number && `Cab: ${b.vehicle_number}`, b.driver_name && `Driver: ${b.driver_name}`].filter(Boolean).join(' · ') || (b.cab_id ? `Cab #${b.cab_id}` : '—') : '—'}</span></div>
                         <div className="admin-entry-card-row"><span className="key">Fare</span><span className="value">₹{b.fare_amount != null ? Number(b.fare_amount).toFixed(2) : '—'}</span></div>
                       </div>
                       <div className="admin-entry-card-actions">
@@ -3052,7 +3291,7 @@ const AdminDashboard = () => {
               <h2>All corporate invoices</h2>
               <p className="admin-bookings-desc">Download individual invoices or all as a ZIP.</p>
               <div className="admin-modal-actions" style={{ marginBottom: 16 }}>
-                <button type="button" className="admin-btn admin-btn-primary" onClick={handleCorporateDownloadAll} disabled={corporateDownloadAllLoading || corporateBookings.length === 0}>
+                <button type="button" className="admin-btn admin-btn-primary" onClick={openCorporateDownloadAllModal} disabled={corporateDownloadAllLoading || corporateBookings.length === 0}>
                   {corporateDownloadAllLoading ? 'Preparing…' : 'Download all invoices (ZIP)'}
                 </button>
               </div>
@@ -3099,7 +3338,8 @@ const AdminDashboard = () => {
                       <div className="admin-entry-card-actions">
                         <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleOpenCorporateEdit(b)}>Edit booking</button>
                         <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => openAssignModal(b, true)}>{b.cab_id ? 'Reassign driver & cab' : 'Assign driver & cab'}</button>
-                        <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => handleCorporateInvoiceDownload(b.id)}>Download</button>
+                        {b.cab_id && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendDriverEmail(b, true)} disabled={sendDriverEmailId === `corporate-${b.id}`}>{sendDriverEmailId === `corporate-${b.id}` ? '…' : 'Send email to driver'}</button>}
+                        <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => openCorporateDownloadModal(b)}>Download</button>
                       </div>
                     </div>
                   ))}
@@ -3378,6 +3618,9 @@ const AdminDashboard = () => {
               {detailBooking.service_type === 'outstation' && detailBooking.trip_type && (
                 <div className="admin-detail-row"><span className="key">Trip type</span><span className="value">{detailBooking.trip_type === 'one_way' ? 'One Way' : detailBooking.trip_type === 'round_trip' ? 'Round Trip' : detailBooking.trip_type === 'multiple_stops' ? 'Multiple Stops' : detailBooking.trip_type}</span></div>
               )}
+              {detailBooking.service_type === 'outstation' && detailBooking.return_date && (
+                <div className="admin-detail-row"><span className="key">Return date</span><span className="value">{new Date(detailBooking.return_date).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</span></div>
+              )}
               {(detailBooking.cab_type_name || detailBooking.cab_type_id) && (
                 <div className="admin-detail-row"><span className="key">Cab type</span><span className="value">{detailBooking.cab_type_name || '—'}</span></div>
               )}
@@ -3386,7 +3629,10 @@ const AdminDashboard = () => {
               )}
               <div className="admin-detail-row"><span className="key">Status</span><span className="value">{detailBooking.booking_status}</span></div>
               <div className="admin-detail-row"><span className="key">Fare</span><span className="value">₹{detailBooking.fare_amount}</span></div>
-              <div className="admin-detail-row"><span className="key">Driver / Cab</span><span className="value">{detailBooking.driver_name || '—'} / {detailBooking.vehicle_number || '—'}</span></div>
+              {(detailBooking.cab_id || detailBooking.vehicle_number) && (
+                <div className="admin-detail-row"><span className="key">Cab</span><span className="value">{detailBooking.vehicle_number || `#${detailBooking.cab_id}`}</span></div>
+              )}
+              <div className="admin-detail-row"><span className="key">Assigned driver</span><span className="value">{(detailBooking.driver_name || detailBooking.driver_phone) ? [detailBooking.driver_name, detailBooking.driver_phone].filter(Boolean).join(' — ') : '—'}</span></div>
               <div className="admin-detail-row admin-detail-row-actions" style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #e5e7eb', gap: 8, flexWrap: 'wrap' }}>
                 <span className="key" style={{ width: '100%', marginBottom: 4 }}>Update status</span>
                 <span className="value" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>

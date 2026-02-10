@@ -15,6 +15,7 @@ require('dotenv').config({ path: path.join(backendDir, '.env') });
 const migrations = [
   { name: 'rate_meter_tables', script: path.join(__dirname, 'rate_meter_tables.js') },
   { name: 'add-manager-role', script: path.join(__dirname, 'add-manager-role.js') },
+  { name: 'add-drivers-email', script: path.join(__dirname, 'add-drivers-email.js') },
 ];
 
 console.log('Running migrations (DATABASE_PATH:', process.env.DATABASE_PATH || 'default', ')...\n');

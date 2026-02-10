@@ -39,6 +39,14 @@ async function ensureCabsCorporateOnlyColumn() {
   }
 }
 
+async function ensureCabsDriverEmailColumn() {
+  try {
+    await db.runAsync('ALTER TABLE cabs ADD COLUMN driver_email TEXT');
+  } catch (e) {
+
+  }
+}
+
 async function generateCorporateInvoiceNumber() {
   await ensureCorporateBookingsInvoiceNumberColumn();
   const today = new Date();
@@ -327,19 +335,26 @@ router.put('/bookings/:id', [
 
     const n8nWarnings = [];
     if (req.body.cab_id) {
-      const cab = await db.getAsync('SELECT vehicle_number, driver_name, driver_phone FROM cabs WHERE id = ?', [req.body.cab_id]);
+      await ensureCabsDriverEmailColumn();
+      const cab = await db.getAsync('SELECT vehicle_number, driver_name, driver_phone, driver_email FROM cabs WHERE id = ?', [req.body.cab_id]);
       if (cab) {
+        const driverEmail = (cab.driver_email != null && String(cab.driver_email).trim() !== '') ? String(cab.driver_email).trim() : '';
+        const pickup = updated.pickup_point || '';
+        const drop = updated.drop_point || '';
         triggerDriverInfo({
           bookingId: 'CRP' + id,
           customerEmail: '',
-          driverEmail: '',
+          driverEmail,
           driverName: cab.driver_name || '',
           driverPhone: cab.driver_phone || '',
           cabNumber: cab.vehicle_number || '',
+          pickup,
+          drop,
+          pickupTime: updated.travel_date || updated.created_at || '',
+          sendDriverInfoToCustomer: true,
+          sendTripToDriver: false,
         });
         n8nWarnings.push('Customer email is not stored for corporate bookings — customer will not receive driver info email.');
-        if (!(cab.driver_name && String(cab.driver_name).trim())) n8nWarnings.push('Driver name is missing.');
-        if (!(cab.driver_phone && String(cab.driver_phone).trim())) n8nWarnings.push('Driver phone is missing.');
         if (!(cab.vehicle_number && String(cab.vehicle_number).trim())) n8nWarnings.push('Cab number is missing.');
       }
     }
@@ -347,6 +362,45 @@ router.put('/bookings/:id', [
     res.json({ ...updated, n8nWarnings: n8nWarnings.length ? n8nWarnings : undefined });
   } catch (error) {
     console.error('Error updating corporate booking:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/bookings/:id/send-driver-email', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await ensureCabsDriverEmailColumn();
+    const row = await db.getAsync(
+      `SELECT cb.*, c.vehicle_number,
+        COALESCE(c.driver_name, d.name) as driver_name,
+        COALESCE(c.driver_phone, d.phone) as driver_phone,
+        COALESCE(d.email, c.driver_email) as driver_email
+       FROM corporate_bookings cb
+       LEFT JOIN cabs c ON cb.cab_id = c.id
+       LEFT JOIN drivers d ON d.email = c.driver_email
+       WHERE cb.id = ?`,
+      [id]
+    );
+    if (!row) return res.status(404).json({ error: 'Corporate booking not found' });
+    if (!row.cab_id) return res.status(400).json({ error: 'No cab assigned to this booking' });
+    const driverEmail = (row.driver_email != null && String(row.driver_email).trim() !== '') ? String(row.driver_email).trim() : '';
+    if (!driverEmail) return res.json({ ok: true, message: 'No driver email configured on this cab; email not sent.' });
+    triggerDriverInfo({
+      bookingId: 'CRP' + id,
+      customerEmail: '',
+      driverEmail,
+      driverName: row.driver_name || '',
+      driverPhone: row.driver_phone || '',
+      cabNumber: row.vehicle_number || '',
+      pickup: row.pickup_point || '',
+      drop: row.drop_point || '',
+      pickupTime: row.travel_date || row.created_at || '',
+      sendDriverInfoToCustomer: false,
+      sendTripToDriver: true,
+    });
+    res.json({ ok: true, message: 'Trip email sent to driver' });
+  } catch (error) {
+    console.error('Error sending driver email (corporate):', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

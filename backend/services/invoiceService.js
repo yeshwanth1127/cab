@@ -52,8 +52,8 @@ function generateInvoicePDF(booking, withGST = true) {
 
     // Header layout: logo/tagline on left, address on right; all must sit above the blue INVOICE bar
     const headerTop = 42;
-    const logoWidth = 100;
-    const logoHeight = 44; // constrained so logo never overlaps the blue bar
+    const logoWidth = 150;
+    const logoHeight = 66; // larger logo so it doesn't look shrunk
     const lineY = headerTop + logoHeight + 2;
     const taglineY = lineY + 6;
     const blueBarTop = taglineY + 10; // gap below tagline before bar
@@ -62,7 +62,7 @@ function generateInvoicePDF(booking, withGST = true) {
 
     if (fs.existsSync(LOGO_PATH)) {
       doc.image(LOGO_PATH, margin, headerTop, { width: logoWidth, height: logoHeight });
-      doc.strokeColor('#16a34a').lineWidth(1).moveTo(margin, lineY).lineTo(margin + 140, lineY).stroke();
+      doc.strokeColor('#16a34a').lineWidth(1).moveTo(margin, lineY).lineTo(margin + 180, lineY).stroke();
       doc.fontSize(9).fillColor('#374151').text(COMPANY.tagline, margin, taglineY);
     } else {
       doc.fontSize(22).fillColor(YELLOW_TEXT).text(COMPANY.nameFirst, margin, headerTop);
@@ -71,7 +71,7 @@ function generateInvoicePDF(booking, withGST = true) {
       doc.fillColor(GREEN_TEXT).text(COMPANY.nameSecond.trim(), margin + nammaWidth + logoGap, headerTop);
       const cabsWidth = doc.widthOfString(COMPANY.nameSecond.trim());
       const totalLogoWidth = nammaWidth + logoGap + cabsWidth;
-      doc.strokeColor('#16a34a').lineWidth(1).moveTo(margin, headerTop + 36).lineTo(margin + Math.min(totalLogoWidth, 140), headerTop + 36).stroke();
+      doc.strokeColor('#16a34a').lineWidth(1).moveTo(margin, headerTop + 36).lineTo(margin + Math.min(totalLogoWidth, 180), headerTop + 36).stroke();
       doc.fontSize(9).fillColor('#374151').text(COMPANY.tagline, margin, headerTop + 44);
     }
 
@@ -284,8 +284,8 @@ function generateEventInvoicePDF(eventBooking) {
     const pageWidth = 595.28;
     const margin = 50;
     const headerTop = 42;
-    const logoWidth = 100;
-    const logoHeight = 44;
+    const logoWidth = 150;
+    const logoHeight = 66;
     const lineY = headerTop + logoHeight + 2;
     const taglineY = lineY + 6;
     const blueBarTop = taglineY + 10;
@@ -295,13 +295,13 @@ function generateEventInvoicePDF(eventBooking) {
 
     if (fs.existsSync(LOGO_PATH)) {
       doc.image(LOGO_PATH, margin, headerTop, { width: logoWidth, height: logoHeight });
-      doc.strokeColor('#16a34a').lineWidth(1).moveTo(margin, lineY).lineTo(margin + 140, lineY).stroke();
+      doc.strokeColor('#16a34a').lineWidth(1).moveTo(margin, lineY).lineTo(margin + 180, lineY).stroke();
       doc.fontSize(9).fillColor('#374151').text(COMPANY.tagline, margin, taglineY);
     } else {
       doc.fontSize(22).fillColor(YELLOW_TEXT).text(COMPANY.nameFirst, margin, headerTop);
       const nammaWidth = doc.widthOfString(COMPANY.nameFirst);
       doc.fillColor(GREEN_TEXT).text(COMPANY.nameSecond.trim(), margin + nammaWidth + 6, headerTop);
-      doc.strokeColor('#16a34a').lineWidth(1).moveTo(margin, headerTop + 36).lineTo(margin + 140, headerTop + 36).stroke();
+      doc.strokeColor('#16a34a').lineWidth(1).moveTo(margin, headerTop + 36).lineTo(margin + 180, headerTop + 36).stroke();
       doc.fontSize(9).fillColor('#374151').text(COMPANY.tagline, margin, headerTop + 44);
     }
 

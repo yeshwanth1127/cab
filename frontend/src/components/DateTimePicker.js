@@ -4,12 +4,19 @@ import './DateTimePicker.css';
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-// Generate 15-minute time slots for 24h
+// Format hour and minute as 12-hour string (e.g. "9:00 AM", "12:30 PM")
+function format12h(h, m) {
+  const period = h < 12 ? 'AM' : 'PM';
+  const hour12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${hour12}:${String(m).padStart(2, '0')} ${period}`;
+}
+
+// Generate 15-minute time slots in 12-hour format for display
 function getTimeSlots() {
   const slots = [];
   for (let h = 0; h < 24; h++) {
     for (let m = 0; m < 60; m += 15) {
-      slots.push({ h, m, label: `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}` });
+      slots.push({ h, m, label: format12h(h, m) });
     }
   }
   return slots;
@@ -113,8 +120,9 @@ export default function DateTimePicker({ value = '', onChange, placeholder, disa
 
   const commit = (date, timeLabel) => {
     if (!date || !timeLabel) return;
-    const [h, m] = timeLabel.split(':').map(Number);
-    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate(), h, m, 0, 0);
+    const slot = TIME_SLOTS.find((s) => s.label === timeLabel);
+    if (!slot) return;
+    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate(), slot.h, slot.m, 0, 0);
     onChange(toISOLocal(d));
   };
 

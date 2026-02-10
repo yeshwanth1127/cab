@@ -30,6 +30,7 @@ async function ensureBookingsColumns() {
     ['maps_link_drop', 'TEXT'],
     ['invoice_number', 'TEXT'],
     ['travel_date', 'DATETIME'],
+    ['"return_date"', 'DATETIME'],
   ];
   for (const [col, type] of columns) {
     try {
@@ -79,6 +80,7 @@ router.post('/', async (req, res) => {
       destination_lat,
       destination_lng,
       travel_date,
+      return_date,
     } = req.body;
 
     if (!from_location || !to_location || !passenger_name || !passenger_phone || fare_amount == null) {
@@ -93,8 +95,8 @@ router.post('/', async (req, res) => {
         from_location, to_location, distance_km, estimated_time_minutes, fare_amount,
         passenger_name, passenger_phone, passenger_email, cab_id, cab_type_id,
         service_type, number_of_hours, trip_type, pickup_lat, pickup_lng, destination_lat, destination_lng,
-        invoice_number, travel_date
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        invoice_number, travel_date, "return_date"
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         from_location,
         to_location,
@@ -115,6 +117,7 @@ router.post('/', async (req, res) => {
         destination_lng != null ? Number(destination_lng) : null,
         invoiceNumber,
         travel_date || null,
+        return_date || null,
       ]
     );
 

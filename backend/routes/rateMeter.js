@@ -7,6 +7,14 @@ const db = require('../db/database');
 
 const router = express.Router();
 
+async function ensureCabsDriverEmailColumn() {
+  try {
+    await db.runAsync('ALTER TABLE cabs ADD COLUMN driver_email TEXT');
+  } catch (e) {
+    // column may already exist
+  }
+}
+
 const carOptionsUploadDir = path.join(__dirname, '../uploads/car-options');
 if (!fs.existsSync(carOptionsUploadDir)) {
   fs.mkdirSync(carOptionsUploadDir, { recursive: true });
@@ -283,7 +291,8 @@ router.post(
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
-      const { cab_type_id, vehicle_number, driver_name, driver_phone, name, description, image_url, create_only } = req.body;
+      await ensureCabsDriverEmailColumn();
+      const { cab_type_id, vehicle_number, driver_name, driver_phone, driver_email, name, description, image_url, create_only } = req.body;
       const ct = await db.getAsync('SELECT id FROM cab_types WHERE id = ? AND is_active = 1', [cab_type_id]);
       if (!ct) return res.status(400).json({ error: 'Cab type not found' });
       const vn = vehicle_number.trim();
@@ -293,15 +302,15 @@ router.post(
           return res.status(400).json({ error: 'This vehicle number is already used. Use a different number or assign that cab via "Assign existing cab".' });
         }
         await db.runAsync(
-          `UPDATE cabs SET cab_type_id = ?, driver_name = ?, driver_phone = ?, name = ?, description = ?, image_url = ?, is_active = 1 WHERE id = ?`,
-          [cab_type_id, driver_name || null, driver_phone || null, name || null, description || null, image_url || null, existing.id]
+          `UPDATE cabs SET cab_type_id = ?, driver_name = ?, driver_phone = ?, driver_email = ?, name = ?, description = ?, image_url = ?, is_active = 1 WHERE id = ?`,
+          [cab_type_id, driver_name || null, driver_phone || null, driver_email || null, name || null, description || null, image_url || null, existing.id]
         );
         const row = await db.getAsync('SELECT * FROM cabs WHERE id = ?', [existing.id]);
         return res.json(row);
       }
       const r = await db.runAsync(
-        `INSERT INTO cabs (cab_type_id, vehicle_number, driver_name, driver_phone, name, description, image_url) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [cab_type_id, vn, driver_name || null, driver_phone || null, name || null, description || null, image_url || null]
+        `INSERT INTO cabs (cab_type_id, vehicle_number, driver_name, driver_phone, driver_email, name, description, image_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [cab_type_id, vn, driver_name || null, driver_phone || null, driver_email || null, name || null, description || null, image_url || null]
       );
       const row = await db.getAsync('SELECT * FROM cabs WHERE id = ?', [r.lastID]);
       res.status(201).json(row);
@@ -317,8 +326,9 @@ router.put(
   param('id').isInt({ min: 1 }),
   async (req, res) => {
     try {
+      await ensureCabsDriverEmailColumn();
       const { id } = req.params;
-      const { cab_type_id, vehicle_number, driver_name, driver_phone, name, description, image_url, is_available } = req.body;
+      const { cab_type_id, vehicle_number, driver_name, driver_phone, driver_email, name, description, image_url, is_available } = req.body;
       const existing = await db.getAsync('SELECT id FROM cabs WHERE id = ?', [id]);
       if (!existing) return res.status(404).json({ error: 'Cab not found' });
       const updates = [];
@@ -337,6 +347,7 @@ router.put(
       }
       if (driver_name !== undefined) { updates.push('driver_name = ?'); values.push(driver_name); }
       if (driver_phone !== undefined) { updates.push('driver_phone = ?'); values.push(driver_phone); }
+      if (driver_email !== undefined) { updates.push('driver_email = ?'); values.push(driver_email); }
       if (name !== undefined) { updates.push('name = ?'); values.push(name); }
       if (description !== undefined) { updates.push('description = ?'); values.push(description); }
       if (image_url !== undefined) { updates.push('image_url = ?'); values.push(image_url); }

@@ -21,6 +21,7 @@ function triggerBookingSuccess(payload) {
   post('N8N_WEBHOOK_BOOKING_SUCCESS_URL', 'booking-success', payload);
 }
 
+// Payload may include sendDriverInfoToCustomer (true = email customer on assign) and sendTripToDriver (true = email driver when admin clicks "Send email to driver").
 function triggerDriverInfo(payload) {
   post('N8N_WEBHOOK_DRIVER_INFO_URL', 'driver-info', payload);
 }

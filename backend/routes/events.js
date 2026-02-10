@@ -46,9 +46,12 @@ async function ensureEventTables() {
       )
     `);
   } catch (e) {
-    // tables may already exist with different schema
+    console.error('ensureEventTables:', e.message);
   }
 }
+
+// Create event tables as soon as the app loads so they exist before first request
+ensureEventTables().catch((e) => console.error('Event tables startup:', e.message));
 
 router.post('/bookings', [
   body('name').notEmpty().withMessage('Name is required'),
