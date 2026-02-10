@@ -22,6 +22,14 @@ async function ensureCorporateBookingsInvoiceNumberColumn() {
   }
 }
 
+async function ensureCorporateBookingsCabIdColumn() {
+  try {
+    await db.runAsync('ALTER TABLE corporate_bookings ADD COLUMN cab_id INTEGER');
+  } catch (e) {
+
+  }
+}
+
 async function generateCorporateInvoiceNumber() {
   await ensureCorporateBookingsInvoiceNumberColumn();
   const today = new Date();
@@ -106,6 +114,7 @@ router.use(requireAdmin);
 
 router.get('/bookings', async (req, res) => {
   try {
+    await ensureCorporateBookingsCabIdColumn();
     const bookings = await db.allAsync(
       `SELECT cb.*, c.vehicle_number, c.driver_name as cab_driver_name, c.driver_phone as cab_driver_phone, ct.name as cab_type_name
        FROM corporate_bookings cb
@@ -234,6 +243,10 @@ router.put('/bookings/:id', [
     if (req.body.invoice_number !== undefined) {
       updates.push('invoice_number = ?');
       values.push(req.body.invoice_number === '' ? null : req.body.invoice_number);
+    }
+    if (req.body.cab_id !== undefined) {
+      updates.push('cab_id = ?');
+      values.push(req.body.cab_id ? Number(req.body.cab_id) : null);
     }
 
     if (updates.length === 0) {

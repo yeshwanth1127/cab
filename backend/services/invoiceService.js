@@ -50,25 +50,34 @@ function generateInvoicePDF(booking, withGST = true) {
     const margin = 50;
     const rightColX = pageWidth - margin - 180;
 
-    const logoY = 50;
+    // Header layout: logo/tagline on left, address on right; all must sit above the blue INVOICE bar
+    const headerTop = 42;
+    const logoWidth = 100;
+    const logoHeight = 44; // constrained so logo never overlaps the blue bar
+    const lineY = headerTop + logoHeight + 2;
+    const taglineY = lineY + 6;
+    const blueBarTop = taglineY + 10; // gap below tagline before bar
+    const blueBarHeight = 28;
+    const contentTop = blueBarTop + blueBarHeight + 10; // content below blue bar
+
     if (fs.existsSync(LOGO_PATH)) {
-      doc.image(LOGO_PATH, margin, logoY, { width: 100 });
-      doc.strokeColor('#16a34a').lineWidth(1).moveTo(margin, 92).lineTo(margin + 140, 92).stroke();
-      doc.fontSize(9).fillColor('#374151').text(COMPANY.tagline, margin, 98);
+      doc.image(LOGO_PATH, margin, headerTop, { width: logoWidth, height: logoHeight });
+      doc.strokeColor('#16a34a').lineWidth(1).moveTo(margin, lineY).lineTo(margin + 140, lineY).stroke();
+      doc.fontSize(9).fillColor('#374151').text(COMPANY.tagline, margin, taglineY);
     } else {
-      doc.fontSize(22).fillColor(YELLOW_TEXT).text(COMPANY.nameFirst, margin, logoY);
+      doc.fontSize(22).fillColor(YELLOW_TEXT).text(COMPANY.nameFirst, margin, headerTop);
       const nammaWidth = doc.widthOfString(COMPANY.nameFirst);
       const logoGap = 6;
-      doc.fillColor(GREEN_TEXT).text(COMPANY.nameSecond.trim(), margin + nammaWidth + logoGap, logoY);
+      doc.fillColor(GREEN_TEXT).text(COMPANY.nameSecond.trim(), margin + nammaWidth + logoGap, headerTop);
       const cabsWidth = doc.widthOfString(COMPANY.nameSecond.trim());
       const totalLogoWidth = nammaWidth + logoGap + cabsWidth;
-      doc.strokeColor('#16a34a').lineWidth(1).moveTo(margin, 78).lineTo(margin + Math.min(totalLogoWidth, 140), 78).stroke();
-      doc.fontSize(9).fillColor('#374151').text(COMPANY.tagline, margin, 86);
+      doc.strokeColor('#16a34a').lineWidth(1).moveTo(margin, headerTop + 36).lineTo(margin + Math.min(totalLogoWidth, 140), headerTop + 36).stroke();
+      doc.fontSize(9).fillColor('#374151').text(COMPANY.tagline, margin, headerTop + 44);
     }
 
     doc.fontSize(9).fillColor('black');
     const addrLines = COMPANY.address.split(',').map((s) => s.trim()).filter(Boolean);
-    let addrY = 50;
+    let addrY = headerTop;
     addrLines.forEach((line, i) => {
       doc.text(line + (i < addrLines.length - 1 ? ',' : ''), rightColX, addrY, { width: 175, align: 'left' });
       addrY += 10;
@@ -77,12 +86,11 @@ function generateInvoicePDF(booking, withGST = true) {
     doc.text(`Phone: ${COMPANY.supportPhone}`, rightColX, addrY);
     doc.text(`Email ID: ${COMPANY.email}`, rightColX, addrY + 14);
 
-    const bandY = 102;
-    doc.rect(0, bandY, pageWidth, 28).fill(BLUE_HEADER);
-    doc.fillColor('white').fontSize(18).font('Helvetica-Bold').text('INVOICE', 0, bandY + 6, { width: pageWidth, align: 'center' });
+    doc.rect(0, blueBarTop, pageWidth, blueBarHeight).fill(BLUE_HEADER);
+    doc.fillColor('white').fontSize(18).font('Helvetica-Bold').text('INVOICE', 0, blueBarTop + 6, { width: pageWidth, align: 'center' });
     doc.fillColor('black').font('Helvetica');
 
-    let y = 145;
+    let y = contentTop;
     doc.fontSize(11).font('Helvetica-Bold').text(`M/s ${(booking.passenger_name || '—').toUpperCase()}`, margin, y);
     doc.font('Helvetica').fontSize(9);
     y += 16;
@@ -101,7 +109,7 @@ function generateInvoicePDF(booking, withGST = true) {
     doc.text(`Phone: ${booking.passenger_phone || '—'}`, margin, y);
     const customerBlockBottom = y + 14;
 
-    y = 145;
+    y = contentTop;
     doc.fontSize(9);
     doc.text(`Invoice No: ${booking.invoice_number || booking.id}`, rightColX, y);
     y += 12;

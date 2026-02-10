@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "setup-admin": "node scripts/setup-admin.js"
+    "setup-admin": "node scripts/setup-admin.js",
+    "migrate": "node db/migrations/run-all.js",
+    "build": "echo Backend has no build step"
   },
   "dependencies": {
     "archiver": "^7.0.1",

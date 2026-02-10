@@ -646,6 +646,16 @@
   box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.2);
 }
 
+.car-options-confirm-field .car-options-datetime-picker.datetime-picker-wrap {
+  background: #f9fafb;
+  border-color: #e5e7eb;
+  color: #111827;
+}
+
+.car-options-confirm-field .car-options-datetime-picker.datetime-picker-wrap:not(.has-value) .datetime-picker-display {
+  color: #6b7280;
+}
+
 .car-options-confirm-error {
   color: #dc2626;
   font-size: 0.9rem;

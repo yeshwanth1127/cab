@@ -3,6 +3,7 @@ import { useLocation, Link, useNavigate } from 'react-router-dom';
 import api, { getImageUrl } from '../services/api';
 import MainNavbar from '../components/MainNavbar';
 import Icon from '../components/Icon';
+import DateTimePicker from '../components/DateTimePicker';
 import AnimatedMapBackground from '../components/AnimatedMapBackground';
 import './CarOptions.css';
 
@@ -25,6 +26,7 @@ const CarOptions = () => {
   const [confirmModal, setConfirmModal] = useState(null);
   const [confirmPassengerName, setConfirmPassengerName] = useState('');
   const [confirmPassengerPhone, setConfirmPassengerPhone] = useState('');
+  const [confirmTravelDatetime, setConfirmTravelDatetime] = useState('');
   const [confirmSubmitting, setConfirmSubmitting] = useState(false);
   const [confirmError, setConfirmError] = useState('');
   const [reconfirmData, setReconfirmData] = useState(null);
@@ -179,6 +181,7 @@ const CarOptions = () => {
     setConfirmError('');
     setConfirmPassengerName('');
     setConfirmPassengerPhone('');
+    setConfirmTravelDatetime(bookingState.travel_datetime || '');
     setConfirmModal({ cab, cabType });
   };
 
@@ -186,6 +189,7 @@ const CarOptions = () => {
     setConfirmModal(null);
     setReconfirmData(null);
     setConfirmError('');
+    setConfirmTravelDatetime('');
   };
 
   const handleConfirmBooking = (e) => {
@@ -224,12 +228,21 @@ const CarOptions = () => {
     summaryLines.push({ label: 'Vehicle', value: confirmModal.cab.vehicle_number });
     summaryLines.push({ label: 'Name', value: name });
     summaryLines.push({ label: 'Phone', value: phone });
+    if (confirmTravelDatetime) {
+      try {
+        const d = new Date(confirmTravelDatetime);
+        summaryLines.push({ label: 'Date & time', value: d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) });
+      } catch (_) {
+        summaryLines.push({ label: 'Date & time', value: confirmTravelDatetime });
+      }
+    }
     summaryLines.push({ label: 'Total', value: `₹${fareAmount}`, isTotal: true });
     setReconfirmData({
       cab: confirmModal.cab,
       cabType: confirmModal.cabType,
       passengerName: name,
       passengerPhone: phone,
+      travelDatetime: confirmTravelDatetime,
       fareAmount,
       summaryLines,
     });
@@ -244,7 +257,7 @@ const CarOptions = () => {
     setConfirmSubmitting(true);
     setConfirmError('');
     try {
-      const { cab, cabType, passengerName, passengerPhone, fareAmount } = reconfirmData;
+      const { cab, cabType, passengerName, passengerPhone, fareAmount, travelDatetime } = reconfirmData;
       if (isAirportFlow) {
         const payload = {
           service_type: 'airport',
@@ -255,6 +268,7 @@ const CarOptions = () => {
           fare_amount: fareAmount,
           cab_id: cab.id,
           cab_type_id: cabType.id,
+          travel_date: travelDatetime || null,
         };
         if (bookingState.from_lat != null && bookingState.from_lng != null) {
           payload.pickup_lat = bookingState.from_lat;
@@ -279,6 +293,7 @@ const CarOptions = () => {
           fare_amount: fareAmount,
           cab_id: cab.id,
           cab_type_id: cabType.id,
+          travel_date: travelDatetime || null,
         };
         if (bookingState.from_lat != null && bookingState.from_lng != null) {
           payload.pickup_lat = bookingState.from_lat;
@@ -305,6 +320,7 @@ const CarOptions = () => {
           cab_type_id: cabType.id,
           pickup_lat: bookingState.from_lat ?? null,
           pickup_lng: bookingState.from_lng ?? null,
+          travel_date: travelDatetime || null,
         });
         setSuccessBookingId(res.data?.id);
         setConfirmModal(null);
@@ -677,6 +693,16 @@ const CarOptions = () => {
                       onChange={(e) => setConfirmPassengerPhone(e.target.value)}
                       placeholder="Enter phone number"
                       required
+                    />
+                  </div>
+                  <div className="car-options-confirm-field">
+                    <label>Date and time</label>
+                    <DateTimePicker
+                      value={confirmTravelDatetime}
+                      onChange={setConfirmTravelDatetime}
+                      placeholder="Select pickup date and time"
+                      min={new Date().toISOString().slice(0, 16)}
+                      className="car-options-datetime-picker"
                     />
                   </div>
                   {confirmError && <p className="car-options-confirm-error">{confirmError}</p>}

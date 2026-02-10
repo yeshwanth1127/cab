@@ -1,8 +1,6 @@
-
 const path = require('path');
-try {
-  require('dotenv').config({ path: path.join(__dirname, '../../.env') });
-} catch (_) {}
+// Load .env from backend dir so DATABASE_PATH is set before database.js reads it
+require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env') });
 const db = require('../database');
 
 async function runMigration() {

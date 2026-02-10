@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import LocationInput from '../components/LocationInput';
@@ -7,17 +7,19 @@ import AnimatedMapBackground from '../components/AnimatedMapBackground';
 import MainNavbar from '../components/MainNavbar';
 import './CorporateBookingPage.css';
 
-const handleDateInputClick = (e) => {
-
-  if (e.target.showPicker) {
-    e.target.showPicker();
-  } else {
-    e.target.focus();
-  }
-};
-
 const CorporateBookingPage = () => {
   const navigate = useNavigate();
+  const dateInputRef = useRef(null);
+  const timeInputRef = useRef(null);
+
+  const handleDateInputClick = (e) => {
+    if (e.target.showPicker) {
+      e.target.showPicker();
+    } else {
+      e.target.focus();
+    }
+  };
+
   const [formData, setFormData] = useState({
     name: '',
     phone_number: '',
@@ -303,24 +305,53 @@ const CorporateBookingPage = () => {
                 <div className="form-group">
                   <label>Date and Time *</label>
                   <div className="corporate-datetime-row">
-                    <input
-                      type="date"
-                      name="travel_date"
-                      value={formData.travel_date}
-                      onChange={handleChange}
-                      onClick={handleDateInputClick}
-                      min={new Date().toISOString().split('T')[0]}
-                      className={errors.travel_date ? 'error' : ''}
-                      placeholder="Date"
-                    />
-                    <input
-                      type="time"
-                      name="travel_time"
-                      value={formData.travel_time}
-                      onChange={handleChange}
-                      onClick={handleDateInputClick}
-                      className={errors.travel_time ? 'error' : ''}
-                    />
+                    <div
+                      className={`corporate-datetime-box ${formData.travel_date ? 'has-value' : ''} ${errors.travel_date ? 'error' : ''}`.trim()}
+                      onClick={() => dateInputRef.current?.click()}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); dateInputRef.current?.click(); } }}
+                      aria-label="Select date"
+                    >
+                      <span className="corporate-datetime-display">
+                        {formData.travel_date ? new Date(formData.travel_date + 'T12:00:00').toLocaleDateString(undefined, { dateStyle: 'medium' }) : 'Select date'}
+                      </span>
+                      <input
+                        ref={dateInputRef}
+                        type="date"
+                        name="travel_date"
+                        value={formData.travel_date}
+                        onChange={handleChange}
+                        onClick={handleDateInputClick}
+                        min={new Date().toISOString().split('T')[0]}
+                        className="corporate-datetime-input"
+                        aria-hidden="true"
+                        tabIndex={-1}
+                      />
+                    </div>
+                    <div
+                      className={`corporate-datetime-box ${formData.travel_time ? 'has-value' : ''} ${errors.travel_time ? 'error' : ''}`.trim()}
+                      onClick={() => timeInputRef.current?.click()}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); timeInputRef.current?.click(); } }}
+                      aria-label="Select time"
+                    >
+                      <span className="corporate-datetime-display">
+                        {formData.travel_time || 'Select time'}
+                      </span>
+                      <input
+                        ref={timeInputRef}
+                        type="time"
+                        name="travel_time"
+                        value={formData.travel_time}
+                        onChange={handleChange}
+                        onClick={handleDateInputClick}
+                        className="corporate-datetime-input"
+                        aria-hidden="true"
+                        tabIndex={-1}
+                      />
+                    </div>
                   </div>
                   {(errors.travel_date || errors.travel_time) && (
                     <span className="error-message">{errors.travel_date || errors.travel_time}</span>

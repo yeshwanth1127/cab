@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import api, { getImageUrl } from '../services/api';
 import MainNavbar from '../components/MainNavbar';
 import LocationInput from '../components/LocationInput';
+import DateTimePicker from '../components/DateTimePicker';
 import Icon from '../components/Icon';
 import './HomePage.css';
 
@@ -34,15 +35,31 @@ const HomePage = () => {
   const [confirmModal, setConfirmModal] = useState(null);
   const [confirmPassengerName, setConfirmPassengerName] = useState('');
   const [confirmPassengerPhone, setConfirmPassengerPhone] = useState('');
+  const [confirmTravelDatetime, setConfirmTravelDatetime] = useState('');
   const [confirmSubmitting, setConfirmSubmitting] = useState(false);
   const [confirmError, setConfirmError] = useState('');
   const [successBookingId, setSuccessBookingId] = useState(null);
+  const [localLocationError, setLocalLocationError] = useState('');
+  const [travelDatetime, setTravelDatetime] = useState('');
 
   const fromAddress = fromLocation?.address || '';
+
+  // Local service is only available within Bangalore
+  const BANGALORE_BOUNDS = { latMin: 12.77, latMax: 13.22, lngMin: 77.38, lngMax: 77.82 };
+  const isWithinBangalore = (location) => {
+    if (!location) return false;
+    if (location.lat != null && location.lng != null) {
+      const { latMin, latMax, lngMin, lngMax } = BANGALORE_BOUNDS;
+      return location.lat >= latMin && location.lat <= latMax && location.lng >= lngMin && location.lng <= lngMax;
+    }
+    const addr = (location.address || '').toLowerCase();
+    return addr.includes('bangalore') || addr.includes('bengaluru');
+  };
 
   const handleBackToServices = () => {
     setServiceChoice(null);
     setFromLocation(null);
+    setLocalLocationError('');
     setNumberOfHours(null);
     setAirportDirection(null);
     setAirportLocation(null);
@@ -53,6 +70,7 @@ const HomePage = () => {
     setOutstationMultiStops([null, null]);
     setLocalOffers([]);
     setLocalOffersError('');
+    setTravelDatetime('');
   };
 
   const airportLocationAddress = airportLocation?.address || '';
@@ -72,6 +90,7 @@ const HomePage = () => {
           from_lng: outstationFrom?.lng ?? null,
           to_lat: outstationTo?.lat ?? null,
           to_lng: outstationTo?.lng ?? null,
+          travel_datetime: travelDatetime || null,
         },
       });
     } else if (outstationTripType === 'round_trip') {
@@ -85,6 +104,7 @@ const HomePage = () => {
           from_location: pickupAddr,
           to_location: pickupAddr,
           number_of_days: days,
+          travel_datetime: travelDatetime || null,
         },
       });
     } else {
@@ -97,6 +117,7 @@ const HomePage = () => {
           from_location: stops[0],
           to_location: stops.length > 1 ? stops[stops.length - 1] : stops[0],
           stops: stops,
+          travel_datetime: travelDatetime || null,
         },
       });
     }
@@ -125,6 +146,7 @@ const HomePage = () => {
         from_lng: fromLng,
         to_lat: toLat,
         to_lng: toLng,
+        travel_datetime: travelDatetime || null,
       },
     });
   };
@@ -132,6 +154,11 @@ const HomePage = () => {
   const handleContinueToCabSelection = () => {
     if (!fromAddress.trim()) return;
     if (!numberOfHours) return;
+    if (!isWithinBangalore(fromLocation)) {
+      setLocalLocationError('Local cab service is only available within Bangalore. Please choose a pickup location in Bangalore.');
+      return;
+    }
+    setLocalLocationError('');
     navigate('/car-options', {
       state: {
         service_type: 'local',
@@ -139,6 +166,7 @@ const HomePage = () => {
         number_of_hours: numberOfHours,
         from_lat: fromLocation?.lat ?? null,
         from_lng: fromLocation?.lng ?? null,
+        travel_datetime: travelDatetime || null,
       },
     });
   };
@@ -153,6 +181,7 @@ const HomePage = () => {
   const handleCloseConfirm = () => {
     setConfirmModal(null);
     setConfirmError('');
+    setConfirmTravelDatetime('');
   };
 
   const handleConfirmBooking = async (e) => {
@@ -184,6 +213,7 @@ const HomePage = () => {
         cab_type_id: confirmModal.cabType.id,
         pickup_lat: fromLocation?.lat ?? null,
         pickup_lng: fromLocation?.lng ?? null,
+        travel_date: confirmTravelDatetime || null,
       });
       setSuccessBookingId(res.data?.id);
       setConfirmModal(null);
@@ -299,6 +329,16 @@ const HomePage = () => {
                     </div>
                   </div>
                 )}
+                <div className="home-form-group">
+                  <label className="home-form-label">Date and time</label>
+                  <DateTimePicker
+                    value={travelDatetime}
+                    onChange={setTravelDatetime}
+                    placeholder="Select pickup date and time"
+                    min={new Date().toISOString().slice(0, 16)}
+                    className="home-flow-datetime-picker"
+                  />
+                </div>
                 <button
                   type="button"
                   className="home-continue-btn"
@@ -444,6 +484,16 @@ const HomePage = () => {
                   </>
                 )}
 
+                <div className="home-form-group">
+                  <label className="home-form-label">Date and time</label>
+                  <DateTimePicker
+                    value={travelDatetime}
+                    onChange={setTravelDatetime}
+                    placeholder="Select pickup date and time"
+                    min={new Date().toISOString().slice(0, 16)}
+                    className="home-flow-datetime-picker"
+                  />
+                </div>
                 <button
                   type="button"
                   className="home-continue-btn"
@@ -484,9 +534,15 @@ const HomePage = () => {
                     <LocationInput
                       placeholder="Enter pickup address"
                       value={fromLocation}
-                      onSelect={setFromLocation}
+                      onSelect={(loc) => {
+                        setFromLocation(loc);
+                        setLocalLocationError('');
+                      }}
                       label="From"
                     />
+                    {localLocationError && (
+                      <p className="home-form-error" role="alert">{localLocationError}</p>
+                    )}
                   </div>
                   <div className="home-form-group">
                     <label className="home-form-label">Package (hours)</label>
@@ -504,6 +560,16 @@ const HomePage = () => {
                         </button>
                       ))}
                     </div>
+                  </div>
+                  <div className="home-form-group">
+                    <label className="home-form-label">Date and time</label>
+                    <DateTimePicker
+                      value={travelDatetime}
+                      onChange={setTravelDatetime}
+                      placeholder="Select pickup date and time"
+                      min={new Date().toISOString().slice(0, 16)}
+                      className="home-flow-datetime-picker"
+                    />
                   </div>
                   <button
                     type="button"
@@ -695,6 +761,16 @@ const HomePage = () => {
                   onChange={(e) => setConfirmPassengerPhone(e.target.value)}
                   placeholder="Enter phone number"
                   required
+                />
+              </div>
+              <div className="home-confirm-field">
+                <label>Date and time</label>
+                <DateTimePicker
+                  value={confirmTravelDatetime}
+                  onChange={setConfirmTravelDatetime}
+                  placeholder="Select pickup date and time"
+                  min={new Date().toISOString().slice(0, 16)}
+                  className="home-datetime-picker"
                 />
               </div>
               {confirmError && (

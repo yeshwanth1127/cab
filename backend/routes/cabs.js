@@ -181,11 +181,15 @@ router.get('/local-offers', async (req, res) => {
   }
 });
 
+function excludeInnovaCabTypes(cabTypes) {
+  return (cabTypes || []).filter((ct) => (ct.name || '').trim().toLowerCase() !== 'innova');
+}
+
 router.get('/airport-offers', async (req, res) => {
   try {
-    const cabTypes = await db.allAsync(
+    const cabTypes = excludeInnovaCabTypes(await db.allAsync(
       "SELECT id, name, description, capacity FROM cab_types WHERE service_type = 'airport' AND is_active = 1 ORDER BY name"
-    );
+    ));
     const result = [];
     for (const ct of cabTypes || []) {
       const rateRow = await db.getAsync(
@@ -241,11 +245,11 @@ router.get('/airport-fare-estimate', async (req, res) => {
       return res.status(400).json({ error: 'from_lat, from_lng, to_lat, to_lng are required' });
     }
     const distance_km = haversineDistanceKm(fromLat, fromLng, toLat, toLng);
-    const cabTypes = await db.allAsync(
+    const cabTypes = excludeInnovaCabTypes(await db.allAsync(
       "SELECT id, name FROM cab_types WHERE service_type = 'airport' AND is_active = 1 ORDER BY name"
-    );
+    ));
     const fares = [];
-    for (const ct of cabTypes || []) {
+    for (const ct of cabTypes) {
       const rateRow = await db.getAsync(
         `SELECT base_fare, per_km_rate, driver_charges, night_charges
          FROM rate_meters
@@ -283,9 +287,9 @@ function getInt(row, key, defaultVal = null) {
 
 router.get('/outstation-offers', async (req, res) => {
   try {
-    const cabTypes = await db.allAsync(
+    const cabTypes = excludeInnovaCabTypes(await db.allAsync(
       "SELECT id, name, description, capacity FROM cab_types WHERE service_type = 'outstation' AND is_active = 1 ORDER BY name"
-    );
+    ));
     const result = [];
     for (const ct of cabTypes || []) {
       const [oneWay, roundTrip, multiStop] = await Promise.all([
@@ -364,9 +368,9 @@ router.get('/outstation-offers', async (req, res) => {
 router.get('/outstation-fare-estimate', async (req, res) => {
   try {
     const tripType = req.query.trip_type || 'one_way';
-    const offers = await db.allAsync(
+    const offers = excludeInnovaCabTypes(await db.allAsync(
       "SELECT id, name FROM cab_types WHERE service_type = 'outstation' AND is_active = 1 ORDER BY name"
-    );
+    ));
     const fares = [];
 
     if (tripType === 'one_way') {

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api, { getImageUrl } from '../services/api';
 import LocationInput from '../components/LocationInput';
+import DateTimePicker from '../components/DateTimePicker';
 import Icon from '../components/Icon';
 import './AdminDashboard.css';
 
@@ -23,12 +24,22 @@ const TABS = {
   corporateBookings: 'corporateBookings',
   corporateInvoices: 'corporateInvoices',
   createCorporateInvoice: 'createCorporateInvoice',
+
+  addUsers: 'addUsers',
 };
+
+const MANAGER_SECTIONS = [
+  { key: 'bookings', label: 'Bookings (Enquiries, Confirmed, Assigned, Trip End, Cancelled)' },
+  { key: 'drivers', label: 'Drivers & Cabs (Others)' },
+  { key: 'rate_meter', label: 'Rate Meter' },
+  { key: 'billing', label: 'Billing & Invoices' },
+  { key: 'corporate', label: 'Corporate Bookings & Invoices' },
+];
 
 const RATE_METER_CAB_NAMES = {
   local: ['Innova Crysta', 'SUV', 'Sedan'],
-  airport: ['Innova', 'Crysta', 'SUV', 'Sedan'],
-  outstation: ['Innova', 'Crysta', 'SUV', 'Sedan', 'TT', 'Minibus'],
+  airport: ['Crysta', 'SUV', 'Sedan'],
+  outstation: ['Crysta', 'SUV', 'Sedan', 'TT', 'Minibus'],
 };
 
 function normalizePhoneForWhatsApp(phone) {
@@ -55,7 +66,11 @@ const AdminDashboard = () => {
   const [detailBooking, setDetailBooking] = useState(null);
   const [editingInvoiceNumber, setEditingInvoiceNumber] = useState('');
   const [invoiceNumberSaving, setInvoiceNumberSaving] = useState(false);
+  const [downloadInvoiceModal, setDownloadInvoiceModal] = useState({ open: false, booking: null, withGst: true });
+  const [downloadInvoiceNumber, setDownloadInvoiceNumber] = useState('');
+  const [downloadInvoiceSubmitting, setDownloadInvoiceSubmitting] = useState(false);
   const [assignBooking, setAssignBooking] = useState(null);
+  const [assignForCorporate, setAssignForCorporate] = useState(false);
   const [assignDriverId, setAssignDriverId] = useState('');
   const [assignCabId, setAssignCabId] = useState('');
   const [assignSubmitting, setAssignSubmitting] = useState(false);
@@ -73,6 +88,7 @@ const AdminDashboard = () => {
     number_of_hours: '',
     outstation_trip_type: 'one_way',
     extra_stops: [],
+    travel_datetime: '',
   });
   const [fromLocation, setFromLocation] = useState(null);
   const [toLocation, setToLocation] = useState(null);
@@ -153,6 +169,16 @@ const AdminDashboard = () => {
   });
   const [corporateEditSaving, setCorporateEditSaving] = useState(false);
   const [staleBookingsWarning, setStaleBookingsWarning] = useState(null);
+
+  const [addUserForm, setAddUserForm] = useState({
+    username: '',
+    email: '',
+    password: '',
+    role: 'manager',
+    permissions: MANAGER_SECTIONS.map((s) => ({ section_key: s.key, can_view: true, can_edit: false })),
+  });
+  const [addUserSubmitting, setAddUserSubmitting] = useState(false);
+  const [addUserError, setAddUserError] = useState('');
 
   const showToast = useCallback((message, type = 'success') => {
     setToast({ message, type });
@@ -448,20 +474,44 @@ const AdminDashboard = () => {
     const wasAlreadyAssigned = !!assignBooking.cab_id;
     setAssignSubmitting(true);
     try {
-      await api.put(`/admin/bookings/${assignBooking.id}`, {
-        cab_id: Number(assignCabId),
-        booking_status: 'confirmed',
-      });
-      showToast(wasAlreadyAssigned ? 'Driver & cab reassigned.' : 'Driver & cab assigned.');
-      setAssignBooking(null);
-      setAssignDriverId('');
-      setAssignCabId('');
-      fetchBookings();
+      if (assignForCorporate) {
+        await api.put(`/corporate/bookings/${assignBooking.id}`, { cab_id: Number(assignCabId) });
+        showToast(wasAlreadyAssigned ? 'Driver & cab reassigned.' : 'Driver & cab assigned.');
+        setAssignBooking(null);
+        setAssignForCorporate(false);
+        setAssignDriverId('');
+        setAssignCabId('');
+        fetchCorporateBookings();
+      } else {
+        await api.put(`/admin/bookings/${assignBooking.id}`, {
+          cab_id: Number(assignCabId),
+          booking_status: 'confirmed',
+        });
+        showToast(wasAlreadyAssigned ? 'Driver & cab reassigned.' : 'Driver & cab assigned.');
+        setAssignBooking(null);
+        setAssignDriverId('');
+        setAssignCabId('');
+        fetchBookings();
+      }
     } catch (err) {
       showToast(err.response?.data?.error || 'Failed to assign', 'error');
     } finally {
       setAssignSubmitting(false);
     }
+  };
+
+  const openAssignModal = (booking, isCorporate = false) => {
+    setAssignBooking(booking);
+    setAssignForCorporate(!!isCorporate);
+    setAssignCabId(booking.cab_id ? String(booking.cab_id) : '');
+    setAssignDriverId('');
+  };
+
+  const closeAssignModal = () => {
+    setAssignBooking(null);
+    setAssignForCorporate(false);
+    setAssignDriverId('');
+    setAssignCabId('');
   };
 
   const [statusUpdatingId, setStatusUpdatingId] = useState(null);
@@ -552,6 +602,7 @@ const AdminDashboard = () => {
         pickup_lng: fromLocation?.lng ?? null,
         destination_lat: toLocation?.lat ?? null,
         destination_lng: toLocation?.lng ?? null,
+        travel_date: createForm.travel_datetime || null,
       });
       showToast('Booking created.');
       setCreateForm({
@@ -564,6 +615,7 @@ const AdminDashboard = () => {
         number_of_hours: '',
         outstation_trip_type: 'one_way',
         extra_stops: [],
+        travel_datetime: '',
       });
       setFromLocation(null);
       setToLocation(null);
@@ -572,6 +624,40 @@ const AdminDashboard = () => {
       showToast(err.response?.data?.error || 'Failed to create booking', 'error');
     } finally {
       setCreateSubmitting(false);
+    }
+  };
+
+  const handleAddUserSubmit = async (e) => {
+    e.preventDefault();
+    setAddUserError('');
+    const { username, email, password, role, permissions } = addUserForm;
+    if (!username?.trim() || !email?.trim() || !password || password.length < 6) {
+      setAddUserError('Username, email and password (min 6 characters) are required.');
+      return;
+    }
+    setAddUserSubmitting(true);
+    try {
+      const payload = { username: username.trim(), email: email.trim(), password, role };
+      if (role === 'manager') {
+        payload.permissions = permissions
+          .filter((p) => p.can_view || p.can_edit)
+          .map((p) => ({ section_key: p.section_key, can_view: !!p.can_view, can_edit: !!p.can_edit }));
+      }
+      await api.post('/auth/register-admin', payload);
+      showToast(role === 'admin' ? 'Admin user created.' : 'Manager user created.');
+      setAddUserForm({
+        username: '',
+        email: '',
+        password: '',
+        role: 'manager',
+        permissions: MANAGER_SECTIONS.map((s) => ({ section_key: s.key, can_view: true, can_edit: false })),
+      });
+    } catch (err) {
+      const msg = err.response?.data?.error || err.response?.data?.errors?.[0]?.msg || 'Failed to create user';
+      setAddUserError(msg);
+      showToast(msg, 'error');
+    } finally {
+      setAddUserSubmitting(false);
     }
   };
 
@@ -706,10 +792,19 @@ const AdminDashboard = () => {
     }
   };
 
-  const handleBookingInvoiceDownload = async (bookingId, withGst) => {
+  const openDownloadInvoiceModal = (booking, withGst) => {
+    setDownloadInvoiceModal({ open: true, booking, withGst });
+    setDownloadInvoiceNumber(booking.invoice_number || `#${booking.id}`);
+  };
+
+  const handleBookingInvoiceDownload = async (bookingId, withGst, invoiceNumber) => {
     try {
+      const params = { with_gst: withGst };
+      if (invoiceNumber != null && String(invoiceNumber).trim() !== '') {
+        params.invoice_number = String(invoiceNumber).trim();
+      }
       const response = await api.get(`/admin/bookings/${bookingId}/invoice`, {
-        params: { with_gst: withGst },
+        params,
         responseType: 'blob',
       });
       const blob = new Blob([response.data], { type: 'application/pdf' });
@@ -724,6 +819,19 @@ const AdminDashboard = () => {
       showToast('Invoice downloaded.');
     } catch (err) {
       showToast(err.response?.data?.error || 'Failed to download invoice', 'error');
+    }
+  };
+
+  const handleDownloadInvoiceModalConfirm = async () => {
+    const { booking, withGst } = downloadInvoiceModal;
+    if (!booking) return;
+    setDownloadInvoiceSubmitting(true);
+    try {
+      const invNum = downloadInvoiceNumber.trim() || booking.invoice_number || String(booking.id);
+      await handleBookingInvoiceDownload(booking.id, withGst, invNum);
+      setDownloadInvoiceModal({ open: false, booking: null, withGst: true });
+    } finally {
+      setDownloadInvoiceSubmitting(false);
     }
   };
 
@@ -1293,7 +1401,7 @@ const AdminDashboard = () => {
                     </button>
                   </>
                 )}
-                <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => { setAssignBooking(b); setAssignDriverId(''); setAssignCabId(b.cab_id || ''); }}>{b.cab_id ? 'Reassign' : 'Assign'}</button>
+                <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => openAssignModal(b, false)}>{b.cab_id ? 'Reassign' : 'Assign'}</button>
                 {b.maps_link && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link)}>Copy pickup map</button>}
                 {b.maps_link_drop && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link_drop)}>Copy drop map</button>}
                 {(b.driver_phone || b.driver_name) && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendWhatsApp(b)}>WhatsApp</button>}
@@ -1451,6 +1559,18 @@ const AdminDashboard = () => {
               </span>
             </button>
           </div>
+          {user?.role === 'admin' && (
+            <div className="admin-sidebar-section">
+              <div className="admin-sidebar-section-title">USERS</div>
+              <button type="button" className={`admin-dashboard-nav-btn ${activeTab === TABS.addUsers ? 'active' : ''}`} onClick={() => setTab(TABS.addUsers)}>
+                <Icon name="user" size={20} className="admin-nav-btn-icon" />
+                <span className="admin-nav-btn-content">
+                  <span className="admin-nav-btn-label">Add Users</span>
+                  <span className="admin-nav-btn-sublabel">Managers & Admins</span>
+                </span>
+              </button>
+            </div>
+          )}
         </aside>
 
         <main className="admin-dashboard-main">
@@ -1691,7 +1811,7 @@ const AdminDashboard = () => {
                               </button>
                             </>
                           )}
-                          <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => { setAssignBooking(b); setAssignDriverId(''); setAssignCabId(b.cab_id || ''); }}>{b.cab_id ? 'Reassign' : 'Assign'}</button>
+                          <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => openAssignModal(b, false)}>{b.cab_id ? 'Reassign' : 'Assign'}</button>
                           {b.maps_link && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link)}>Copy pickup map</button>}
                           {b.maps_link_drop && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link_drop)}>Copy drop map</button>}
                           {(b.driver_phone || b.driver_name) && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendWhatsApp(b)}>WhatsApp</button>}
@@ -1727,6 +1847,21 @@ const AdminDashboard = () => {
                       <option value="outstation">Outstation</option>
                     </select>
                   </div>
+                  {createForm.service_type === 'local' && (
+                    <div className="admin-form-group">
+                      <label>Package</label>
+                      <select
+                        value={createForm.number_of_hours === '' || createForm.number_of_hours == null ? '' : String(createForm.number_of_hours)}
+                        onChange={(e) => setCreateForm((f) => ({ ...f, number_of_hours: e.target.value === '' ? '' : e.target.value }))}
+                        style={{ width: '100%', padding: '8px 12px', border: '1px solid #bbf7d0', borderRadius: 6 }}
+                      >
+                        <option value="">— Select package —</option>
+                        <option value="4">4h</option>
+                        <option value="8">8h</option>
+                        <option value="12">12h</option>
+                      </select>
+                    </div>
+                  )}
                   {createForm.service_type === 'outstation' && (
                     <div className="admin-form-group">
                       <label>Outstation trip type</label>
@@ -1833,6 +1968,15 @@ const AdminDashboard = () => {
                       </div>
                     </>
                   )}
+                  <div className="admin-form-group full-width">
+                    <label>Date and time</label>
+                    <DateTimePicker
+                      value={createForm.travel_datetime}
+                      onChange={(v) => setCreateForm((f) => ({ ...f, travel_datetime: v }))}
+                      placeholder="Select pickup date and time"
+                      min={new Date().toISOString().slice(0, 16)}
+                    />
+                  </div>
                   <div className="admin-form-group">
                     <label>Passenger name *</label>
                     <input
@@ -1862,18 +2006,6 @@ const AdminDashboard = () => {
                       required
                     />
                   </div>
-                  {createForm.service_type === 'local' && (
-                    <div className="admin-form-group">
-                      <label>Hours (optional)</label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={createForm.number_of_hours}
-                        onChange={(e) => setCreateForm((f) => ({ ...f, number_of_hours: e.target.value }))}
-                        placeholder="4, 8, 12"
-                      />
-                    </div>
-                  )}
                 </div>
                 <div className="admin-modal-actions" style={{ marginTop: 16 }}>
                   <button type="submit" className="admin-btn admin-btn-primary" disabled={createSubmitting}>
@@ -2060,7 +2192,7 @@ const AdminDashboard = () => {
                             )}
                           </div>
                         ))}
-                        {(filteredRateMeterCabTypes.airport || []).length === 0 && <p className="admin-rate-meters-empty">Click “Create missing cab types” to add Innova, Crysta, SUV, Sedan.</p>}
+                        {(filteredRateMeterCabTypes.airport || []).length === 0 && <p className="admin-rate-meters-empty">Click “Create missing cab types” to add Crysta, SUV, Sedan.</p>}
                       </div>
                     )}
                   </div>
@@ -2162,7 +2294,7 @@ const AdminDashboard = () => {
                             )}
                           </div>
                         ))}
-                        {(filteredRateMeterCabTypes.outstation || []).length === 0 && <p className="admin-rate-meters-empty">Click “Create missing cab types” to add Innova, Crysta, SUV, Sedan, TT, Minibus.</p>}
+                        {(filteredRateMeterCabTypes.outstation || []).length === 0 && <p className="admin-rate-meters-empty">Click “Create missing cab types” to add Crysta, SUV, Sedan, TT, Minibus.</p>}
                       </div>
                     )}
                   </div>
@@ -2363,6 +2495,36 @@ const AdminDashboard = () => {
         </div>
       )}
 
+      {downloadInvoiceModal.open && downloadInvoiceModal.booking && (
+        <div className="admin-modal-overlay" onClick={() => !downloadInvoiceSubmitting && setDownloadInvoiceModal({ open: false, booking: null, withGst: true })}>
+          <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="admin-modal-header">
+              <h3>Download invoice {downloadInvoiceModal.withGst ? '(with GST)' : '(without GST)'}</h3>
+              <button type="button" className="admin-modal-close" onClick={() => !downloadInvoiceSubmitting && setDownloadInvoiceModal({ open: false, booking: null, withGst: true })} aria-label="Close">×</button>
+            </div>
+            <div className="admin-modal-body">
+              <p className="admin-bookings-desc" style={{ marginBottom: 12 }}>Enter the invoice number to show on the PDF, or leave the default.</p>
+              <div className="admin-form-group full-width">
+                <label>Invoice number</label>
+                <input
+                  type="text"
+                  value={downloadInvoiceNumber}
+                  onChange={(e) => setDownloadInvoiceNumber(e.target.value)}
+                  placeholder={downloadInvoiceModal.booking ? (downloadInvoiceModal.booking.invoice_number || `#${downloadInvoiceModal.booking.id}`) : ''}
+                  style={{ width: '100%', padding: '8px 12px', border: '1px solid #bbf7d0', borderRadius: 6 }}
+                />
+              </div>
+              <div className="admin-modal-actions">
+                <button type="button" className="admin-btn admin-btn-secondary" onClick={() => !downloadInvoiceSubmitting && setDownloadInvoiceModal({ open: false, booking: null, withGst: true })} disabled={downloadInvoiceSubmitting}>Cancel</button>
+                <button type="button" className="admin-btn admin-btn-primary" onClick={handleDownloadInvoiceModalConfirm} disabled={downloadInvoiceSubmitting}>
+                  {downloadInvoiceSubmitting ? 'Downloading…' : 'Download'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
           {activeTab === TABS.billing && (
             <div className="admin-tab-section admin-dashboard-box">
               <h2 className="admin-dashboard-box-heading">Billing – Confirmed bookings</h2>
@@ -2399,8 +2561,8 @@ const AdminDashboard = () => {
                             </button>
                           </>
                         )}
-                        <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => handleBookingInvoiceDownload(b.id, true)}>Download (with GST)</button>
-                        <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleBookingInvoiceDownload(b.id, false)}>Download (without GST)</button>
+                        <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => openDownloadInvoiceModal(b, true)}>Download (with GST)</button>
+                        <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => openDownloadInvoiceModal(b, false)}>Download (without GST)</button>
                       </div>
                     </div>
                   ))}
@@ -2646,10 +2808,14 @@ const AdminDashboard = () => {
                         <div className="admin-entry-card-row"><span className="key">Phone</span><span className="value">{b.phone_number || '—'}</span></div>
                         <div className="admin-entry-card-row"><span className="key">Pickup</span><span className="value">{b.pickup_point || '—'}</span></div>
                         <div className="admin-entry-card-row"><span className="key">Drop</span><span className="value">{b.drop_point || '—'}</span></div>
+                        {b.cab_id && (b.vehicle_number || b.cab_driver_name) && (
+                          <div className="admin-entry-card-row"><span className="key">Assigned</span><span className="value">{[b.vehicle_number, b.cab_driver_name].filter(Boolean).join(' – ')}</span></div>
+                        )}
                       </div>
                       <div className="admin-entry-card-actions">
                         <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleOpenCorporateEdit(b)}>Edit booking</button>
-                        <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => handleCorporateInvoiceDownload(b.id)}>Download invoice</button>
+                        <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => openAssignModal(b, true)}>{b.cab_id ? 'Reassign driver & cab' : 'Assign driver & cab'}</button>
+                        <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCorporateInvoiceDownload(b.id)}>Download invoice</button>
                       </div>
                     </div>
                   ))}
@@ -2703,9 +2869,13 @@ const AdminDashboard = () => {
                         <div className="admin-entry-card-row"><span className="key">Company</span><span className="value">{b.company_name || '—'}</span></div>
                         <div className="admin-entry-card-row"><span className="key">Name</span><span className="value">{b.name || '—'}</span></div>
                         <div className="admin-entry-card-row"><span className="key">Trip</span><span className="value">{b.pickup_point || '—'} → {b.drop_point || '—'}</span></div>
+                        {b.cab_id && (b.vehicle_number || b.cab_driver_name) && (
+                          <div className="admin-entry-card-row"><span className="key">Assigned</span><span className="value">{[b.vehicle_number, b.cab_driver_name].filter(Boolean).join(' – ')}</span></div>
+                        )}
                       </div>
                       <div className="admin-entry-card-actions">
                         <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleOpenCorporateEdit(b)}>Edit booking</button>
+                        <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => openAssignModal(b, true)}>{b.cab_id ? 'Reassign driver & cab' : 'Assign driver & cab'}</button>
                         <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => handleCorporateInvoiceDownload(b.id)}>Download</button>
                       </div>
                     </div>
@@ -2773,6 +2943,106 @@ const AdminDashboard = () => {
                 <div className="admin-modal-actions" style={{ marginTop: 16 }}>
                   <button type="submit" className="admin-btn admin-btn-primary" disabled={corporateInvoiceSubmitting}>
                     {corporateInvoiceSubmitting ? 'Creating…' : 'Create corporate invoice & download PDF'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {activeTab === TABS.addUsers && (
+            <div className="admin-tab-section">
+              <h2>Add Users</h2>
+              <p className="admin-bookings-desc">Create manager or admin users. Only admins can add users. Managers can be given view/edit permissions per section.</p>
+              <form onSubmit={handleAddUserSubmit} className="admin-dashboard-box" style={{ maxWidth: 640, marginTop: 16 }}>
+                {addUserError && <p className="admin-form-error" style={{ marginBottom: 12 }}>{addUserError}</p>}
+                <div className="admin-form-grid">
+                  <div className="admin-form-group">
+                    <label>Username *</label>
+                    <input
+                      type="text"
+                      value={addUserForm.username}
+                      onChange={(e) => setAddUserForm((f) => ({ ...f, username: e.target.value }))}
+                      placeholder="Login username"
+                      required
+                    />
+                  </div>
+                  <div className="admin-form-group">
+                    <label>Email *</label>
+                    <input
+                      type="email"
+                      value={addUserForm.email}
+                      onChange={(e) => setAddUserForm((f) => ({ ...f, email: e.target.value }))}
+                      placeholder="user@example.com"
+                      required
+                    />
+                  </div>
+                  <div className="admin-form-group">
+                    <label>Password * (min 6 characters)</label>
+                    <input
+                      type="password"
+                      value={addUserForm.password}
+                      onChange={(e) => setAddUserForm((f) => ({ ...f, password: e.target.value }))}
+                      placeholder="••••••••"
+                      minLength={6}
+                      required
+                    />
+                  </div>
+                  <div className="admin-form-group">
+                    <label>Role</label>
+                    <select
+                      value={addUserForm.role}
+                      onChange={(e) => setAddUserForm((f) => ({ ...f, role: e.target.value }))}
+                    >
+                      <option value="manager">Manager</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                  </div>
+                </div>
+                {addUserForm.role === 'manager' && (
+                  <div className="admin-form-block" style={{ marginTop: 20 }}>
+                    <div className="admin-form-block-title">Manager permissions</div>
+                    <p className="admin-bookings-desc" style={{ marginBottom: 12 }}>Choose which sections this manager can view and/or edit.</p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {MANAGER_SECTIONS.map((section, idx) => {
+                        const perm = addUserForm.permissions[idx] || { section_key: section.key, can_view: true, can_edit: false };
+                        return (
+                          <div key={section.key} className="admin-form-group" style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                            <span style={{ minWidth: 280 }}>{section.label}</span>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 0 }}>
+                              <input
+                                type="checkbox"
+                                checked={!!perm.can_view}
+                                onChange={(e) => {
+                                  const next = [...addUserForm.permissions];
+                                  if (!next[idx]) next[idx] = { section_key: section.key, can_view: true, can_edit: false };
+                                  next[idx] = { ...next[idx], can_view: e.target.checked };
+                                  setAddUserForm((f) => ({ ...f, permissions: next }));
+                                }}
+                              />
+                              View
+                            </label>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 0 }}>
+                              <input
+                                type="checkbox"
+                                checked={!!perm.can_edit}
+                                onChange={(e) => {
+                                  const next = [...addUserForm.permissions];
+                                  if (!next[idx]) next[idx] = { section_key: section.key, can_view: true, can_edit: false };
+                                  next[idx] = { ...next[idx], can_edit: e.target.checked };
+                                  setAddUserForm((f) => ({ ...f, permissions: next }));
+                                }}
+                              />
+                              Edit
+                            </label>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                <div className="admin-modal-actions" style={{ marginTop: 20 }}>
+                  <button type="submit" className="admin-btn admin-btn-primary" disabled={addUserSubmitting}>
+                    {addUserSubmitting ? 'Creating…' : 'Create user'}
                   </button>
                 </div>
               </form>
@@ -2933,14 +3203,14 @@ const AdminDashboard = () => {
       )}
 
       {assignBooking && (
-        <div className="admin-modal-overlay" onClick={() => { setAssignBooking(null); setAssignDriverId(''); setAssignCabId(''); }}>
+        <div className="admin-modal-overlay" onClick={closeAssignModal}>
           <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
             <div className="admin-modal-header">
               <h3>{assignBooking.cab_id ? 'Reassign driver & cab' : 'Assign driver & cab'}</h3>
-              <button type="button" className="admin-modal-close" onClick={() => { setAssignBooking(null); setAssignDriverId(''); setAssignCabId(''); }} aria-label="Close">×</button>
+              <button type="button" className="admin-modal-close" onClick={closeAssignModal} aria-label="Close">×</button>
             </div>
             <form onSubmit={handleAssignSubmit} className="admin-modal-body">
-              <p>Booking #{assignBooking.id}: {assignBooking.from_location} → {assignBooking.to_location}</p>
+              <p>Booking #{assignBooking.id}: {assignForCorporate ? (assignBooking.pickup_point || '—') + ' → ' + (assignBooking.drop_point || '—') : (assignBooking.from_location || '—') + ' → ' + (assignBooking.to_location || '—')}</p>
               <div className="admin-form-group">
                 <label>Driver</label>
                 <select
@@ -2970,7 +3240,7 @@ const AdminDashboard = () => {
                 )}
               </div>
               <div className="admin-modal-actions">
-                <button type="button" className="admin-btn admin-btn-secondary" onClick={() => { setAssignBooking(null); setAssignDriverId(''); setAssignCabId(''); }}>Cancel</button>
+                <button type="button" className="admin-btn admin-btn-secondary" onClick={closeAssignModal}>Cancel</button>
                 <button type="submit" className="admin-btn admin-btn-primary" disabled={assignSubmitting || !assignCabId}>{assignSubmitting ? (assignBooking.cab_id ? 'Reassigning…' : 'Assigning…') : (assignBooking.cab_id ? 'Reassign' : 'Assign')}</button>
               </div>
             </form>

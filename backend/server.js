@@ -3,9 +3,11 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
 const fs = require('fs');
-const db = require('./db/database');
 
+// Load .env before database so DATABASE_PATH is set when db/database.js runs
 dotenv.config({ path: path.join(__dirname, '.env') });
+
+const db = require('./db/database');
 
 const app = express();
 const PORT = process.env.PORT || 5000;

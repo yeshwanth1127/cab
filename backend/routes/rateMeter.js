@@ -62,6 +62,8 @@ router.get(
             (allowed) => (row.name || '').trim().toLowerCase() === allowed.trim().toLowerCase()
           )
         );
+      } else if (service_type === 'airport' || service_type === 'outstation') {
+        result = result.filter((row) => (row.name || '').trim().toLowerCase() !== 'innova');
       }
       // Deduplicate by name (case-insensitive): keep one row per name (prefer lowest id), sum cab_count
       const byKey = new Map();

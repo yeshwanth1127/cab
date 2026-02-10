@@ -23,6 +23,7 @@ async function ensureBookingsColumns() {
     ['assigned_at', 'DATETIME'],
     ['trip_type', 'TEXT'],
     ['invoice_number', 'TEXT'],
+    ['travel_date', 'DATETIME'],
   ];
   for (const [col, type] of columns) {
     try {
@@ -132,6 +133,7 @@ router.post('/bookings', [
       pickup_lng,
       destination_lat,
       destination_lng,
+      travel_date,
     } = req.body;
 
     const invoiceNumber = await generateDefaultInvoiceNumber();
@@ -140,8 +142,8 @@ router.post('/bookings', [
         from_location, to_location, distance_km, estimated_time_minutes, fare_amount,
         passenger_name, passenger_phone, cab_id, cab_type_id,
         service_type, number_of_hours, pickup_lat, pickup_lng, destination_lat, destination_lng,
-        invoice_number
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        invoice_number, travel_date
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         from_location,
         to_location,
@@ -159,6 +161,7 @@ router.post('/bookings', [
         destination_lat != null ? Number(destination_lat) : null,
         destination_lng != null ? Number(destination_lng) : null,
         invoiceNumber,
+        travel_date || null,
       ]
     );
     let newBooking = await db.getAsync('SELECT * FROM bookings WHERE id = ?', [result.lastID]);
@@ -399,6 +402,9 @@ router.get('/bookings/:id/invoice', async (req, res) => {
   try {
     const { id } = req.params;
     const withGST = req.query.with_gst !== 'false';
+    const invoiceNumberOverride = req.query.invoice_number != null && String(req.query.invoice_number).trim() !== ''
+      ? String(req.query.invoice_number).trim()
+      : null;
     const booking = await db.getAsync(
       `SELECT b.*, ct.name as cab_type_name
        FROM bookings b
@@ -409,7 +415,10 @@ router.get('/bookings/:id/invoice', async (req, res) => {
     if (!booking) {
       return res.status(404).json({ error: 'Booking not found' });
     }
-    const pdfBuffer = await generateInvoicePDF(booking, withGST);
+    const bookingForPdf = invoiceNumberOverride
+      ? { ...booking, invoice_number: invoiceNumberOverride }
+      : booking;
+    const pdfBuffer = await generateInvoicePDF(bookingForPdf, withGST);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="invoice-${id}${withGST ? '-with-gst' : ''}.pdf"`);
     res.send(pdfBuffer);
