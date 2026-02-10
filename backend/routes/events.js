@@ -2,6 +2,7 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const db = require('../db/database');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
+const { generateEventInvoicePDF } = require('../services/invoiceService');
 
 const router = express.Router();
 
@@ -90,6 +91,37 @@ router.get('/bookings/:id', async (req, res) => {
     res.json(booking);
   } catch (error) {
     console.error('Error fetching event booking:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.get('/bookings/:id/invoice', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const booking = await db.getAsync(
+      'SELECT * FROM event_bookings WHERE id = ?',
+      [id]
+    );
+    if (!booking) {
+      return res.status(404).json({ error: 'Event booking not found' });
+    }
+    const assignments = await db.allAsync(
+      `SELECT eba.*, c.vehicle_number, c.driver_name as cab_driver_name, c.driver_phone as cab_driver_phone,
+              d.name as driver_name, d.phone as driver_phone
+       FROM event_booking_assignments eba
+       LEFT JOIN cabs c ON eba.cab_id = c.id
+       LEFT JOIN drivers d ON eba.driver_id = d.id
+       WHERE eba.event_booking_id = ?
+       ORDER BY eba.id ASC`,
+      [id]
+    );
+    const eventBooking = { ...booking, assignments };
+    const pdfBuffer = await generateEventInvoicePDF(eventBooking);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="event-booking-${id}.pdf"`);
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error('Error generating event booking invoice:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

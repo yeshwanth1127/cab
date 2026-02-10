@@ -3,6 +3,7 @@ const { body, validationResult } = require('express-validator');
 const db = require('../db/database');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
 const { generateCorporateInvoicePDF } = require('../services/invoiceService');
+const { triggerDriverInfo } = require('../services/n8nWebhooks');
 
 const router = express.Router();
 
@@ -25,6 +26,14 @@ async function ensureCorporateBookingsInvoiceNumberColumn() {
 async function ensureCorporateBookingsCabIdColumn() {
   try {
     await db.runAsync('ALTER TABLE corporate_bookings ADD COLUMN cab_id INTEGER');
+  } catch (e) {
+
+  }
+}
+
+async function ensureCabsCorporateOnlyColumn() {
+  try {
+    await db.runAsync('ALTER TABLE cabs ADD COLUMN corporate_only INTEGER DEFAULT 0');
   } catch (e) {
 
   }
@@ -111,6 +120,56 @@ router.post('/bookings', [
 
 router.use(authenticateToken);
 router.use(requireAdmin);
+
+router.get('/cabs', async (req, res) => {
+  try {
+    await ensureCabsCorporateOnlyColumn();
+    const rows = await db.allAsync(
+      `SELECT c.id, c.vehicle_number, c.name, c.driver_id, c.driver_name, c.driver_phone, c.cab_type_id
+       FROM cabs c
+       WHERE c.is_active = 1 AND COALESCE(c.corporate_only, 0) = 1
+       ORDER BY c.vehicle_number`
+    );
+    const cabs = (rows || []).map((r) => ({
+      id: r.id,
+      vehicle_number: r.vehicle_number ?? '',
+      name: r.name ?? null,
+      driver_id: r.driver_id ?? null,
+      driver_name: r.driver_name ?? '',
+      driver_phone: r.driver_phone ?? '',
+      cab_type_id: r.cab_type_id ?? null,
+    }));
+    res.json(cabs);
+  } catch (error) {
+    console.error('Error fetching corporate cabs:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/cabs', [
+  body('vehicle_number').notEmpty().trim().withMessage('Vehicle number is required'),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    await ensureCabsCorporateOnlyColumn();
+    const { vehicle_number, name, driver_name, driver_phone } = req.body;
+    const vn = String(vehicle_number).trim();
+    const existing = await db.getAsync('SELECT id FROM cabs WHERE vehicle_number = ?', [vn]);
+    if (existing) return res.status(400).json({ error: 'This vehicle number is already used.' });
+    const firstType = await db.getAsync('SELECT id FROM cab_types WHERE is_active = 1 LIMIT 1');
+    const cabTypeId = firstType ? firstType.id : null;
+    const r = await db.runAsync(
+      `INSERT INTO cabs (cab_type_id, vehicle_number, driver_name, driver_phone, name, corporate_only) VALUES (?, ?, ?, ?, ?, 1)`,
+      [cabTypeId, vn, driver_name || null, driver_phone || null, name || null]
+    );
+    const row = await db.getAsync('SELECT * FROM cabs WHERE id = ?', [r.lastID]);
+    res.status(201).json(row);
+  } catch (error) {
+    console.error('Error creating corporate cab:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 
 router.get('/bookings', async (req, res) => {
   try {
@@ -265,6 +324,20 @@ router.put('/bookings/:id', [
       'SELECT * FROM corporate_bookings WHERE id = ?',
       [id]
     );
+
+    if (req.body.cab_id) {
+      const cab = await db.getAsync('SELECT vehicle_number, driver_name, driver_phone FROM cabs WHERE id = ?', [req.body.cab_id]);
+      if (cab) {
+        triggerDriverInfo({
+          bookingId: 'CRP' + id,
+          customerEmail: '',
+          driverEmail: '',
+          driverName: cab.driver_name || '',
+          driverPhone: cab.driver_phone || '',
+          cabNumber: cab.vehicle_number || '',
+        });
+      }
+    }
 
     res.json(updated);
   } catch (error) {

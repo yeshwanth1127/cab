@@ -25,6 +25,8 @@ const TABS = {
   corporateInvoices: 'corporateInvoices',
   createCorporateInvoice: 'createCorporateInvoice',
 
+  eventBookings: 'eventBookings',
+
   addUsers: 'addUsers',
 };
 
@@ -113,14 +115,19 @@ const AdminDashboard = () => {
   const [rateMeterAirportForm, setRateMeterAirportForm] = useState({});
   const [rateMeterOutstationForm, setRateMeterOutstationForm] = useState({});
   const [uploadingCabId, setUploadingCabId] = useState(null);
+  const [rateMeterNameSavingId, setRateMeterNameSavingId] = useState(null);
+  const [rateMeterNameDraft, setRateMeterNameDraft] = useState({});
   const cabImageUploadTarget = useRef({ cabId: null, cabTypeId: null });
   const cabImageInputRef = useRef(null);
+  const [uploadingCabTypeId, setUploadingCabTypeId] = useState(null);
+  const cabTypeImageInputRef = useRef(null);
+  const cabTypeImageUploadTargetId = useRef(null);
 
   const [othersCabTypes, setOthersCabTypes] = useState([]);
   const [othersCabTypesLoading, setOthersCabTypesLoading] = useState(false);
   const [othersAddCabModalOpen, setOthersAddCabModalOpen] = useState(false);
   const [othersEditingCabId, setOthersEditingCabId] = useState(null);
-  const [othersAddCabForm, setOthersAddCabForm] = useState({ cab_type_id: '', name: '', vehicle_number: '', driver_id: '' });
+  const [othersAddCabForm, setOthersAddCabForm] = useState({ cab_type_id: '', name: '', vehicle_number: '' });
   const [othersAddCabSubmitting, setOthersAddCabSubmitting] = useState(false);
 
   const [tabFilter, setTabFilter] = useState({ search: '', serviceType: '', dateFrom: '', dateTo: '' });
@@ -168,7 +175,16 @@ const AdminDashboard = () => {
     service_type: 'local', travel_date: '', travel_time: '', fare_amount: '', notes: '', status: 'pending',
   });
   const [corporateEditSaving, setCorporateEditSaving] = useState(false);
+  const [corporateCabs, setCorporateCabs] = useState([]);
+  const [corporateCabsLoading, setCorporateCabsLoading] = useState(false);
+  const [corporateAddCabOpen, setCorporateAddCabOpen] = useState(false);
+  const [corporateAddCabForm, setCorporateAddCabForm] = useState({ vehicle_number: '', name: '', driver_name: '', driver_phone: '' });
+  const [corporateAddCabSubmitting, setCorporateAddCabSubmitting] = useState(false);
   const [staleBookingsWarning, setStaleBookingsWarning] = useState(null);
+
+  const [eventBookings, setEventBookings] = useState([]);
+  const [eventBookingsLoading, setEventBookingsLoading] = useState(false);
+  const [eventBookingFilter, setEventBookingFilter] = useState({ event_type: '', status: '', search: '' });
 
   const [addUserForm, setAddUserForm] = useState({
     username: '',
@@ -233,6 +249,40 @@ const AdminDashboard = () => {
       showToast(err.response?.data?.error || 'Failed to load corporate bookings', 'error');
     } finally {
       setCorporateBookingsLoading(false);
+    }
+  }, [logout, navigate, showToast]);
+
+  const fetchCorporateCabs = useCallback(async () => {
+    setCorporateCabsLoading(true);
+    try {
+      const res = await api.get('/corporate/cabs');
+      setCorporateCabs(res.data || []);
+    } catch (err) {
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        logout();
+        navigate('/admin/login');
+        return;
+      }
+      showToast(err.response?.data?.error || 'Failed to load corporate cabs', 'error');
+    } finally {
+      setCorporateCabsLoading(false);
+    }
+  }, [logout, navigate, showToast]);
+
+  const fetchEventBookings = useCallback(async () => {
+    setEventBookingsLoading(true);
+    try {
+      const res = await api.get('/events/bookings');
+      setEventBookings(res.data || []);
+    } catch (err) {
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        logout();
+        navigate('/admin/login');
+        return;
+      }
+      showToast(err.response?.data?.error || 'Failed to load event bookings', 'error');
+    } finally {
+      setEventBookingsLoading(false);
     }
   }, [logout, navigate, showToast]);
 
@@ -402,12 +452,15 @@ const AdminDashboard = () => {
       fetchDrivers();
     } else if ([TABS.corporateBookings, TABS.corporateInvoices, TABS.createCorporateInvoice].includes(activeTab)) {
       fetchCorporateBookings();
+      fetchCorporateCabs();
+    } else if (activeTab === TABS.eventBookings) {
+      fetchEventBookings();
     }
     if (activeTab === TABS.others) {
       if (!driverModal) setDriverForm({ name: '', phone: '', license_number: '', emergency_contact_name: '', emergency_contact_phone: '' });
       fetchOthersCabTypes();
     }
-  }, [activeTab, fetchStats, fetchBookings, fetchDrivers, fetchOthersCabTypes, fetchCorporateBookings]);
+  }, [activeTab, fetchStats, fetchBookings, fetchDrivers, fetchOthersCabTypes, fetchCorporateBookings, fetchCorporateCabs, fetchEventBookings]);
 
   useEffect(() => {
     if (activeTab !== TABS.dashboard || !bookings || bookings.length === 0) {
@@ -445,7 +498,7 @@ const AdminDashboard = () => {
     }
   }, [detailBooking]);
 
-  const assignModalCabs = cabs || [];
+  const assignModalCabs = (cabs || []).filter((c) => assignForCorporate ? c.corporate_only : !c.corporate_only);
 
   const handleSaveInvoiceNumber = async () => {
     if (!detailBooking) return;
@@ -792,6 +845,36 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleEventInvoiceDownload = async (bookingId) => {
+    try {
+      const response = await api.get(`/events/bookings/${bookingId}/invoice`, { responseType: 'blob' });
+      if (response.data instanceof Blob && response.data.size > 0) {
+        const url = window.URL.createObjectURL(response.data);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `event-booking-${bookingId}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        showToast('Event invoice downloaded.');
+      } else {
+        const msg = await parseBlobError(response.data);
+        showToast(msg || 'Invalid response', 'error');
+      }
+    } catch (err) {
+      let msg = 'Failed to download event invoice';
+      if (err.response?.data instanceof Blob) {
+        msg = await parseBlobError(err.response.data);
+      } else if (err.response?.data?.error) {
+        msg = err.response.data.error;
+      } else if (err.message) {
+        msg = err.message;
+      }
+      showToast(msg, 'error');
+    }
+  };
+
   const openDownloadInvoiceModal = (booking, withGst) => {
     setDownloadInvoiceModal({ open: true, booking, withGst });
     setDownloadInvoiceNumber(booking.invoice_number || `#${booking.id}`);
@@ -897,6 +980,32 @@ const AdminDashboard = () => {
       notes: b.notes || '',
       status: b.status || 'pending',
     });
+  };
+
+  const handleCorporateAddCabSubmit = async (e) => {
+    e.preventDefault();
+    if (!corporateAddCabForm.vehicle_number?.trim()) {
+      showToast('Vehicle number is required.', 'error');
+      return;
+    }
+    setCorporateAddCabSubmitting(true);
+    try {
+      await api.post('/corporate/cabs', {
+        vehicle_number: corporateAddCabForm.vehicle_number.trim(),
+        name: corporateAddCabForm.name?.trim() || undefined,
+        driver_name: corporateAddCabForm.driver_name?.trim() || undefined,
+        driver_phone: corporateAddCabForm.driver_phone?.trim() || undefined,
+      });
+      showToast('Corporate cab added.');
+      setCorporateAddCabOpen(false);
+      setCorporateAddCabForm({ vehicle_number: '', name: '', driver_name: '', driver_phone: '' });
+      fetchCorporateCabs();
+      fetchDrivers();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to add corporate cab', 'error');
+    } finally {
+      setCorporateAddCabSubmitting(false);
+    }
   };
 
   const handleCorporateEditFormChange = (e) => {
@@ -1007,12 +1116,11 @@ const AdminDashboard = () => {
 
   const handleOthersAddCabSubmit = async (e) => {
     e.preventDefault();
-    const { cab_type_id, name, vehicle_number, driver_id } = othersAddCabForm;
+    const { cab_type_id, name, vehicle_number } = othersAddCabForm;
     if (!cab_type_id || !vehicle_number?.trim()) {
       showToast('Cab type and vehicle number are required.', 'error');
       return;
     }
-    const driver = driver_id ? drivers.find((d) => Number(d.id) === Number(driver_id)) : null;
     setOthersAddCabSubmitting(true);
     try {
       if (othersEditingCabId) {
@@ -1020,8 +1128,8 @@ const AdminDashboard = () => {
           cab_type_id: Number(cab_type_id),
           vehicle_number: vehicle_number.trim(),
           name: (name || '').trim() || null,
-          driver_name: driver?.name || '',
-          driver_phone: driver?.phone || '',
+          driver_name: '',
+          driver_phone: '',
         });
         showToast('Cab updated.');
       } else {
@@ -1029,14 +1137,14 @@ const AdminDashboard = () => {
           cab_type_id: Number(cab_type_id),
           vehicle_number: vehicle_number.trim(),
           name: (name || '').trim() || null,
-          driver_name: driver?.name || '',
-          driver_phone: driver?.phone || '',
+          driver_name: '',
+          driver_phone: '',
         });
         showToast('Cab added.');
       }
       setOthersAddCabModalOpen(false);
       setOthersEditingCabId(null);
-      setOthersAddCabForm({ cab_type_id: '', name: '', vehicle_number: '', driver_id: '' });
+      setOthersAddCabForm({ cab_type_id: '', name: '', vehicle_number: '' });
       fetchDrivers();
     } catch (err) {
       showToast(err.response?.data?.error || 'Failed to save cab', 'error');
@@ -1195,7 +1303,6 @@ const AdminDashboard = () => {
       return;
     }
     setRateMeterExpandedId(cabTypeId);
-    fetchRateMeterCabs(cabTypeId);
     if (serviceType === 'local') fetchRateMeterLocalRates(cabTypeId);
     else if (serviceType === 'airport') fetchRateMeterAirportRates(cabTypeId);
     else if (serviceType === 'outstation') fetchRateMeterOutstationRates(cabTypeId);
@@ -1242,7 +1349,52 @@ const AdminDashboard = () => {
     }
   };
 
-  
+  const isInnovaCrysta = (name) => (name || '').trim().toLowerCase() === 'innova crysta';
+
+  const saveRateMeterCabTypeName = async (cabTypeId, name) => {
+    const trimmed = (name || '').trim();
+    if (!trimmed) return;
+    setRateMeterNameSavingId(cabTypeId);
+    try {
+      await api.put(`/admin/rate-meter/cab-types/${cabTypeId}`, { name: trimmed });
+      showToast('Car name saved.');
+      fetchRateMeterCabTypes();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to save name', 'error');
+    } finally {
+      setRateMeterNameSavingId(null);
+    }
+  };
+
+  const triggerCabTypeImageUpload = (cabTypeId) => {
+    cabTypeImageUploadTargetId.current = cabTypeId;
+    cabTypeImageInputRef.current?.click();
+  };
+
+  const handleCabTypeImageSelect = async (e) => {
+    const file = e.target.files?.[0];
+    const cabTypeId = cabTypeImageUploadTargetId.current;
+    if (!file || !cabTypeId) {
+      e.target.value = '';
+      return;
+    }
+    setUploadingCabTypeId(cabTypeId);
+    e.target.value = '';
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+      await api.post(`/admin/rate-meter/cab-types/${cabTypeId}/upload`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      showToast('Cab type image uploaded.');
+      fetchRateMeterCabTypes();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Upload failed', 'error');
+    } finally {
+      setUploadingCabTypeId(null);
+      cabTypeImageUploadTargetId.current = null;
+    }
+  };
 
   const sortLatestFirst = (a, b) => (Number(b.id) || 0) - (Number(a.id) || 0);
   const enquiriesBookings = [...bookings].sort(sortLatestFirst);
@@ -1310,6 +1462,15 @@ const AdminDashboard = () => {
   const filteredDrivers = (drivers || []).filter(filterDriver);
   const filteredCabs = (cabs || []).filter(filterCab);
   const filteredCorporateBookings = (corporateBookings || []).filter(filterCorporate);
+
+  const filterEventBooking = (b) => {
+    if (eventBookingFilter.event_type && (b.event_type || '') !== eventBookingFilter.event_type) return false;
+    if (eventBookingFilter.status && (b.status || '') !== eventBookingFilter.status) return false;
+    if (eventBookingFilter.search && !filterBySearch(eventBookingFilter.search, b, ['name', 'phone_number', 'pickup_point', 'drop_point', 'event_type', 'status'])) return false;
+    return true;
+  };
+  const filteredEventBookings = (eventBookings || []).filter(filterEventBooking);
+
   const filteredRateMeterCabTypes = {
     local: (rateMeterCabTypes.local || []).filter((ct) => filterBySearch(tabFilter.search, ct, ['name'])),
     airport: (rateMeterCabTypes.airport || []).filter((ct) => filterBySearch(tabFilter.search, ct, ['name'])),
@@ -1556,6 +1717,16 @@ const AdminDashboard = () => {
               <span className="admin-nav-btn-content">
                 <span className="admin-nav-btn-label">Create corporate invoice</span>
                 <span className="admin-nav-btn-sublabel">New corporate invoice</span>
+              </span>
+            </button>
+          </div>
+          <div className="admin-sidebar-section">
+            <div className="admin-sidebar-section-title">EVENT BOOKINGS</div>
+            <button type="button" className={`admin-dashboard-nav-btn ${activeTab === TABS.eventBookings ? 'active' : ''}`} onClick={() => setTab(TABS.eventBookings)}>
+              <Icon name="events" size={20} className="admin-nav-btn-icon" />
+              <span className="admin-nav-btn-content">
+                <span className="admin-nav-btn-label">Event bookings</span>
+                <span className="admin-nav-btn-sublabel">View & invoices</span>
               </span>
             </button>
           </div>
@@ -2019,13 +2190,12 @@ const AdminDashboard = () => {
           {activeTab === TABS.rateMeter && (
             <div className="admin-tab-section">
               <h2>Rate Meter</h2>
-              <p className="admin-bookings-desc">Set fares and manage cabs for Local, Airport, and Outstation. Create missing cab types, then set rates and add cabs per type.</p>
+              <p className="admin-bookings-desc">Set fares, car name and image for Local, Airport, and Outstation. Create missing cab types, then set rates and upload image per type.</p>
               <input ref={cabImageInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleCabImageSelect} aria-hidden="true" tabIndex={-1} />
+              <input ref={cabTypeImageInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleCabTypeImageSelect} aria-hidden="true" tabIndex={-1} />
               {rateMeterLoading.cabTypes && <p className="admin-dashboard-list-loading">Loading cab types…</p>}
               {!rateMeterLoading.cabTypes && (
                 <>
-                  {
-}
                   <div className={`admin-rate-meters-block ${rateMeterOpenSection === 'local' ? 'open' : ''}`}>
                     <button type="button" className="admin-rate-meters-block-btn" onClick={() => setRateMeterOpenSection(rateMeterOpenSection === 'local' ? null : 'local')}>
                       <span>Local (4h / 8h / 12h packages + extra hour)</span>
@@ -2039,7 +2209,7 @@ const AdminDashboard = () => {
                         {(filteredRateMeterCabTypes.local || []).map((ct) => (
                           <div key={ct.id} className="admin-rate-meters-card">
                             <button type="button" className="admin-form-block admin-form-block-title" style={{ width: '100%', textAlign: 'left', cursor: 'pointer', marginBottom: 8 }} onClick={() => toggleRateMeterCabTypeExpand(ct.id, 'local')}>
-                              {ct.name} {ct.cab_count != null ? `(${ct.cab_count} cab${Number(ct.cab_count) !== 1 ? 's' : ''})` : ''} {rateMeterExpandedId === ct.id ? '▼' : '▶'}
+                              {ct.name} {rateMeterExpandedId === ct.id ? '▼' : '▶'}
                             </button>
                             {rateMeterExpandedId === ct.id && (
                               <>
@@ -2047,64 +2217,70 @@ const AdminDashboard = () => {
                                 {!rateMeterLoading.rates && (() => {
                                   const f = rateMeterLocalForm[ct.id] || {};
                                   return (
-                                    <form onSubmit={(e) => { e.preventDefault(); saveRateMeterLocal(ct.id, f); }}>
-                                      <div className="admin-form-grid" style={{ marginBottom: 12 }}>
-                                        <div className="admin-form-group">
-                                          <label>Base fare (₹)</label>
-                                          <input type="number" min="0" step="0.01" value={f.base_fare} onChange={(e) => setRateMeterLocalForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], base_fare: e.target.value } }))} />
+                                    <>
+                                      <div className="admin-form-block" style={{ marginBottom: 12 }}>
+                                        <div className="admin-form-block-title">Car name &amp; image</div>
+                                        <div className="admin-form-grid" style={{ alignItems: 'flex-end' }}>
+                                          <div className="admin-form-group">
+                                            <label>Car name</label>
+                                            <input
+                                              type="text"
+                                              value={rateMeterNameDraft[ct.id] ?? ct.name ?? ''}
+                                              onChange={(e) => setRateMeterNameDraft((prev) => ({ ...prev, [ct.id]: e.target.value }))}
+                                              placeholder="e.g. Innova Crysta"
+                                              style={{ width: '100%', padding: '8px 12px', border: '1px solid #bbf7d0', borderRadius: 6 }}
+                                            />
+                                          </div>
+                                          <div className="admin-form-group" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                            <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => saveRateMeterCabTypeName(ct.id, rateMeterNameDraft[ct.id] ?? ct.name)} disabled={rateMeterNameSavingId === ct.id}>{rateMeterNameSavingId === ct.id ? 'Saving…' : 'Save name'}</button>
+                                          </div>
                                         </div>
-                                        <div className="admin-form-group">
-                                          <label>4 hr package (₹)</label>
-                                          <input type="number" min="0" step="0.01" value={f.package_4h} onChange={(e) => setRateMeterLocalForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], package_4h: e.target.value } }))} />
-                                        </div>
-                                        <div className="admin-form-group">
-                                          <label>8 hr package (₹)</label>
-                                          <input type="number" min="0" step="0.01" value={f.package_8h} onChange={(e) => setRateMeterLocalForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], package_8h: e.target.value } }))} />
-                                        </div>
-                                        <div className="admin-form-group">
-                                          <label>12 hr package (₹)</label>
-                                          <input type="number" min="0" step="0.01" value={f.package_12h} onChange={(e) => setRateMeterLocalForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], package_12h: e.target.value } }))} />
-                                        </div>
-                                        <div className="admin-form-group">
-                                          <label>Extra hour rate (₹)</label>
-                                          <input type="number" min="0" step="0.01" value={f.extra_hour_rate} onChange={(e) => setRateMeterLocalForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], extra_hour_rate: e.target.value } }))} />
+                                        <div style={{ marginTop: 12 }}>
+                                          {ct.image_url ? (
+                                            <div className="admin-cab-row">
+                                              <div className="admin-cab-row-image-wrap">
+                                                <img src={getImageUrl(ct.image_url)} alt={ct.name} className="admin-cab-row-image" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling?.classList.add('visible'); }} />
+                                                <div className="admin-cab-row-image-placeholder" style={{ display: 'none' }}><Icon name="car" size={24} /></div>
+                                              </div>
+                                              <div className="admin-cab-row-actions">
+                                                <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => triggerCabTypeImageUpload(ct.id)} disabled={uploadingCabTypeId === ct.id}>{uploadingCabTypeId === ct.id ? 'Uploading…' : 'Upload image'}</button>
+                                              </div>
+                                            </div>
+                                          ) : (
+                                            <button type="button" className="admin-btn admin-btn-secondary" onClick={() => triggerCabTypeImageUpload(ct.id)} disabled={uploadingCabTypeId === ct.id}>{uploadingCabTypeId === ct.id ? 'Uploading…' : 'Upload image'}</button>
+                                          )}
                                         </div>
                                       </div>
-                                      <div className="admin-modal-actions" style={{ marginBottom: 16 }}>
-                                        <button type="submit" className="admin-btn admin-btn-primary" disabled={rateMeterSaving}>Save local rates</button>
-                                        <button type="button" className="admin-btn admin-btn-primary" onClick={() => openRateMeterCabModal(ct.id)}>Add cab</button>
-                                      </div>
-                                    </form>
+                                      <form onSubmit={(e) => { e.preventDefault(); saveRateMeterLocal(ct.id, f); }}>
+                                        <div className="admin-form-grid" style={{ marginBottom: 12 }}>
+                                          <div className="admin-form-group">
+                                            <label>Base fare (₹)</label>
+                                            <input type="number" min="0" step="0.01" value={f.base_fare} onChange={(e) => setRateMeterLocalForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], base_fare: e.target.value } }))} />
+                                          </div>
+                                          <div className="admin-form-group">
+                                            <label>4 hr package (₹)</label>
+                                            <input type="number" min="0" step="0.01" value={f.package_4h} onChange={(e) => setRateMeterLocalForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], package_4h: e.target.value } }))} />
+                                          </div>
+                                          <div className="admin-form-group">
+                                            <label>8 hr package (₹)</label>
+                                            <input type="number" min="0" step="0.01" value={f.package_8h} onChange={(e) => setRateMeterLocalForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], package_8h: e.target.value } }))} />
+                                          </div>
+                                          <div className="admin-form-group">
+                                            <label>12 hr package (₹)</label>
+                                            <input type="number" min="0" step="0.01" value={f.package_12h} onChange={(e) => setRateMeterLocalForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], package_12h: e.target.value } }))} />
+                                          </div>
+                                          <div className="admin-form-group">
+                                            <label>Extra hour rate (₹)</label>
+                                            <input type="number" min="0" step="0.01" value={f.extra_hour_rate} onChange={(e) => setRateMeterLocalForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], extra_hour_rate: e.target.value } }))} />
+                                          </div>
+                                        </div>
+                                        <div className="admin-modal-actions" style={{ marginBottom: 16 }}>
+                                          <button type="submit" className="admin-btn admin-btn-primary" disabled={rateMeterSaving}>Save local rates</button>
+                                        </div>
+                                      </form>
+                                    </>
                                   );
                                 })()}
-                                {rateMeterLoading.cabs && <p className="admin-dashboard-list-loading">Loading cabs…</p>}
-                                <div className="admin-form-block">
-                                  <div className="admin-form-block-title">Cabs</div>
-                                  {(rateMeterCabsByType[ct.id] || []).length === 0 && !rateMeterLoading.cabs && <p className="admin-rate-meters-empty">No cabs. Add one above.</p>}
-                                  {(rateMeterCabsByType[ct.id] || []).map((cab) => {
-                                    const cabImageUrl = cab.image_url ? getImageUrl(cab.image_url) : null;
-                                    return (
-                                      <div key={cab.id} className="admin-cab-row">
-                                        <div className="admin-cab-row-image-wrap">
-                                          {cabImageUrl ? (
-                                            <img src={cabImageUrl} alt={cab.vehicle_number || 'Cab'} className="admin-cab-row-image" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling?.classList.add('visible'); }} />
-                                          ) : null}
-                                          <div className={`admin-cab-row-image-placeholder ${!cabImageUrl ? 'visible' : ''}`}><Icon name="car" size={24} /></div>
-                                        </div>
-                                        <div className="admin-cab-row-details">
-                                          <span className="admin-cab-row-vehicle">{cab.vehicle_number}</span>
-                                          {cab.name && <span className="admin-cab-row-name">{cab.name}</span>}
-                                          {cab.driver_name && <span className="admin-cab-row-driver">Driver: {cab.driver_name}</span>}
-                                          {cab.driver_phone && <span className="admin-cab-row-phone">{cab.driver_phone}</span>}
-                                        </div>
-                                        <div className="admin-cab-row-actions">
-                                          <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => triggerCabImageUpload(cab.id, ct.id)} disabled={uploadingCabId === cab.id}>{uploadingCabId === cab.id ? 'Uploading…' : 'Upload image'}</button>
-                                          <button type="button" className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => deleteRateMeterCab(ct.id, cab.id)}>Remove</button>
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
                               </>
                             )}
                           </div>
@@ -2127,7 +2303,7 @@ const AdminDashboard = () => {
                         {(filteredRateMeterCabTypes.airport || []).map((ct) => (
                           <div key={ct.id} className="admin-rate-meters-card">
                             <button type="button" className="admin-form-block admin-form-block-title" style={{ width: '100%', textAlign: 'left', cursor: 'pointer', marginBottom: 8 }} onClick={() => toggleRateMeterCabTypeExpand(ct.id, 'airport')}>
-                              {ct.name} {ct.cab_count != null ? `(${ct.cab_count} cab${Number(ct.cab_count) !== 1 ? 's' : ''})` : ''} {rateMeterExpandedId === ct.id ? '▼' : '▶'}
+                              {ct.name} {rateMeterExpandedId === ct.id ? '▼' : '▶'}
                             </button>
                             {rateMeterExpandedId === ct.id && (
                               <>
@@ -2135,59 +2311,66 @@ const AdminDashboard = () => {
                                 {!rateMeterLoading.rates && (() => {
                                   const f = rateMeterAirportForm[ct.id] || {};
                                   return (
-                                    <form onSubmit={(e) => { e.preventDefault(); saveRateMeterAirport(ct.id, f); }}>
-                                      <div className="admin-form-grid" style={{ marginBottom: 12 }}>
-                                        <div className="admin-form-group">
-                                          <label>Base fare (₹)</label>
-                                          <input type="number" min="0" step="0.01" value={f.base_fare} onChange={(e) => setRateMeterAirportForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], base_fare: e.target.value } }))} />
+                                    <>
+                                      <div className="admin-form-block" style={{ marginBottom: 12 }}>
+                                        <div className="admin-form-block-title">Car name &amp; image</div>
+                                        <div className="admin-form-grid" style={{ alignItems: 'flex-end' }}>
+                                          <div className="admin-form-group">
+                                            <label>Car name</label>
+                                            <input
+                                              type="text"
+                                              value={rateMeterNameDraft[ct.id] ?? ct.name ?? ''}
+                                              onChange={(e) => setRateMeterNameDraft((prev) => ({ ...prev, [ct.id]: e.target.value }))}
+                                              placeholder="e.g. Crysta"
+                                              style={{ width: '100%', padding: '8px 12px', border: '1px solid #bbf7d0', borderRadius: 6 }}
+                                            />
+                                          </div>
+                                          <div className="admin-form-group" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                            <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => saveRateMeterCabTypeName(ct.id, rateMeterNameDraft[ct.id] ?? ct.name)} disabled={rateMeterNameSavingId === ct.id}>{rateMeterNameSavingId === ct.id ? 'Saving…' : 'Save name'}</button>
+                                          </div>
                                         </div>
-                                        <div className="admin-form-group">
-                                          <label>Per km rate (₹)</label>
-                                          <input type="number" min="0" step="0.01" value={f.per_km_rate} onChange={(e) => setRateMeterAirportForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], per_km_rate: e.target.value } }))} />
-                                        </div>
-                                        <div className="admin-form-group">
-                                          <label>Driver charges (₹)</label>
-                                          <input type="number" min="0" step="0.01" value={f.driver_charges} onChange={(e) => setRateMeterAirportForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], driver_charges: e.target.value } }))} />
-                                        </div>
-                                        <div className="admin-form-group">
-                                          <label>Night charges (₹)</label>
-                                          <input type="number" min="0" step="0.01" value={f.night_charges} onChange={(e) => setRateMeterAirportForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], night_charges: e.target.value } }))} />
+                                        <div style={{ marginTop: 12 }}>
+                                          {ct.image_url ? (
+                                            <div className="admin-cab-row">
+                                              <div className="admin-cab-row-image-wrap">
+                                                <img src={getImageUrl(ct.image_url)} alt={ct.name} className="admin-cab-row-image" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling?.classList.add('visible'); }} />
+                                                <div className="admin-cab-row-image-placeholder" style={{ display: 'none' }}><Icon name="car" size={24} /></div>
+                                              </div>
+                                              <div className="admin-cab-row-actions">
+                                                <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => triggerCabTypeImageUpload(ct.id)} disabled={uploadingCabTypeId === ct.id}>{uploadingCabTypeId === ct.id ? 'Uploading…' : 'Upload image'}</button>
+                                              </div>
+                                            </div>
+                                          ) : (
+                                            <button type="button" className="admin-btn admin-btn-secondary" onClick={() => triggerCabTypeImageUpload(ct.id)} disabled={uploadingCabTypeId === ct.id}>{uploadingCabTypeId === ct.id ? 'Uploading…' : 'Upload image'}</button>
+                                          )}
                                         </div>
                                       </div>
-                                      <div className="admin-modal-actions" style={{ marginBottom: 16 }}>
-                                        <button type="submit" className="admin-btn admin-btn-primary" disabled={rateMeterSaving}>Save airport rates</button>
-                                        <button type="button" className="admin-btn admin-btn-primary" onClick={() => openRateMeterCabModal(ct.id)}>Add cab</button>
-                                      </div>
-                                    </form>
+                                      <form onSubmit={(e) => { e.preventDefault(); saveRateMeterAirport(ct.id, f); }}>
+                                        <div className="admin-form-grid" style={{ marginBottom: 12 }}>
+                                          <div className="admin-form-group">
+                                            <label>Base fare (₹)</label>
+                                            <input type="number" min="0" step="0.01" value={f.base_fare} onChange={(e) => setRateMeterAirportForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], base_fare: e.target.value } }))} />
+                                          </div>
+                                          <div className="admin-form-group">
+                                            <label>Per km rate (₹)</label>
+                                            <input type="number" min="0" step="0.01" value={f.per_km_rate} onChange={(e) => setRateMeterAirportForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], per_km_rate: e.target.value } }))} />
+                                          </div>
+                                          <div className="admin-form-group">
+                                            <label>Driver charges (₹)</label>
+                                            <input type="number" min="0" step="0.01" value={f.driver_charges} onChange={(e) => setRateMeterAirportForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], driver_charges: e.target.value } }))} />
+                                          </div>
+                                          <div className="admin-form-group">
+                                            <label>Night charges (₹)</label>
+                                            <input type="number" min="0" step="0.01" value={f.night_charges} onChange={(e) => setRateMeterAirportForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], night_charges: e.target.value } }))} />
+                                          </div>
+                                        </div>
+                                        <div className="admin-modal-actions" style={{ marginBottom: 16 }}>
+                                          <button type="submit" className="admin-btn admin-btn-primary" disabled={rateMeterSaving}>Save airport rates</button>
+                                        </div>
+                                      </form>
+                                    </>
                                   );
                                 })()}
-                                <div className="admin-form-block">
-                                  <div className="admin-form-block-title">Cabs</div>
-                                  {(rateMeterCabsByType[ct.id] || []).length === 0 && !rateMeterLoading.cabs && <p className="admin-rate-meters-empty">No cabs. Add one above.</p>}
-                                  {(rateMeterCabsByType[ct.id] || []).map((cab) => {
-                                    const cabImageUrl = cab.image_url ? getImageUrl(cab.image_url) : null;
-                                    return (
-                                      <div key={cab.id} className="admin-cab-row">
-                                        <div className="admin-cab-row-image-wrap">
-                                          {cabImageUrl ? (
-                                            <img src={cabImageUrl} alt={cab.vehicle_number || 'Cab'} className="admin-cab-row-image" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling?.classList.add('visible'); }} />
-                                          ) : null}
-                                          <div className={`admin-cab-row-image-placeholder ${!cabImageUrl ? 'visible' : ''}`}><Icon name="car" size={24} /></div>
-                                        </div>
-                                        <div className="admin-cab-row-details">
-                                          <span className="admin-cab-row-vehicle">{cab.vehicle_number}</span>
-                                          {cab.name && <span className="admin-cab-row-name">{cab.name}</span>}
-                                          {cab.driver_name && <span className="admin-cab-row-driver">Driver: {cab.driver_name}</span>}
-                                          {cab.driver_phone && <span className="admin-cab-row-phone">{cab.driver_phone}</span>}
-                                        </div>
-                                        <div className="admin-cab-row-actions">
-                                          <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => triggerCabImageUpload(cab.id, ct.id)} disabled={uploadingCabId === cab.id}>{uploadingCabId === cab.id ? 'Uploading…' : 'Upload image'}</button>
-                                          <button type="button" className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => deleteRateMeterCab(ct.id, cab.id)}>Remove</button>
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
                               </>
                             )}
                           </div>
@@ -2212,7 +2395,7 @@ const AdminDashboard = () => {
                         {(filteredRateMeterCabTypes.outstation || []).map((ct) => (
                           <div key={ct.id} className="admin-rate-meters-card">
                             <button type="button" className="admin-form-block admin-form-block-title" style={{ width: '100%', textAlign: 'left', cursor: 'pointer', marginBottom: 8 }} onClick={() => toggleRateMeterCabTypeExpand(ct.id, 'outstation')}>
-                              {ct.name} {ct.cab_count != null ? `(${ct.cab_count} cab${Number(ct.cab_count) !== 1 ? 's' : ''})` : ''} {rateMeterExpandedId === ct.id ? '▼' : '▶'}
+                              {ct.name} {rateMeterExpandedId === ct.id ? '▼' : '▶'}
                             </button>
                             {rateMeterExpandedId === ct.id && (
                               <>
@@ -2223,73 +2406,80 @@ const AdminDashboard = () => {
                                   const rt = f.roundTrip || {};
                                   const ms = f.multipleStops || {};
                                   return (
-                                    <form onSubmit={(e) => {
-                                      e.preventDefault();
-                                      saveRateMeterOutstation(ct.id, { oneWay: ow, roundTrip: rt, multipleStops: ms });
-                                    }}>
+                                    <>
                                       <div className="admin-form-block" style={{ marginBottom: 12 }}>
-                                        <div className="admin-form-block-title">One way</div>
-                                        <div className="admin-form-grid">
-                                          <div className="admin-form-group"><label>Min km</label><input type="number" min="0" value={ow.minKm} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], oneWay: { ...prev[ct.id]?.oneWay, minKm: e.target.value } } }))} /></div>
-                                          <div className="admin-form-group"><label>Base fare (₹)</label><input type="number" min="0" step="0.01" value={ow.baseFare} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], oneWay: { ...prev[ct.id]?.oneWay, baseFare: e.target.value } } }))} /></div>
-                                          <div className="admin-form-group"><label>Extra km rate (₹)</label><input type="number" min="0" step="0.01" value={ow.extraKmRate} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], oneWay: { ...prev[ct.id]?.oneWay, extraKmRate: e.target.value } } }))} /></div>
-                                          <div className="admin-form-group"><label>Driver charges (₹)</label><input type="number" min="0" step="0.01" value={ow.driverCharges} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], oneWay: { ...prev[ct.id]?.oneWay, driverCharges: e.target.value } } }))} /></div>
-                                          <div className="admin-form-group"><label>Night charges (₹)</label><input type="number" min="0" step="0.01" value={ow.nightCharges} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], oneWay: { ...prev[ct.id]?.oneWay, nightCharges: e.target.value } } }))} /></div>
+                                        <div className="admin-form-block-title">Car name &amp; image</div>
+                                        <div className="admin-form-grid" style={{ alignItems: 'flex-end' }}>
+                                          <div className="admin-form-group">
+                                            <label>Car name</label>
+                                            <input
+                                              type="text"
+                                              value={rateMeterNameDraft[ct.id] ?? ct.name ?? ''}
+                                              onChange={(e) => setRateMeterNameDraft((prev) => ({ ...prev, [ct.id]: e.target.value }))}
+                                              placeholder="e.g. Crysta"
+                                              style={{ width: '100%', padding: '8px 12px', border: '1px solid #bbf7d0', borderRadius: 6 }}
+                                            />
+                                          </div>
+                                          <div className="admin-form-group" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                            <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => saveRateMeterCabTypeName(ct.id, rateMeterNameDraft[ct.id] ?? ct.name)} disabled={rateMeterNameSavingId === ct.id}>{rateMeterNameSavingId === ct.id ? 'Saving…' : 'Save name'}</button>
+                                          </div>
+                                        </div>
+                                        <div style={{ marginTop: 12 }}>
+                                          {ct.image_url ? (
+                                            <div className="admin-cab-row">
+                                              <div className="admin-cab-row-image-wrap">
+                                                <img src={getImageUrl(ct.image_url)} alt={ct.name} className="admin-cab-row-image" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling?.classList.add('visible'); }} />
+                                                <div className="admin-cab-row-image-placeholder" style={{ display: 'none' }}><Icon name="car" size={24} /></div>
+                                              </div>
+                                              <div className="admin-cab-row-actions">
+                                                <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => triggerCabTypeImageUpload(ct.id)} disabled={uploadingCabTypeId === ct.id}>{uploadingCabTypeId === ct.id ? 'Uploading…' : 'Upload image'}</button>
+                                              </div>
+                                            </div>
+                                          ) : (
+                                            <button type="button" className="admin-btn admin-btn-secondary" onClick={() => triggerCabTypeImageUpload(ct.id)} disabled={uploadingCabTypeId === ct.id}>{uploadingCabTypeId === ct.id ? 'Uploading…' : 'Upload image'}</button>
+                                          )}
                                         </div>
                                       </div>
-                                      <div className="admin-form-block" style={{ marginBottom: 12 }}>
-                                        <div className="admin-form-block-title">Round trip</div>
-                                        <div className="admin-form-grid">
-                                          <div className="admin-form-group"><label>Base km/day</label><input type="number" min="0" value={rt.baseKmPerDay} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], roundTrip: { ...prev[ct.id]?.roundTrip, baseKmPerDay: e.target.value } } }))} /></div>
-                                          <div className="admin-form-group"><label>Per km rate (₹)</label><input type="number" min="0" step="0.01" value={rt.perKmRate} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], roundTrip: { ...prev[ct.id]?.roundTrip, perKmRate: e.target.value } } }))} /></div>
-                                          <div className="admin-form-group"><label>Extra km rate (₹)</label><input type="number" min="0" step="0.01" value={rt.extraKmRate} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], roundTrip: { ...prev[ct.id]?.roundTrip, extraKmRate: e.target.value } } }))} /></div>
-                                          <div className="admin-form-group"><label>Driver charges (₹)</label><input type="number" min="0" step="0.01" value={rt.driverCharges} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], roundTrip: { ...prev[ct.id]?.roundTrip, driverCharges: e.target.value } } }))} /></div>
-                                          <div className="admin-form-group"><label>Night charges (₹)</label><input type="number" min="0" step="0.01" value={rt.nightCharges} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], roundTrip: { ...prev[ct.id]?.roundTrip, nightCharges: e.target.value } } }))} /></div>
+                                      <form onSubmit={(e) => {
+                                        e.preventDefault();
+                                        saveRateMeterOutstation(ct.id, { oneWay: ow, roundTrip: rt, multipleStops: ms });
+                                      }}>
+                                        <div className="admin-form-block" style={{ marginBottom: 12 }}>
+                                          <div className="admin-form-block-title">One way</div>
+                                          <div className="admin-form-grid">
+                                            <div className="admin-form-group"><label>Min km</label><input type="number" min="0" value={ow.minKm} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], oneWay: { ...prev[ct.id]?.oneWay, minKm: e.target.value } } }))} /></div>
+                                            <div className="admin-form-group"><label>Base fare (₹)</label><input type="number" min="0" step="0.01" value={ow.baseFare} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], oneWay: { ...prev[ct.id]?.oneWay, baseFare: e.target.value } } }))} /></div>
+                                            <div className="admin-form-group"><label>Extra km rate (₹)</label><input type="number" min="0" step="0.01" value={ow.extraKmRate} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], oneWay: { ...prev[ct.id]?.oneWay, extraKmRate: e.target.value } } }))} /></div>
+                                            <div className="admin-form-group"><label>Driver charges (₹)</label><input type="number" min="0" step="0.01" value={ow.driverCharges} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], oneWay: { ...prev[ct.id]?.oneWay, driverCharges: e.target.value } } }))} /></div>
+                                            <div className="admin-form-group"><label>Night charges (₹)</label><input type="number" min="0" step="0.01" value={ow.nightCharges} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], oneWay: { ...prev[ct.id]?.oneWay, nightCharges: e.target.value } } }))} /></div>
+                                          </div>
                                         </div>
-                                      </div>
-                                      <div className="admin-form-block" style={{ marginBottom: 12 }}>
-                                        <div className="admin-form-block-title">Multiple stops</div>
-                                        <div className="admin-form-grid">
-                                          <div className="admin-form-group"><label>Base fare (₹)</label><input type="number" min="0" step="0.01" value={ms.baseFare} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], multipleStops: { ...prev[ct.id]?.multipleStops, baseFare: e.target.value } } }))} /></div>
-                                          <div className="admin-form-group"><label>Per km rate (₹)</label><input type="number" min="0" step="0.01" value={ms.perKmRate} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], multipleStops: { ...prev[ct.id]?.multipleStops, perKmRate: e.target.value } } }))} /></div>
-                                          <div className="admin-form-group"><label>Driver charges (₹)</label><input type="number" min="0" step="0.01" value={ms.driverCharges} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], multipleStops: { ...prev[ct.id]?.multipleStops, driverCharges: e.target.value } } }))} /></div>
-                                          <div className="admin-form-group"><label>Night charges (₹)</label><input type="number" min="0" step="0.01" value={ms.nightCharges} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], multipleStops: { ...prev[ct.id]?.multipleStops, nightCharges: e.target.value } } }))} /></div>
+                                        <div className="admin-form-block" style={{ marginBottom: 12 }}>
+                                          <div className="admin-form-block-title">Round trip</div>
+                                          <div className="admin-form-grid">
+                                            <div className="admin-form-group"><label>Base km/day</label><input type="number" min="0" value={rt.baseKmPerDay} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], roundTrip: { ...prev[ct.id]?.roundTrip, baseKmPerDay: e.target.value } } }))} /></div>
+                                            <div className="admin-form-group"><label>Per km rate (₹)</label><input type="number" min="0" step="0.01" value={rt.perKmRate} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], roundTrip: { ...prev[ct.id]?.roundTrip, perKmRate: e.target.value } } }))} /></div>
+                                            <div className="admin-form-group"><label>Extra km rate (₹)</label><input type="number" min="0" step="0.01" value={rt.extraKmRate} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], roundTrip: { ...prev[ct.id]?.roundTrip, extraKmRate: e.target.value } } }))} /></div>
+                                            <div className="admin-form-group"><label>Driver charges (₹)</label><input type="number" min="0" step="0.01" value={rt.driverCharges} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], roundTrip: { ...prev[ct.id]?.roundTrip, driverCharges: e.target.value } } }))} /></div>
+                                            <div className="admin-form-group"><label>Night charges (₹)</label><input type="number" min="0" step="0.01" value={rt.nightCharges} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], roundTrip: { ...prev[ct.id]?.roundTrip, nightCharges: e.target.value } } }))} /></div>
+                                          </div>
                                         </div>
-                                      </div>
-                                      <div className="admin-modal-actions" style={{ marginBottom: 16 }}>
-                                        <button type="submit" className="admin-btn admin-btn-primary" disabled={rateMeterSaving}>Save outstation rates</button>
-                                        <button type="button" className="admin-btn admin-btn-primary" onClick={() => openRateMeterCabModal(ct.id)}>Add cab</button>
-                                      </div>
-                                    </form>
+                                        <div className="admin-form-block" style={{ marginBottom: 12 }}>
+                                          <div className="admin-form-block-title">Multiple stops</div>
+                                          <div className="admin-form-grid">
+                                            <div className="admin-form-group"><label>Base fare (₹)</label><input type="number" min="0" step="0.01" value={ms.baseFare} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], multipleStops: { ...prev[ct.id]?.multipleStops, baseFare: e.target.value } } }))} /></div>
+                                            <div className="admin-form-group"><label>Per km rate (₹)</label><input type="number" min="0" step="0.01" value={ms.perKmRate} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], multipleStops: { ...prev[ct.id]?.multipleStops, perKmRate: e.target.value } } }))} /></div>
+                                            <div className="admin-form-group"><label>Driver charges (₹)</label><input type="number" min="0" step="0.01" value={ms.driverCharges} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], multipleStops: { ...prev[ct.id]?.multipleStops, driverCharges: e.target.value } } }))} /></div>
+                                            <div className="admin-form-group"><label>Night charges (₹)</label><input type="number" min="0" step="0.01" value={ms.nightCharges} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], multipleStops: { ...prev[ct.id]?.multipleStops, nightCharges: e.target.value } } }))} /></div>
+                                          </div>
+                                        </div>
+                                        <div className="admin-modal-actions" style={{ marginBottom: 16 }}>
+                                          <button type="submit" className="admin-btn admin-btn-primary" disabled={rateMeterSaving}>Save outstation rates</button>
+                                        </div>
+                                      </form>
+                                    </>
                                   );
                                 })()}
-                                <div className="admin-form-block">
-                                  <div className="admin-form-block-title">Cabs</div>
-                                  {(rateMeterCabsByType[ct.id] || []).length === 0 && !rateMeterLoading.cabs && <p className="admin-rate-meters-empty">No cabs. Add one above.</p>}
-                                  {(rateMeterCabsByType[ct.id] || []).map((cab) => {
-                                    const cabImageUrl = cab.image_url ? getImageUrl(cab.image_url) : null;
-                                    return (
-                                      <div key={cab.id} className="admin-cab-row">
-                                        <div className="admin-cab-row-image-wrap">
-                                          {cabImageUrl ? (
-                                            <img src={cabImageUrl} alt={cab.vehicle_number || 'Cab'} className="admin-cab-row-image" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling?.classList.add('visible'); }} />
-                                          ) : null}
-                                          <div className={`admin-cab-row-image-placeholder ${!cabImageUrl ? 'visible' : ''}`}><Icon name="car" size={24} /></div>
-                                        </div>
-                                        <div className="admin-cab-row-details">
-                                          <span className="admin-cab-row-vehicle">{cab.vehicle_number}</span>
-                                          {cab.name && <span className="admin-cab-row-name">{cab.name}</span>}
-                                          {cab.driver_name && <span className="admin-cab-row-driver">Driver: {cab.driver_name}</span>}
-                                          {cab.driver_phone && <span className="admin-cab-row-phone">{cab.driver_phone}</span>}
-                                        </div>
-                                        <div className="admin-cab-row-actions">
-                                          <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => triggerCabImageUpload(cab.id, ct.id)} disabled={uploadingCabId === cab.id}>{uploadingCabId === cab.id ? 'Uploading…' : 'Upload image'}</button>
-                                          <button type="button" className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => deleteRateMeterCab(ct.id, cab.id)}>Remove</button>
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
                               </>
                             )}
                           </div>
@@ -2400,7 +2590,7 @@ const AdminDashboard = () => {
                 </button>
                 <div className="admin-rate-meters-block-body">
                   <div className="admin-modal-actions" style={{ marginBottom: 16 }}>
-                    <button type="button" className="admin-btn admin-btn-primary" onClick={() => { setOthersEditingCabId(null); setOthersAddCabModalOpen(true); setOthersAddCabForm({ cab_type_id: '', name: '', vehicle_number: '', driver_id: '' }); }}>Add cab</button>
+                    <button type="button" className="admin-btn admin-btn-primary" onClick={() => { setOthersEditingCabId(null); setOthersAddCabModalOpen(true); setOthersAddCabForm({ cab_type_id: '', name: '', vehicle_number: '' }); }}>Add cab</button>
                   </div>
                   {loading.drivers && <p className="admin-dashboard-list-loading">Loading cabs…</p>}
                   {!loading.drivers && (
@@ -2416,7 +2606,7 @@ const AdminDashboard = () => {
                         </thead>
                         <tbody>
                           {(cabs || []).length === 0 && (
-                            <tr><td colSpan={4} className="admin-dashboard-list-empty">No cabs yet. Click "Add cab" and enter vehicle number and cab type (driver is optional).</td></tr>
+                            <tr><td colSpan={4} className="admin-dashboard-list-empty">No cabs yet. Click "Add cab" and enter vehicle number and cab type.</td></tr>
                           )}
                           {filteredCabs.map((c) => (
                             <tr key={c.id}>
@@ -2424,7 +2614,7 @@ const AdminDashboard = () => {
                               <td>{c.driver_name || '—'} {c.driver_phone ? `(${c.driver_phone})` : ''}</td>
                               <td>{c.cab_type_name || '—'}{c.cab_type_service_type ? ` (${(c.cab_type_service_type || '').charAt(0).toUpperCase() + (c.cab_type_service_type || '').slice(1).toLowerCase()})` : ''}</td>
                               <td className="actions">
-                                <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => { setOthersEditingCabId(c.id); setOthersAddCabForm({ cab_type_id: String(c.cab_type_id || ''), name: c.name || '', vehicle_number: c.vehicle_number || '', driver_id: String((drivers || []).find((d) => d.phone === c.driver_phone || d.name === c.driver_name)?.id || '') }); setOthersAddCabModalOpen(true); }}>Edit</button>
+                                <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => { setOthersEditingCabId(c.id); setOthersAddCabForm({ cab_type_id: String(c.cab_type_id || ''), name: c.name || '', vehicle_number: c.vehicle_number || '' }); setOthersAddCabModalOpen(true); }}>Edit</button>
                                 <button type="button" className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => deleteOthersCab(c.id)}>Delete</button>
                               </td>
                             </tr>
@@ -2471,19 +2661,6 @@ const AdminDashboard = () => {
                 <div className="admin-form-group">
                   <label>Vehicle number</label>
                   <input type="text" value={othersAddCabForm.vehicle_number} onChange={(e) => setOthersAddCabForm((f) => ({ ...f, vehicle_number: e.target.value }))} required />
-                </div>
-                <div className="admin-form-group full-width">
-                  <label>Driver (optional)</label>
-                  <select
-                    value={othersAddCabForm.driver_id}
-                    onChange={(e) => setOthersAddCabForm((f) => ({ ...f, driver_id: e.target.value }))}
-                    style={{ width: '100%', padding: '8px 12px', border: '1px solid #bbf7d0', borderRadius: 6 }}
-                  >
-                    <option value="">— Select driver (optional) —</option>
-                    {(drivers || []).map((d) => (
-                      <option key={d.id} value={d.id}>{d.name} {d.phone ? `— ${d.phone}` : ''}</option>
-                    ))}
-                  </select>
                 </div>
               </div>
               <div className="admin-modal-actions">
@@ -2769,6 +2946,37 @@ const AdminDashboard = () => {
             <div className="admin-tab-section">
               <h2>All corporate bookings</h2>
               <p className="admin-bookings-desc">Corporate booking requests and assignments.</p>
+              <div className="admin-dashboard-box" style={{ marginBottom: 24 }}>
+                <h3 style={{ marginTop: 0, marginBottom: 8 }}>Corporate cabs</h3>
+                <p className="admin-bookings-desc" style={{ marginBottom: 12 }}>Cabs used only for corporate bookings and invoices. Add cabs here; they will appear only when assigning driver & cab to corporate bookings.</p>
+                {corporateCabsLoading && <p className="admin-dashboard-list-loading">Loading…</p>}
+                {!corporateCabsLoading && (
+                  <>
+                    <div className="admin-modal-actions" style={{ marginBottom: 12 }}>
+                      <button type="button" className="admin-btn admin-btn-primary" onClick={() => setCorporateAddCabOpen(true)}>Add cab</button>
+                    </div>
+                    {corporateCabs.length === 0 ? (
+                      <p className="admin-dashboard-list-empty">No corporate cabs yet. Add one to assign to corporate bookings.</p>
+                    ) : (
+                      <div className="admin-entry-cards" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                        {corporateCabs.map((c) => (
+                          <div key={c.id} className="admin-entry-card" style={{ minWidth: 200, maxWidth: 320 }}>
+                            <div className="admin-entry-card-header">
+                              <span className="admin-entry-card-id">#{c.id}</span>
+                            </div>
+                            <div className="admin-entry-card-rows">
+                              <div className="admin-entry-card-row"><span className="key">Vehicle</span><span className="value">{c.vehicle_number || '—'}</span></div>
+                              <div className="admin-entry-card-row"><span className="key">Name</span><span className="value">{c.name || '—'}</span></div>
+                              <div className="admin-entry-card-row"><span className="key">Driver</span><span className="value">{c.driver_name || '—'}</span></div>
+                              {c.driver_phone && <div className="admin-entry-card-row"><span className="key">Phone</span><span className="value">{c.driver_phone}</span></div>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
               {corporateBookingsLoading && <p className="admin-dashboard-list-loading">Loading…</p>}
               {!corporateBookingsLoading && corporateBookings.length === 0 && <p className="admin-dashboard-list-empty">No corporate bookings yet.</p>}
               {!corporateBookingsLoading && corporateBookings.length > 0 && (
@@ -2877,6 +3085,74 @@ const AdminDashboard = () => {
                         <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleOpenCorporateEdit(b)}>Edit booking</button>
                         <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => openAssignModal(b, true)}>{b.cab_id ? 'Reassign driver & cab' : 'Assign driver & cab'}</button>
                         <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => handleCorporateInvoiceDownload(b.id)}>Download</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === TABS.eventBookings && (
+            <div className="admin-tab-section">
+              <h2>Event bookings</h2>
+              <p className="admin-bookings-desc">View event bookings (weddings, birthdays, others) and download invoices in event format.</p>
+              <div className="admin-modal-actions" style={{ marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+                <select
+                  value={eventBookingFilter.event_type}
+                  onChange={(e) => setEventBookingFilter((f) => ({ ...f, event_type: e.target.value }))}
+                  style={{ padding: '8px 12px', border: '1px solid #bbf7d0', borderRadius: 6, minWidth: 120 }}
+                >
+                  <option value="">All event types</option>
+                  <option value="weddings">Weddings</option>
+                  <option value="birthdays">Birthdays</option>
+                  <option value="others">Others</option>
+                </select>
+                <select
+                  value={eventBookingFilter.status}
+                  onChange={(e) => setEventBookingFilter((f) => ({ ...f, status: e.target.value }))}
+                  style={{ padding: '8px 12px', border: '1px solid #bbf7d0', borderRadius: 6, minWidth: 120 }}
+                >
+                  <option value="">All statuses</option>
+                  <option value="pending">Pending</option>
+                  <option value="confirmed">Confirmed</option>
+                  <option value="in_progress">In progress</option>
+                  <option value="completed">Completed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+                <input
+                  type="text"
+                  placeholder="Search name, phone, pickup, drop..."
+                  value={eventBookingFilter.search}
+                  onChange={(e) => setEventBookingFilter((f) => ({ ...f, search: e.target.value }))}
+                  style={{ padding: '8px 12px', border: '1px solid #bbf7d0', borderRadius: 6, minWidth: 200 }}
+                />
+              </div>
+              {eventBookingsLoading && <p className="admin-dashboard-list-loading">Loading...</p>}
+              {!eventBookingsLoading && eventBookings.length === 0 && <p className="admin-dashboard-list-empty">No event bookings yet.</p>}
+              {!eventBookingsLoading && eventBookings.length > 0 && filteredEventBookings.length === 0 && <p className="admin-dashboard-list-empty">No event bookings match the filter.</p>}
+              {!eventBookingsLoading && filteredEventBookings.length > 0 && (
+                <div className="admin-entry-cards">
+                  {filteredEventBookings.map((b) => (
+                    <div key={b.id} className="admin-entry-card">
+                      <div className="admin-entry-card-header">
+                        <span className="admin-entry-card-id">#{b.id}</span>
+                        <span className="admin-service-badge">{(b.event_type === 'weddings' ? 'Wedding' : b.event_type === 'birthdays' ? 'Birthday' : 'Event')}</span>
+                        <span className="admin-service-badge">{b.status || '—'}</span>
+                      </div>
+                      <div className="admin-entry-card-rows">
+                        <div className="admin-entry-card-row"><span className="key">Name</span><span className="value">{b.name || '—'}</span></div>
+                        <div className="admin-entry-card-row"><span className="key">Phone</span><span className="value">{b.phone_number || '—'}</span></div>
+                        <div className="admin-entry-card-row"><span className="key">Pickup</span><span className="value">{b.pickup_point || '—'}</span></div>
+                        <div className="admin-entry-card-row"><span className="key">Drop</span><span className="value">{b.drop_point || '—'}</span></div>
+                        <div className="admin-entry-card-row"><span className="key">Date & time</span><span className="value">{[b.pickup_date, b.pickup_time].filter(Boolean).join(' ') || '—'}</span></div>
+                        <div className="admin-entry-card-row"><span className="key">Cars</span><span className="value">{b.number_of_cars != null ? b.number_of_cars : 1}</span></div>
+                        {b.assignments && b.assignments.length > 0 && (
+                          <div className="admin-entry-card-row"><span className="key">Assigned</span><span className="value">{b.assignments.map((a) => a.vehicle_number || a.cab_driver_name || '—').join(', ')}</span></div>
+                        )}
+                      </div>
+                      <div className="admin-entry-card-actions">
+                        <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => handleEventInvoiceDownload(b.id)}>View invoice</button>
                       </div>
                     </div>
                   ))}
@@ -3202,6 +3478,40 @@ const AdminDashboard = () => {
         </div>
       )}
 
+      {corporateAddCabOpen && (
+        <div className="admin-modal-overlay" onClick={() => !corporateAddCabSubmitting && setCorporateAddCabOpen(false)}>
+          <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="admin-modal-header">
+              <h3>Add corporate cab</h3>
+              <button type="button" className="admin-modal-close" onClick={() => !corporateAddCabSubmitting && setCorporateAddCabOpen(false)} aria-label="Close">×</button>
+            </div>
+            <form onSubmit={handleCorporateAddCabSubmit} className="admin-modal-body">
+              <p className="admin-bookings-desc" style={{ marginBottom: 12 }}>This cab will only appear when assigning driver & cab to corporate bookings or invoices.</p>
+              <div className="admin-form-group">
+                <label>Vehicle number *</label>
+                <input type="text" value={corporateAddCabForm.vehicle_number} onChange={(e) => setCorporateAddCabForm((f) => ({ ...f, vehicle_number: e.target.value }))} placeholder="e.g. KA-01-AB-1234" required />
+              </div>
+              <div className="admin-form-group">
+                <label>Cab name (optional)</label>
+                <input type="text" value={corporateAddCabForm.name} onChange={(e) => setCorporateAddCabForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Swift Dzire" />
+              </div>
+              <div className="admin-form-group">
+                <label>Driver name (optional)</label>
+                <input type="text" value={corporateAddCabForm.driver_name} onChange={(e) => setCorporateAddCabForm((f) => ({ ...f, driver_name: e.target.value }))} placeholder="Driver name" />
+              </div>
+              <div className="admin-form-group">
+                <label>Driver phone (optional)</label>
+                <input type="text" value={corporateAddCabForm.driver_phone} onChange={(e) => setCorporateAddCabForm((f) => ({ ...f, driver_phone: e.target.value }))} placeholder="Phone number" />
+              </div>
+              <div className="admin-modal-actions">
+                <button type="button" className="admin-btn admin-btn-secondary" onClick={() => !corporateAddCabSubmitting && setCorporateAddCabOpen(false)} disabled={corporateAddCabSubmitting}>Cancel</button>
+                <button type="submit" className="admin-btn admin-btn-primary" disabled={corporateAddCabSubmitting}>{corporateAddCabSubmitting ? 'Adding…' : 'Add cab'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {assignBooking && (
         <div className="admin-modal-overlay" onClick={closeAssignModal}>
           <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
@@ -3235,91 +3545,16 @@ const AdminDashboard = () => {
                     <option key={c.id} value={c.id}>{((c.name || '').trim() || c.vehicle_number || '—')}{c.vehicle_number && (c.name || '').trim() ? ` (${c.vehicle_number})` : ''}{c.driver_name ? ` – ${c.driver_name}` : ''}</option>
                   ))}
                 </select>
-                {false && assignDriverId && assignModalCabs.length === 0 && (
+                {assignForCorporate && assignModalCabs.length === 0 && (
+                  <p className="admin-bookings-desc" style={{ marginTop: 6 }}>No corporate cabs yet. Add one in All corporate bookings → Corporate cabs.</p>
+                )}
+                {!assignForCorporate && assignDriverId && assignModalCabs.length === 0 && (
                   <p className="admin-dashboard-list-loading" style={{ marginTop: 6 }}>No cab assigned to this driver. Select “Any driver” or assign a cab to this driver in Others.</p>
                 )}
               </div>
               <div className="admin-modal-actions">
                 <button type="button" className="admin-btn admin-btn-secondary" onClick={closeAssignModal}>Cancel</button>
                 <button type="submit" className="admin-btn admin-btn-primary" disabled={assignSubmitting || !assignCabId}>{assignSubmitting ? (assignBooking.cab_id ? 'Reassigning…' : 'Assigning…') : (assignBooking.cab_id ? 'Reassign' : 'Assign')}</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {rateMeterCabModal.open && (
-        <div className="admin-modal-overlay" onClick={closeRateMeterCabModal}>
-          <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="admin-modal-header">
-              <h3>Add cab</h3>
-              <button type="button" className="admin-modal-close" onClick={closeRateMeterCabModal} aria-label="Close">×</button>
-            </div>
-            <div className="admin-modal-body" style={{ marginBottom: 12 }}>
-              <div className="admin-form-group" style={{ marginBottom: 16 }}>
-                <span style={{ marginRight: 12 }}>
-                  <button type="button" className={`admin-btn admin-btn-sm ${rateMeterAddCabMode === 'assign' ? 'admin-btn-primary' : 'admin-btn-secondary'}`} onClick={() => setRateMeterAddCabMode('assign')}>Assign existing cab</button>
-                </span>
-                <span>
-                  <button type="button" className={`admin-btn admin-btn-sm ${rateMeterAddCabMode === 'create' ? 'admin-btn-primary' : 'admin-btn-secondary'}`} onClick={() => setRateMeterAddCabMode('create')}>Create new cab</button>
-                </span>
-              </div>
-              <p style={{ fontSize: 12, color: '#666', marginBottom: 12 }}>
-                {rateMeterAddCabMode === 'assign' ? 'Choose a cab already in the database to show under this type (moves it from its current type).' : 'Add a new cab for this type only. Other types are unchanged.'}
-              </p>
-            </div>
-            <form onSubmit={handleRateMeterCabSubmit} className="admin-modal-body">
-              {rateMeterAddCabMode === 'assign' && (
-                <>
-                  {rateMeterModalOptionsLoading && <p className="admin-dashboard-list-loading" style={{ marginBottom: 12 }}>Loading cabs…</p>}
-                  {!rateMeterModalOptionsLoading && (
-                    <div className="admin-form-group" style={{ marginBottom: 16 }}>
-                      <label>Select car</label>
-                      <select
-                        value={rateMeterSelectedCabId}
-                        onChange={(e) => setRateMeterSelectedCabId(e.target.value)}
-                        style={{ width: '100%', padding: '8px 12px', border: '1px solid #bbf7d0', borderRadius: 6 }}
-                        required={rateMeterAddCabMode === 'assign'}
-                      >
-                        <option value="">
-                          {rateMeterModalCabs.length === 0 ? 'No cabs in database. Add cabs in Others or create new below.' : '— Choose a car —'}
-                        </option>
-                        {rateMeterModalCabs.map((c) => (
-                          <option key={String(c.id)} value={String(c.id)}>
-                            {(c.name || c.vehicle_number || '').trim() || '—'} {c.driver_name ? ` (${c.driver_name})` : ''}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                </>
-              )}
-              {rateMeterAddCabMode === 'create' && (
-                <div className="admin-form-grid" style={{ marginBottom: 16 }}>
-                  <div className="admin-form-group">
-                    <label>Vehicle number *</label>
-                    <input type="text" value={rateMeterNewCabForm.vehicle_number} onChange={(e) => setRateMeterNewCabForm((f) => ({ ...f, vehicle_number: e.target.value }))} style={{ width: '100%', padding: '8px 12px', border: '1px solid #bbf7d0', borderRadius: 6 }} required={rateMeterAddCabMode === 'create'} />
-                  </div>
-                  <div className="admin-form-group">
-                    <label>Name (optional)</label>
-                    <input type="text" value={rateMeterNewCabForm.name} onChange={(e) => setRateMeterNewCabForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Ertiga" style={{ width: '100%', padding: '8px 12px', border: '1px solid #bbf7d0', borderRadius: 6 }} />
-                  </div>
-                  <div className="admin-form-group full-width">
-                    <label>Driver (optional)</label>
-                    <select value={rateMeterNewCabForm.driver_id} onChange={(e) => setRateMeterNewCabForm((f) => ({ ...f, driver_id: e.target.value }))} style={{ width: '100%', padding: '8px 12px', border: '1px solid #bbf7d0', borderRadius: 6 }}>
-                      <option value="">— Select driver (optional) —</option>
-                      {(drivers || []).map((d) => (
-                        <option key={d.id} value={d.id}>{d.name} {d.phone ? ` — ${d.phone}` : ''}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              )}
-              <div className="admin-modal-actions">
-                <button type="button" className="admin-btn admin-btn-secondary" onClick={closeRateMeterCabModal}>Cancel</button>
-                <button type="submit" className="admin-btn admin-btn-primary" disabled={rateMeterSaving || (rateMeterAddCabMode === 'assign' && !rateMeterSelectedCabId) || (rateMeterAddCabMode === 'create' && !rateMeterNewCabForm.vehicle_number?.trim())}>
-                  {rateMeterSaving ? (rateMeterAddCabMode === 'create' ? 'Adding…' : 'Assigning…') : (rateMeterAddCabMode === 'create' ? 'Add cab' : 'Assign')}
-                </button>
               </div>
             </form>
           </div>

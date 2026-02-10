@@ -32,6 +32,7 @@ app.use('/api/corporate', require('./routes/corporate'));
 app.use('/api/events', require('./routes/events'));
 app.use('/api/address', require('./routes/address'));
 app.use('/api/places', require('./routes/places'));
+app.use('/api/invoices', require('./routes/invoices'));
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Server is running' });

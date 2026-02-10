@@ -35,6 +35,7 @@ const HomePage = () => {
   const [confirmModal, setConfirmModal] = useState(null);
   const [confirmPassengerName, setConfirmPassengerName] = useState('');
   const [confirmPassengerPhone, setConfirmPassengerPhone] = useState('');
+  const [confirmPassengerEmail, setConfirmPassengerEmail] = useState('');
   const [confirmTravelDatetime, setConfirmTravelDatetime] = useState('');
   const [confirmSubmitting, setConfirmSubmitting] = useState(false);
   const [confirmError, setConfirmError] = useState('');
@@ -207,9 +208,10 @@ const HomePage = () => {
         to_location: 'Local package',
         passenger_name: name,
         passenger_phone: phone,
+        passenger_email: (confirmPassengerEmail || '').trim() || undefined,
         fare_amount: fareAmount,
         number_of_hours: numberOfHours,
-        cab_id: confirmModal.cab.id,
+        cab_id: confirmModal.cab?.id ?? null,
         cab_type_id: confirmModal.cabType.id,
         pickup_lat: fromLocation?.lat ?? null,
         pickup_lng: fromLocation?.lng ?? null,
@@ -761,6 +763,16 @@ const HomePage = () => {
                   onChange={(e) => setConfirmPassengerPhone(e.target.value)}
                   placeholder="Enter phone number"
                   required
+                />
+              </div>
+              <div className="home-confirm-field">
+                <label htmlFor="home-confirm-email">Email (optional)</label>
+                <input
+                  id="home-confirm-email"
+                  type="email"
+                  value={confirmPassengerEmail}
+                  onChange={(e) => setConfirmPassengerEmail(e.target.value)}
+                  placeholder="Enter email for confirmation"
                 />
               </div>
               <div className="home-confirm-field">

@@ -103,10 +103,14 @@ async function getDefaultImageForCabType(cabTypeId) {
 
 const LOCAL_OFFER_CAB_TYPE_NAMES = ['Innova Crysta', 'SUV', 'Sedan'];
 
+function isInnovaCrystaName(name) {
+  return (name || '').trim().toLowerCase() === 'innova crysta';
+}
+
 router.get('/local-offers', async (req, res) => {
   try {
     const cabTypes = await db.allAsync(
-      "SELECT id, name, description, base_fare, capacity FROM cab_types WHERE service_type = 'local' AND is_active = 1 ORDER BY name"
+      "SELECT id, name, description, base_fare, capacity, image_url FROM cab_types WHERE service_type = 'local' AND is_active = 1 ORDER BY name"
     );
     const result = [];
     for (const ct of cabTypes || []) {
@@ -121,11 +125,14 @@ router.get('/local-offers', async (req, res) => {
         [ct.id]
       );
       const defaultCabTypeImage = await getDefaultImageForCabType(ct.id).catch(() => null);
-      const cabs = (cabsRaw || []).map((c) => {
+      const ctImageUrl = normalizeImageUrl(ct.image_url) || ct.image_url || defaultCabTypeImage;
+      let cabs = (cabsRaw || []).map((c) => {
         const normalized = normalizeImageUrl(c.image_url) || c.image_url;
         return { ...c, image_url: normalized || defaultCabTypeImage };
       });
-      if (cabs.length === 0) continue;
+      if (cabs.length === 0) {
+        cabs = [{ id: null, vehicle_number: ct.name, name: ct.name, description: ct.description || '', image_url: ctImageUrl, driver_name: null, driver_phone: null }];
+      }
 
       let rates = await db.allAsync(
         `SELECT hours, package_fare, extra_hour_rate FROM local_package_rates WHERE cab_type_id = ? ORDER BY hours`,
@@ -188,7 +195,7 @@ function excludeInnovaCabTypes(cabTypes) {
 router.get('/airport-offers', async (req, res) => {
   try {
     const cabTypes = excludeInnovaCabTypes(await db.allAsync(
-      "SELECT id, name, description, capacity FROM cab_types WHERE service_type = 'airport' AND is_active = 1 ORDER BY name"
+      "SELECT id, name, description, capacity, image_url FROM cab_types WHERE service_type = 'airport' AND is_active = 1 ORDER BY name"
     ));
     const result = [];
     for (const ct of cabTypes || []) {
@@ -206,10 +213,14 @@ router.get('/airport-offers', async (req, res) => {
         [ct.id]
       );
       const defaultCabTypeImage = await getDefaultImageForCabType(ct.id).catch(() => null);
-      const cabs = (cabsRaw || []).map((c) => {
+      const ctImageUrl = normalizeImageUrl(ct.image_url) || ct.image_url || defaultCabTypeImage;
+      let cabs = (cabsRaw || []).map((c) => {
         const normalized = normalizeImageUrl(c.image_url) || c.image_url;
         return { ...c, image_url: normalized || defaultCabTypeImage };
       });
+      if (cabs.length === 0) {
+        cabs = [{ id: null, vehicle_number: ct.name, name: ct.name, description: ct.description || '', image_url: ctImageUrl, driver_name: null, driver_phone: null }];
+      }
       const capacity = ct.capacity != null ? Number(ct.capacity) : 4;
       result.push({
         id: ct.id,
@@ -288,7 +299,7 @@ function getInt(row, key, defaultVal = null) {
 router.get('/outstation-offers', async (req, res) => {
   try {
     const cabTypes = excludeInnovaCabTypes(await db.allAsync(
-      "SELECT id, name, description, capacity FROM cab_types WHERE service_type = 'outstation' AND is_active = 1 ORDER BY name"
+      "SELECT id, name, description, capacity, image_url FROM cab_types WHERE service_type = 'outstation' AND is_active = 1 ORDER BY name"
     ));
     const result = [];
     for (const ct of cabTypes || []) {
@@ -315,10 +326,14 @@ router.get('/outstation-offers', async (req, res) => {
         [ct.id]
       );
       const defaultCabTypeImage = await getDefaultImageForCabType(ct.id).catch(() => null);
-      const cabs = (cabsRaw || []).map((c) => {
+      const ctImageUrl = normalizeImageUrl(ct.image_url) || ct.image_url || defaultCabTypeImage;
+      let cabs = (cabsRaw || []).map((c) => {
         const normalized = normalizeImageUrl(c.image_url) || c.image_url;
         return { ...c, image_url: normalized || defaultCabTypeImage };
       });
+      if (cabs.length === 0) {
+        cabs = [{ id: null, vehicle_number: ct.name, name: ct.name, description: ct.description || '', image_url: ctImageUrl, driver_name: null, driver_phone: null }];
+      }
       const capacity = ct.capacity != null ? Number(ct.capacity) : 4;
       const firstRate = oneWay || roundTrip || multiStop;
       result.push({

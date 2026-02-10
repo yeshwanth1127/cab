@@ -26,6 +26,7 @@ const CarOptions = () => {
   const [confirmModal, setConfirmModal] = useState(null);
   const [confirmPassengerName, setConfirmPassengerName] = useState('');
   const [confirmPassengerPhone, setConfirmPassengerPhone] = useState('');
+  const [confirmPassengerEmail, setConfirmPassengerEmail] = useState('');
   const [confirmTravelDatetime, setConfirmTravelDatetime] = useState('');
   const [confirmSubmitting, setConfirmSubmitting] = useState(false);
   const [confirmError, setConfirmError] = useState('');
@@ -120,7 +121,7 @@ const CarOptions = () => {
       driverCharges,
       nightCharges,
     } = opts;
-    const imageUrl = cab?.image_url ? getImageUrl(cab.image_url) : (ct.cabs?.[0]?.image_url ? getImageUrl(ct.cabs[0].image_url) : null);
+    const imageUrl = (cab?.image_url ? getImageUrl(cab.image_url) : null) || (ct.image_url ? getImageUrl(ct.image_url) : null) || (ct.cabs?.[0]?.image_url ? getImageUrl(ct.cabs[0].image_url) : null);
     const seating = ct.seatingCapacity != null ? `${ct.seatingCapacity - 1}+1 seater` : '—';
     const gstText = ct.gstIncluded === true ? 'Includes GST' : ct.gstIncluded === false ? 'Excludes GST' : 'Includes GST';
     const driverText = driverCharges == null || Number(driverCharges) === 0 ? 'Included' : `₹${driverCharges}`;
@@ -225,7 +226,7 @@ const CarOptions = () => {
       summaryLines.push({ label: 'Package', value: `${selectedHours}h` });
     }
     summaryLines.push({ label: 'Cab type', value: confirmModal.cabType.name });
-    summaryLines.push({ label: 'Vehicle', value: confirmModal.cab.vehicle_number });
+    summaryLines.push({ label: 'Vehicle', value: confirmModal.cab.vehicle_number || confirmModal.cabType.name });
     summaryLines.push({ label: 'Name', value: name });
     summaryLines.push({ label: 'Phone', value: phone });
     if (confirmTravelDatetime) {
@@ -242,6 +243,7 @@ const CarOptions = () => {
       cabType: confirmModal.cabType,
       passengerName: name,
       passengerPhone: phone,
+      passengerEmail: (confirmPassengerEmail || '').trim() || undefined,
       travelDatetime: confirmTravelDatetime,
       fareAmount,
       summaryLines,
@@ -257,7 +259,7 @@ const CarOptions = () => {
     setConfirmSubmitting(true);
     setConfirmError('');
     try {
-      const { cab, cabType, passengerName, passengerPhone, fareAmount, travelDatetime } = reconfirmData;
+      const { cab, cabType, passengerName, passengerPhone, passengerEmail, fareAmount, travelDatetime } = reconfirmData;
       if (isAirportFlow) {
         const payload = {
           service_type: 'airport',
@@ -265,8 +267,9 @@ const CarOptions = () => {
           to_location: bookingState.to_location,
           passenger_name: passengerName,
           passenger_phone: passengerPhone,
+          passenger_email: passengerEmail,
           fare_amount: fareAmount,
-          cab_id: cab.id,
+          cab_id: cab?.id ?? null,
           cab_type_id: cabType.id,
           travel_date: travelDatetime || null,
         };
@@ -290,8 +293,9 @@ const CarOptions = () => {
           to_location: bookingState.to_location,
           passenger_name: passengerName,
           passenger_phone: passengerPhone,
+          passenger_email: passengerEmail,
           fare_amount: fareAmount,
-          cab_id: cab.id,
+          cab_id: cab?.id ?? null,
           cab_type_id: cabType.id,
           travel_date: travelDatetime || null,
         };
@@ -314,9 +318,10 @@ const CarOptions = () => {
           to_location: 'Local package',
           passenger_name: passengerName,
           passenger_phone: passengerPhone,
+          passenger_email: passengerEmail,
           fare_amount: fareAmount,
           number_of_hours: selectedHours,
-          cab_id: cab.id,
+          cab_id: cab.id ?? null,
           cab_type_id: cabType.id,
           pickup_lat: bookingState.from_lat ?? null,
           pickup_lng: bookingState.from_lng ?? null,
@@ -693,6 +698,16 @@ const CarOptions = () => {
                       onChange={(e) => setConfirmPassengerPhone(e.target.value)}
                       placeholder="Enter phone number"
                       required
+                    />
+                  </div>
+                  <div className="car-options-confirm-field">
+                    <label htmlFor="car-confirm-email">Email (optional)</label>
+                    <input
+                      id="car-confirm-email"
+                      type="email"
+                      value={confirmPassengerEmail}
+                      onChange={(e) => setConfirmPassengerEmail(e.target.value)}
+                      placeholder="Enter email for confirmation"
                     />
                   </div>
                   <div className="car-options-confirm-field">

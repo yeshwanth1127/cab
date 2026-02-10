@@ -38,17 +38,31 @@ function getInt(row, key, defaultVal = null) {
 }
 
 const LOCAL_RATE_METER_CAB_NAMES = ['Innova Crysta', 'SUV', 'Sedan'];
+const INNOVA_CRYSTA_NAME = 'Innova Crysta';
+
+function isInnovaCrysta(name) {
+  return (name || '').trim().toLowerCase() === INNOVA_CRYSTA_NAME.trim().toLowerCase();
+}
+
+async function ensureCabTypesImageUrlColumn() {
+  try {
+    await db.runAsync('ALTER TABLE cab_types ADD COLUMN image_url TEXT');
+  } catch (e) {
+    // column may already exist
+  }
+}
 
 router.get(
   '/rate-meter/cab-types',
   query('service_type').isIn(['local', 'airport', 'outstation']).withMessage('service_type must be local, airport, or outstation'),
   async (req, res) => {
     try {
+      await ensureCabTypesImageUrlColumn();
       const errors = validationResult(req);
       if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
       const { service_type } = req.query;
       const rows = await db.allAsync(
-        `SELECT ct.id, ct.name, ct.description, ct.service_type, ct.base_fare, ct.per_km_rate,
+        `SELECT ct.id, ct.name, ct.description, ct.service_type, ct.base_fare, ct.per_km_rate, ct.image_url,
                 (SELECT COUNT(*) FROM cabs c WHERE c.cab_type_id = ct.id AND c.is_active = 1) as cab_count
          FROM cab_types ct
          WHERE ct.service_type = ? AND ct.is_active = 1
@@ -168,6 +182,37 @@ router.delete(
       res.json({ message: 'Cab type deactivated' });
     } catch (error) {
       console.error('Error deleting cab type:', error);
+      res.status(500).json({ error: 'Server error' });
+    }
+  }
+);
+
+router.post(
+  '/rate-meter/cab-types/:id/upload',
+  param('id').isInt({ min: 1 }),
+  (req, res, next) => {
+    upload.single('image')(req, res, (err) => {
+      if (err) {
+        if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: 'Image must be under 5MB' });
+        return res.status(400).json({ error: err.message || 'Upload failed' });
+      }
+      next();
+    });
+  },
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      if (!req.file || !req.file.filename) {
+        return res.status(400).json({ error: 'No image file provided' });
+      }
+      const existing = await db.getAsync('SELECT id, name FROM cab_types WHERE id = ? AND is_active = 1', [id]);
+      if (!existing) return res.status(404).json({ error: 'Cab type not found' });
+      const imagePath = `car-options/${req.file.filename}`;
+      await db.runAsync('UPDATE cab_types SET image_url = ? WHERE id = ?', [imagePath, id]);
+      const row = await db.getAsync('SELECT id, name, description, service_type, image_url FROM cab_types WHERE id = ?', [id]);
+      res.json(row);
+    } catch (error) {
+      console.error('Error uploading cab type image:', error);
       res.status(500).json({ error: 'Server error' });
     }
   }

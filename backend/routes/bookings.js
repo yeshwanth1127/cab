@@ -1,8 +1,21 @@
 const express = require('express');
 const db = require('../db/database');
 const { generateGoogleMapsLink } = require('../utils/mapsLink');
+const { triggerBookingSuccess } = require('../services/n8nWebhooks');
 
 const router = express.Router();
+
+function formatTimeForWebhook(travelDate) {
+  if (!travelDate) return '';
+  const d = new Date(travelDate);
+  if (Number.isNaN(d.getTime())) return '';
+  const hours = d.getHours();
+  const mins = d.getMinutes();
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  const h = hours % 12 || 12;
+  const m = String(mins).padStart(2, '0');
+  return `${h}:${m} ${ampm}`;
+}
 
 async function ensureBookingsColumns() {
   const columns = [
@@ -55,6 +68,7 @@ router.post('/', async (req, res) => {
       to_location,
       passenger_name,
       passenger_phone,
+      passenger_email,
       fare_amount,
       number_of_hours,
       trip_type,
@@ -77,10 +91,10 @@ router.post('/', async (req, res) => {
     const result = await db.runAsync(
       `INSERT INTO bookings (
         from_location, to_location, distance_km, estimated_time_minutes, fare_amount,
-        passenger_name, passenger_phone, cab_id, cab_type_id,
+        passenger_name, passenger_phone, passenger_email, cab_id, cab_type_id,
         service_type, number_of_hours, trip_type, pickup_lat, pickup_lng, destination_lat, destination_lng,
         invoice_number, travel_date
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         from_location,
         to_location,
@@ -89,6 +103,7 @@ router.post('/', async (req, res) => {
         Number(fare_amount),
         passenger_name,
         passenger_phone,
+        passenger_email != null && String(passenger_email).trim() ? String(passenger_email).trim() : null,
         cab_id || null,
         cab_type_id || null,
         service_type || 'local',
@@ -112,6 +127,13 @@ router.post('/', async (req, res) => {
     } catch (e) {
 
     }
+    triggerBookingSuccess({
+      customerEmail: newBooking.passenger_email || '',
+      bookingId: 'NC' + newBooking.id,
+      pickup: newBooking.from_location || '',
+      drop: newBooking.to_location || '',
+      time: formatTimeForWebhook(newBooking.travel_date),
+    });
     res.status(201).json(newBooking);
   } catch (error) {
     console.error('Error creating booking:', error);

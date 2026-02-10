@@ -273,7 +273,113 @@ function generateCorporateInvoicePDF(booking, withGST = true) {
   return generateInvoicePDF(asBooking, withGST);
 }
 
+function generateEventInvoicePDF(eventBooking) {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: 'A4', margin: 40 });
+    const buffers = [];
+    doc.on('data', buffers.push.bind(buffers));
+    doc.on('end', () => resolve(Buffer.concat(buffers)));
+    doc.on('error', reject);
+
+    const pageWidth = 595.28;
+    const margin = 50;
+    const headerTop = 42;
+    const logoWidth = 100;
+    const logoHeight = 44;
+    const lineY = headerTop + logoHeight + 2;
+    const taglineY = lineY + 6;
+    const blueBarTop = taglineY + 10;
+    const blueBarHeight = 28;
+    const contentTop = blueBarTop + blueBarHeight + 10;
+    const rightColX = pageWidth - margin - 180;
+
+    if (fs.existsSync(LOGO_PATH)) {
+      doc.image(LOGO_PATH, margin, headerTop, { width: logoWidth, height: logoHeight });
+      doc.strokeColor('#16a34a').lineWidth(1).moveTo(margin, lineY).lineTo(margin + 140, lineY).stroke();
+      doc.fontSize(9).fillColor('#374151').text(COMPANY.tagline, margin, taglineY);
+    } else {
+      doc.fontSize(22).fillColor(YELLOW_TEXT).text(COMPANY.nameFirst, margin, headerTop);
+      const nammaWidth = doc.widthOfString(COMPANY.nameFirst);
+      doc.fillColor(GREEN_TEXT).text(COMPANY.nameSecond.trim(), margin + nammaWidth + 6, headerTop);
+      doc.strokeColor('#16a34a').lineWidth(1).moveTo(margin, headerTop + 36).lineTo(margin + 140, headerTop + 36).stroke();
+      doc.fontSize(9).fillColor('#374151').text(COMPANY.tagline, margin, headerTop + 44);
+    }
+
+    doc.fontSize(9).fillColor('black');
+    const addrLines = COMPANY.address.split(',').map((s) => s.trim()).filter(Boolean);
+    let addrY = headerTop;
+    addrLines.forEach((line, i) => {
+      doc.text(line + (i < addrLines.length - 1 ? ',' : ''), rightColX, addrY, { width: 175, align: 'left' });
+      addrY += 10;
+    });
+    addrY += 2;
+    doc.text(`Phone: ${COMPANY.supportPhone}`, rightColX, addrY);
+    doc.text(`Email ID: ${COMPANY.email}`, rightColX, addrY + 14);
+
+    doc.rect(0, blueBarTop, pageWidth, blueBarHeight).fill(BLUE_HEADER);
+    doc.fillColor('white').fontSize(16).font('Helvetica-Bold').text('EVENT BOOKING INVOICE', 0, blueBarTop + 6, { width: pageWidth, align: 'center' });
+    doc.fillColor('black').font('Helvetica');
+
+    const eventTypeLabel = (eventBooking.event_type === 'weddings' ? 'Wedding' : eventBooking.event_type === 'birthdays' ? 'Birthday' : 'Event').toUpperCase();
+    let y = contentTop;
+    doc.fontSize(11).font('Helvetica-Bold').text(`Booking #${eventBooking.id}  |  ${eventTypeLabel}`, margin, y);
+    doc.font('Helvetica').fontSize(9);
+    y += 18;
+    doc.text(`Customer: ${(eventBooking.name || '—').toUpperCase()}`, margin, y);
+    y += 14;
+    doc.text(`Phone: ${eventBooking.phone_number || '—'}`, margin, y);
+    y += 14;
+    doc.text(`Pickup: ${eventBooking.pickup_point || '—'}`, margin, y);
+    y += 12;
+    doc.text(`Drop: ${eventBooking.drop_point || '—'}`, margin, y);
+    y += 14;
+    const pickupDt = eventBooking.pickup_date && eventBooking.pickup_time
+      ? `${String(eventBooking.pickup_date).trim()} at ${String(eventBooking.pickup_time).trim()}`
+      : (eventBooking.pickup_date || eventBooking.pickup_time || '—');
+    doc.text(`Date & Time: ${pickupDt}`, margin, y);
+    y += 12;
+    doc.text(`Number of cars: ${eventBooking.number_of_cars != null ? eventBooking.number_of_cars : 1}`, margin, y);
+    y += 16;
+
+    const assignments = eventBooking.assignments || [];
+    if (assignments.length > 0) {
+      doc.fontSize(10).font('Helvetica-Bold').text('Assigned vehicles', margin, y);
+      y += 18;
+      const tableTop = y;
+      const colW = { sl: 28, vehicle: 120, driver: 140, phone: 120 };
+      const tableWidth = pageWidth - 2 * margin;
+      const rowH = 22;
+      doc.rect(margin, tableTop, tableWidth, rowH).fill(BLUE_HEADER);
+      doc.fillColor('white').fontSize(9).font('Helvetica-Bold');
+      doc.text('No', margin + 6, tableTop + 6, { width: colW.sl });
+      doc.text('Vehicle', margin + colW.sl + 6, tableTop + 6, { width: colW.vehicle });
+      doc.text('Driver', margin + colW.sl + colW.vehicle + 6, tableTop + 6, { width: colW.driver });
+      doc.text('Phone', margin + colW.sl + colW.vehicle + colW.driver + 6, tableTop + 6, { width: colW.phone });
+      doc.fillColor('black').font('Helvetica');
+      let rowY = tableTop + rowH;
+      assignments.forEach((a, i) => {
+        doc.rect(margin, rowY, tableWidth, rowH).stroke();
+        doc.fontSize(9).text(String(i + 1), margin + 6, rowY + 6, { width: colW.sl });
+        doc.text(a.vehicle_number || a.cab_driver_name || '—', margin + colW.sl + 6, rowY + 6, { width: colW.vehicle });
+        doc.text(a.driver_name || a.cab_driver_name || '—', margin + colW.sl + colW.vehicle + 6, rowY + 6, { width: colW.driver });
+        doc.text(a.driver_phone || a.cab_driver_phone || '—', margin + colW.sl + colW.vehicle + colW.driver + 6, rowY + 6, { width: colW.phone });
+        rowY += rowH;
+      });
+      y = rowY + 16;
+    }
+
+    if (eventBooking.notes && String(eventBooking.notes).trim()) {
+      doc.fontSize(9).fillColor('#374151').text(`Notes: ${String(eventBooking.notes).trim()}`, margin, y, { width: pageWidth - 2 * margin });
+      y += 20;
+    }
+
+    doc.fontSize(8).fillColor('#6b7280').text('This is a computer-generated event booking invoice.', margin, 800, { width: pageWidth - 2 * margin, align: 'center' });
+    doc.end();
+  });
+}
+
 module.exports = {
   generateInvoicePDF,
   generateCorporateInvoicePDF,
+  generateEventInvoicePDF,
 };

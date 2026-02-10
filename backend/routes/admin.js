@@ -4,6 +4,7 @@ const db = require('../db/database');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
 const { generateInvoicePDF } = require('../services/invoiceService');
 const { generateGoogleMapsLink } = require('../utils/mapsLink');
+const { triggerDriverInfo, triggerInvoiceGenerated } = require('../services/n8nWebhooks');
 
 const router = express.Router();
 
@@ -252,6 +253,16 @@ router.put('/bookings/:id', async (req, res) => {
        FROM bookings b LEFT JOIN cabs c ON b.cab_id = c.id LEFT JOIN cab_types ct ON b.cab_type_id = ct.id WHERE b.id = ?`,
       [id]
     );
+    if (cab_id) {
+      triggerDriverInfo({
+        bookingId: 'NC' + id,
+        customerEmail: withCab.passenger_email || '',
+        driverEmail: withCab.driver_email || '',
+        driverName: withCab.driver_name || '',
+        driverPhone: withCab.driver_phone || '',
+        cabNumber: withCab.vehicle_number || '',
+      });
+    }
     res.json(withCab);
   } catch (error) {
     console.error('Error updating booking:', error);
@@ -259,10 +270,19 @@ router.put('/bookings/:id', async (req, res) => {
   }
 });
 
+async function ensureCabsCorporateOnlyColumn() {
+  try {
+    await db.runAsync('ALTER TABLE cabs ADD COLUMN corporate_only INTEGER DEFAULT 0');
+  } catch (e) {
+    // column may already exist
+  }
+}
+
 router.get('/cabs', async (req, res) => {
   try {
+    await ensureCabsCorporateOnlyColumn();
     const rows = await db.allAsync(
-      `SELECT c.id, c.vehicle_number, c.name, c.driver_id, c.driver_name, c.driver_phone, c.cab_type_id, ct.name as cab_type_name, ct.service_type as cab_type_service_type
+      `SELECT c.id, c.vehicle_number, c.name, c.driver_id, c.driver_name, c.driver_phone, c.cab_type_id, c.corporate_only, ct.name as cab_type_name, ct.service_type as cab_type_service_type
        FROM cabs c
        LEFT JOIN cab_types ct ON c.cab_type_id = ct.id
        WHERE c.is_active = 1
@@ -278,6 +298,7 @@ router.get('/cabs', async (req, res) => {
       cab_type_id: r.cab_type_id ?? r.CAB_TYPE_ID,
       cab_type_name: r.cab_type_name ?? r.CAB_TYPE_NAME ?? '—',
       cab_type_service_type: r.cab_type_service_type ?? r.CAB_TYPE_SERVICE_TYPE ?? null,
+      corporate_only: !!(r.corporate_only ?? r.CORPORATE_ONLY),
     }));
     res.json(cabs);
   } catch (error) {
@@ -461,10 +482,10 @@ router.post('/invoice/create', [
     const result = await db.runAsync(
       `INSERT INTO bookings (
         from_location, to_location, distance_km, estimated_time_minutes, fare_amount,
-        passenger_name, passenger_phone, cab_id, cab_type_id,
+        passenger_name, passenger_phone, passenger_email, cab_id, cab_type_id,
         service_type, number_of_hours, trip_type, pickup_lat, pickup_lng, destination_lat, destination_lng,
         invoice_number
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         from_location,
         to_location,
@@ -473,6 +494,7 @@ router.post('/invoice/create', [
         Number(fare_amount),
         passenger_name,
         passenger_phone,
+        passenger_email != null && String(passenger_email).trim() ? String(passenger_email).trim() : null,
         null,
         null,
         svcType,
@@ -496,6 +518,18 @@ router.post('/invoice/create', [
     const bookingForPdf = { ...newBooking, passenger_email: passenger_email || null, trip_type: outstationTripType || newBooking.trip_type };
     const withGST = with_gst !== false;
     const pdfBuffer = await generateInvoicePDF(bookingForPdf, withGST);
+
+    const baseUrl = (process.env.BASE_URL || '').replace(/\/$/, '');
+    const pdfSecret = process.env.INVOICE_PDF_SECRET || '';
+    const pdfUrl = baseUrl && pdfSecret
+      ? `${baseUrl}/api/invoices/${newBooking.id}/pdf?token=${encodeURIComponent(pdfSecret)}&with_gst=${withGST}`
+      : '';
+    triggerInvoiceGenerated({
+      customerEmail: passenger_email && String(passenger_email).trim() ? String(passenger_email).trim() : '',
+      invoiceId: newBooking.invoice_number || 'INV' + newBooking.id,
+      amount: '₹' + Number(fare_amount),
+      pdfUrl,
+    });
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="invoice-${newBooking.id}${withGST ? '-with-gst' : ''}.pdf"`);
