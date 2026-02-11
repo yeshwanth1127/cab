@@ -135,6 +135,7 @@ router.post('/bookings', [
       to_location,
       passenger_name,
       passenger_phone,
+      passenger_email,
       fare_amount,
       service_type,
       number_of_hours,
@@ -152,10 +153,10 @@ router.post('/bookings', [
     const result = await db.runAsync(
       `INSERT INTO bookings (
         from_location, to_location, distance_km, estimated_time_minutes, fare_amount,
-        passenger_name, passenger_phone, cab_id, cab_type_id,
+        passenger_name, passenger_phone, passenger_email, cab_id, cab_type_id,
         service_type, number_of_hours, pickup_lat, pickup_lng, destination_lat, destination_lng,
         invoice_number, travel_date, "return_date"
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         from_location,
         to_location,
@@ -164,6 +165,7 @@ router.post('/bookings', [
         Number(fare_amount),
         passenger_name,
         passenger_phone,
+        passenger_email != null && String(passenger_email).trim() ? String(passenger_email).trim() : null,
         cab_id || null,
         cab_type_id || null,
         service_type || 'local',
@@ -196,7 +198,7 @@ router.post('/bookings', [
 router.put('/bookings/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { booking_status, cab_id, driver_id, invoice_number } = req.body;
+    const { booking_status, cab_id, driver_id, invoice_number, passenger_email } = req.body;
 
     const existing = await db.getAsync('SELECT * FROM bookings WHERE id = ?', [id]);
     if (!existing) {
@@ -204,6 +206,42 @@ router.put('/bookings/:id', async (req, res) => {
     }
 
     await ensureBookingsColumns();
+
+    // Record assignment history when cab_id changes (so previous drivers keep history)
+    if (cab_id !== undefined) {
+      await ensureBookingAssignmentHistoryTable();
+      const prevCabId = existing.cab_id ?? existing.CAB_ID;
+      const newCabId = cab_id || null;
+
+      if (prevCabId) {
+        const openRow = await db.getAsync(
+          'SELECT id FROM booking_assignment_history WHERE booking_id = ? AND unassigned_at IS NULL',
+          [id]
+        );
+        const prevDriverId = await getDriverIdForCab(prevCabId);
+        const assignedAt = (existing.assigned_at ?? existing.ASSIGNED_AT) || new Date().toISOString();
+        if (openRow) {
+          await db.runAsync(
+            'UPDATE booking_assignment_history SET unassigned_at = datetime(\'now\') WHERE booking_id = ? AND unassigned_at IS NULL',
+            [id]
+          );
+        } else {
+          await db.runAsync(
+            `INSERT INTO booking_assignment_history (booking_id, cab_id, driver_id, assigned_at, unassigned_at)
+             VALUES (?, ?, ?, ?, datetime('now'))`,
+            [id, prevCabId, prevDriverId, assignedAt]
+          );
+        }
+      }
+      if (newCabId) {
+        const newDriverId = await getDriverIdForCab(newCabId);
+        await db.runAsync(
+          `INSERT INTO booking_assignment_history (booking_id, cab_id, driver_id, assigned_at, unassigned_at)
+           VALUES (?, ?, ?, datetime('now'), NULL)`,
+          [id, newCabId, newDriverId]
+        );
+      }
+    }
 
     const updates = [];
     const values = [];
@@ -229,6 +267,10 @@ router.put('/bookings/:id', async (req, res) => {
     if (invoice_number !== undefined) {
       updates.push('invoice_number = ?');
       values.push(invoice_number ? String(invoice_number).trim() : null);
+    }
+    if (passenger_email !== undefined) {
+      updates.push('passenger_email = ?');
+      values.push(passenger_email != null && String(passenger_email).trim() ? String(passenger_email).trim() : null);
     }
 
     if (updates.length === 0 && driver_id == null) {
@@ -326,6 +368,7 @@ router.put('/bookings/:id', async (req, res) => {
       triggerDriverInfo({
         bookingId: 'NC' + id,
         customerEmail: customerEmailVal,
+        email: customerEmailVal,
         driverEmail,
         driverName,
         driverPhone,
@@ -414,6 +457,75 @@ router.post('/bookings/:id/send-driver-email', async (req, res) => {
   }
 });
 
+router.post('/bookings/:id/send-customer-email', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await ensureDriversEmailColumn();
+    await ensureCabsDriverEmailColumn();
+    const withCab = await db.getAsync(
+      `SELECT b.*, c.vehicle_number,
+        COALESCE(c.driver_name, d.name) as driver_name,
+        COALESCE(c.driver_phone, d.phone) as driver_phone,
+        COALESCE(d.email, c.driver_email) as driver_email
+       FROM bookings b
+       LEFT JOIN cabs c ON b.cab_id = c.id
+       LEFT JOIN drivers d ON d.email = c.driver_email
+       WHERE b.id = ?`,
+      [id]
+    );
+    if (!withCab) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+    if (!withCab.cab_id) {
+      return res.status(400).json({ error: 'No cab assigned to this booking' });
+    }
+    const pick = (row, ...preferredKeys) => {
+      if (!row || typeof row !== 'object') return '';
+      for (const k of preferredKeys) {
+        const v = row[k];
+        if (v != null && String(v).trim() !== '') return String(v).trim();
+      }
+      const target = preferredKeys[0].toLowerCase();
+      for (const key of Object.keys(row)) {
+        if (key.toLowerCase() === target) {
+          const v = row[key];
+          if (v != null && String(v).trim() !== '') return String(v).trim();
+          break;
+        }
+      }
+      return '';
+    };
+    const customerEmailVal = pick(withCab, 'passenger_email', 'PASSENGER_EMAIL');
+    if (!customerEmailVal) {
+      return res.status(400).json({ error: 'Customer email is missing — add it in the booking details first.' });
+    }
+    const driverName = pick(withCab, 'driver_name', 'DRIVER_NAME');
+    const driverPhone = pick(withCab, 'driver_phone', 'DRIVER_PHONE');
+    const cabNumber = pick(withCab, 'vehicle_number', 'VEHICLE_NUMBER');
+    const pickup = pick(withCab, 'from_location', 'FROM_LOCATION');
+    const drop = pick(withCab, 'to_location', 'TO_LOCATION');
+    const pickupTime = pick(withCab, 'travel_date', 'TRAVEL_DATE') || pick(withCab, 'booking_date', 'BOOKING_DATE');
+    triggerDriverInfo({
+      bookingId: 'NC' + id,
+      customerEmail: customerEmailVal,
+      email: customerEmailVal,
+      driverEmail: pick(withCab, 'driver_email', 'DRIVER_EMAIL'),
+      driverName,
+      driverPhone,
+      cabNumber,
+      pickup,
+      drop,
+      pickupTime,
+      sendDriverInfoToCustomer: true,
+      sendTripToDriver: false,
+    });
+    res.json({ ok: true, message: 'Driver info email sent to customer' });
+  } catch (error) {
+    console.error('Error sending customer email:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 async function ensureCabsCorporateOnlyColumn() {
   try {
     await db.runAsync('ALTER TABLE cabs ADD COLUMN corporate_only INTEGER DEFAULT 0');
@@ -436,6 +548,74 @@ async function ensureCabsDriverEmailColumn() {
   } catch (e) {
     // column may already exist
   }
+}
+
+async function ensureBookingAssignmentHistoryTable() {
+  await ensureBookingsColumns();
+  await ensureDriversEmailColumn();
+  await ensureCabsDriverEmailColumn();
+  try {
+    await db.runAsync(
+      `CREATE TABLE IF NOT EXISTS booking_assignment_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        booking_id INTEGER NOT NULL,
+        cab_id INTEGER,
+        driver_id INTEGER,
+        assigned_at DATETIME NOT NULL,
+        unassigned_at DATETIME,
+        FOREIGN KEY (booking_id) REFERENCES bookings(id) ON DELETE CASCADE,
+        FOREIGN KEY (cab_id) REFERENCES cabs(id) ON DELETE SET NULL,
+        FOREIGN KEY (driver_id) REFERENCES drivers(id) ON DELETE SET NULL
+      )`
+    );
+    // Backfill: for bookings that have cab_id but no current assignment row, add one
+    const withCab = await db.allAsync(
+      `SELECT b.id as booking_id, b.cab_id, b.assigned_at
+       FROM bookings b
+       WHERE b.cab_id IS NOT NULL
+       AND NOT EXISTS (
+         SELECT 1 FROM booking_assignment_history h
+         WHERE h.booking_id = b.id AND h.unassigned_at IS NULL
+       )`
+    );
+    for (const row of withCab || []) {
+      try {
+        const cabId = row.cab_id ?? row.CAB_ID;
+        const cab = await db.getAsync(
+          'SELECT driver_id, driver_email FROM cabs WHERE id = ?',
+          [cabId]
+        );
+        const driverId = cab
+          ? (cab.driver_id ?? cab.DRIVER_ID ?? (cab.driver_email || cab.DRIVER_EMAIL
+            ? (await db.getAsync('SELECT id FROM drivers WHERE email = ? LIMIT 1', [cab.driver_email || cab.DRIVER_EMAIL]))?.id
+            : null))
+          : null;
+        const assignedAt = (row.assigned_at ?? row.ASSIGNED_AT) || new Date().toISOString();
+        await db.runAsync(
+          `INSERT INTO booking_assignment_history (booking_id, cab_id, driver_id, assigned_at, unassigned_at)
+           VALUES (?, ?, ?, ?, NULL)`,
+          [row.booking_id ?? row.BOOKING_ID, cabId, driverId, assignedAt]
+        );
+      } catch (rowErr) {
+        console.warn('ensureBookingAssignmentHistoryTable: skip row', row?.booking_id, rowErr.message);
+      }
+    }
+  } catch (e) {
+    console.error('ensureBookingAssignmentHistoryTable:', e);
+  }
+}
+
+/** Resolve driver_id for a cab (from cabs.driver_id or drivers.email = cabs.driver_email). */
+async function getDriverIdForCab(cabId) {
+  if (!cabId) return null;
+  const cab = await db.getAsync('SELECT driver_id, driver_email FROM cabs WHERE id = ?', [cabId]);
+  if (!cab) return null;
+  const id = cab.driver_id ?? cab.DRIVER_ID;
+  if (id != null) return id;
+  const email = cab.driver_email ?? cab.DRIVER_EMAIL;
+  if (!email) return null;
+  const d = await db.getAsync('SELECT id FROM drivers WHERE email = ? LIMIT 1', [email]);
+  return d ? (d.id ?? d.ID) : null;
 }
 
 router.get('/cabs', async (req, res) => {
@@ -482,49 +662,58 @@ router.get('/drivers', async (req, res) => {
   }
 });
 
+const DRIVER_HISTORY_UNKNOWN_ID = 'unknown';
+
 router.get('/driver-history', async (req, res) => {
   try {
-    await ensureBookingsColumns();
-    await ensureDriversEmailColumn();
+    await ensureBookingAssignmentHistoryTable();
     const drivers = await db.allAsync(
-      'SELECT * FROM drivers WHERE is_active = 1 ORDER BY name'
+      'SELECT * FROM drivers ORDER BY name'
     );
-    const bookingRows = await db.allAsync(
-      `SELECT b.id, b.from_location, b.to_location, b.booking_status, b.travel_date, b.booking_date,
+    const assignmentRows = await db.allAsync(
+      `SELECT h.id as history_id, h.booking_id, h.cab_id, h.driver_id, h.assigned_at, h.unassigned_at,
+              b.from_location, b.to_location, b.booking_status, b.travel_date, b.booking_date,
               b.passenger_name, b.passenger_phone, b.fare_amount, b.invoice_number,
-              COALESCE(c.driver_id, (SELECT id FROM drivers WHERE email = c.driver_email LIMIT 1)) as driver_id,
               c.vehicle_number, ct.name as cab_type_name
-       FROM bookings b
-       INNER JOIN cabs c ON b.cab_id = c.id
+       FROM booking_assignment_history h
+       INNER JOIN bookings b ON b.id = h.booking_id
+       LEFT JOIN cabs c ON c.id = h.cab_id
        LEFT JOIN cab_types ct ON b.cab_type_id = ct.id
-       WHERE b.booking_status = 'completed'
-       ORDER BY b.travel_date DESC, b.id DESC`
+       ORDER BY h.assigned_at DESC`
     );
-    const byDriverId = {};
+    const driversById = {};
     for (const d of drivers || []) {
-      const id = d.id ?? d.ID;
-      byDriverId[id] = { driver: d, bookings: [] };
+      const did = d.id ?? d.ID;
+      driversById[did] = d;
     }
-    for (const row of bookingRows || []) {
+    const byDriverKey = {};
+    const unknownDriver = { id: DRIVER_HISTORY_UNKNOWN_ID, name: 'Unknown / Cab only', phone: null, email: null };
+    byDriverKey[DRIVER_HISTORY_UNKNOWN_ID] = { driver: unknownDriver, assignments: [] };
+    for (const row of assignmentRows || []) {
       const driverId = row.driver_id ?? row.DRIVER_ID;
-      if (driverId && byDriverId[driverId]) {
-        byDriverId[driverId].bookings.push({
-          id: row.id ?? row.ID,
-          from_location: row.from_location ?? row.FROM_LOCATION,
-          to_location: row.to_location ?? row.TO_LOCATION,
-          booking_status: row.booking_status ?? row.BOOKING_STATUS,
-          travel_date: row.travel_date ?? row.TRAVEL_DATE,
-          booking_date: row.booking_date ?? row.BOOKING_DATE,
-          passenger_name: row.passenger_name ?? row.PASSENGER_NAME,
-          passenger_phone: row.passenger_phone ?? row.PASSENGER_PHONE,
-          fare_amount: row.fare_amount ?? row.FARE_AMOUNT,
-          invoice_number: row.invoice_number ?? row.INVOICE_NUMBER,
-          vehicle_number: row.vehicle_number ?? row.VEHICLE_NUMBER,
-          cab_type_name: row.cab_type_name ?? row.CAB_TYPE_NAME,
-        });
+      const driverKey = (driverId != null && driversById[driverId]) ? driverId : DRIVER_HISTORY_UNKNOWN_ID;
+      if (!byDriverKey[driverKey]) {
+        byDriverKey[driverKey] = { driver: driversById[driverKey] || { id: driverKey, name: `Driver #${driverKey}`, phone: null, email: null }, assignments: [] };
       }
+      byDriverKey[driverKey].assignments.push({
+        history_id: row.history_id ?? row.HISTORY_ID,
+        booking_id: row.booking_id ?? row.BOOKING_ID,
+        from_location: row.from_location ?? row.FROM_LOCATION,
+        to_location: row.to_location ?? row.TO_LOCATION,
+        booking_status: row.booking_status ?? row.BOOKING_STATUS,
+        travel_date: row.travel_date ?? row.TRAVEL_DATE,
+        booking_date: row.booking_date ?? row.BOOKING_DATE,
+        passenger_name: row.passenger_name ?? row.PASSENGER_NAME,
+        passenger_phone: row.passenger_phone ?? row.PASSENGER_PHONE,
+        fare_amount: row.fare_amount ?? row.FARE_AMOUNT,
+        invoice_number: row.invoice_number ?? row.INVOICE_NUMBER,
+        vehicle_number: row.vehicle_number ?? row.VEHICLE_NUMBER,
+        cab_type_name: row.cab_type_name ?? row.CAB_TYPE_NAME,
+        assigned_at: row.assigned_at ?? row.ASSIGNED_AT,
+        unassigned_at: row.unassigned_at ?? row.UNASSIGNED_AT,
+      });
     }
-    res.json(Object.values(byDriverId));
+    res.json(Object.values(byDriverKey));
   } catch (error) {
     console.error('Error fetching driver history:', error);
     res.status(500).json({ error: 'Server error' });
@@ -660,6 +849,37 @@ router.get('/bookings/:id/invoice', async (req, res) => {
       ? { ...booking, invoice_number: invoiceNumberOverride }
       : booking;
     const pdfBuffer = await generateInvoicePDF(bookingForPdf, withGST);
+
+    const pick = (row, ...keys) => {
+      if (!row || typeof row !== 'object') return '';
+      for (const k of keys) {
+        const v = row[k];
+        if (v != null && String(v).trim() !== '') return String(v).trim();
+      }
+      const target = (keys[0] || '').toLowerCase();
+      for (const key of Object.keys(row)) {
+        if (key.toLowerCase() === target) {
+          const v = row[key];
+          if (v != null && String(v).trim() !== '') return String(v).trim();
+          break;
+        }
+      }
+      return '';
+    };
+    const customerEmailVal = pick(booking, 'passenger_email', 'PASSENGER_EMAIL');
+    const baseUrl = (process.env.BASE_URL || '').replace(/\/$/, '');
+    const pdfSecret = process.env.INVOICE_PDF_SECRET || '';
+    const pdfUrl = baseUrl && pdfSecret
+      ? `${baseUrl}/api/invoices/${id}/pdf?token=${encodeURIComponent(pdfSecret)}&with_gst=${withGST}`
+      : '';
+    triggerInvoiceGenerated({
+      customerEmail: customerEmailVal,
+      email: customerEmailVal,
+      invoiceId: bookingForPdf.invoice_number || 'INV' + id,
+      amount: '₹' + Number(booking.fare_amount || 0),
+      pdfUrl,
+    });
+
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="invoice-${id}${withGST ? '-with-gst' : ''}.pdf"`);
     res.send(pdfBuffer);
@@ -747,6 +967,7 @@ router.post('/invoice/create', [
     const customerEmailVal = passenger_email && String(passenger_email).trim() ? String(passenger_email).trim() : '';
     triggerInvoiceGenerated({
       customerEmail: customerEmailVal,
+      email: customerEmailVal,
       invoiceId: newBooking.invoice_number || 'INV' + newBooking.id,
       amount: '₹' + Number(fare_amount),
       pdfUrl,

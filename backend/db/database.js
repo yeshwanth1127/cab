@@ -1,9 +1,8 @@
 const path = require('path');
 
-const usePostgres =
-  process.env.DATABASE_URL ||
-  process.env.PG_HOST ||
-  process.env.PGHOST;
+const usePostgres = Boolean(
+  process.env.DATABASE_URL || process.env.PG_HOST || process.env.PGHOST
+);
 
 let db;
 let pool;

@@ -1,0 +1,203 @@
+{
+  "name": "Driver Info – Customer & Driver Emails",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "driver-info",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "5189fd2a-2028-4f2a-8a32-98d2f85d59f3",
+      "name": "driver info",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [-1200, -240],
+      "webhookId": "c0352eee-c9af-4351-897a-9a41c1907345"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nif (!item || !item.json) return [{ json: {} }];\nconst input = item.json;\nlet body = input.body ?? input;\nif (typeof body === 'string') { try { body = JSON.parse(body); } catch (_) { body = {}; } }\nif (!body || typeof body !== 'object') body = {};\nreturn [{ json: body }];"
+      },
+      "id": "extract-body-node",
+      "name": "Extract Body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1000, -240]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-customer",
+              "leftValue": "={{ $json.sendDriverInfoToCustomer }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "condition-email",
+              "leftValue": "={{ $json.customerEmail }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-send-to-customer",
+      "name": "IF Send to Customer",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-700, -380]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-driver",
+              "leftValue": "={{ $json.sendTripToDriver }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "condition-driver-email",
+              "leftValue": "={{ $json.driverEmail }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-send-to-driver",
+      "name": "IF Send to Driver",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-700, -100]
+    },
+    {
+      "parameters": {
+        "fromEmail": "Namma Cabs <info@namma-cabs.com>",
+        "toEmail": "={{ $json.customerEmail }}",
+        "subject": "Driver Details – {{ $json.bookingId }}",
+        "html": "<h3>Your Driver Details 🚖</h3><p><b>Name:</b> {{ $json.driverName }}</p><p><b>Phone:</b> {{ $json.driverPhone }}</p><p><b>Cab:</b> {{ $json.cabNumber }}</p><p><b>Pickup:</b> {{ $json.pickup }}</p><p><b>Drop:</b> {{ $json.drop }}</p>",
+        "options": {}
+      },
+      "id": "67f4219e-0174-4f2b-b3f2-072b2ef0c9eb",
+      "name": "Send Driver Info to Customer",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [-440, -420],
+      "credentials": {
+        "smtp": {
+          "id": "GQ63PHi6e1cQ465I",
+          "name": "info"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "Namma Cabs Ops <info@namma-cabs.com>",
+        "toEmail": "={{ $json.driverEmail }}",
+        "subject": "New Trip Assigned – {{ $json.bookingId }}",
+        "html": "<h3>New Trip Assigned</h3><p><b>Pickup:</b> {{ $json.pickup }}</p><p><b>Drop:</b> {{ $json.drop }}</p><p><b>Pickup time:</b> {{ $json.pickupTime }}</p>",
+        "options": {}
+      },
+      "id": "abed0cf5-7aa4-4d9a-bf0e-1ef9c0d86151",
+      "name": "Send Trip Info to Driver",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [-440, -20],
+      "credentials": {
+        "smtp": {
+          "id": "GQ63PHi6e1cQ465I",
+          "name": "info"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "driver info": {
+      "main": [
+        [
+          {
+            "node": "Extract Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Body": {
+      "main": [
+        [
+          {
+            "node": "IF Send to Customer",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "IF Send to Driver",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Send to Customer": {
+      "main": [
+        [
+          {
+            "node": "Send Driver Info to Customer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "IF Send to Driver": {
+      "main": [
+        [
+          {
+            "node": "Send Trip Info to Driver",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "e8fa9ff92c09cfd3e57716a41d0676a5daea9c627115e9c484a21d01abdcf6a8"
+  }
+}

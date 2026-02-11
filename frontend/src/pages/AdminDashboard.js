@@ -68,6 +68,8 @@ const AdminDashboard = () => {
   const [detailBooking, setDetailBooking] = useState(null);
   const [editingInvoiceNumber, setEditingInvoiceNumber] = useState('');
   const [invoiceNumberSaving, setInvoiceNumberSaving] = useState(false);
+  const [editingPassengerEmail, setEditingPassengerEmail] = useState('');
+  const [passengerEmailSaving, setPassengerEmailSaving] = useState(false);
   const [downloadInvoiceModal, setDownloadInvoiceModal] = useState({ open: false, booking: null, withGst: true });
   const [downloadInvoiceNumber, setDownloadInvoiceNumber] = useState('');
   const [downloadInvoiceSubmitting, setDownloadInvoiceSubmitting] = useState(false);
@@ -80,6 +82,7 @@ const AdminDashboard = () => {
   const [assignCabId, setAssignCabId] = useState('');
   const [assignSubmitting, setAssignSubmitting] = useState(false);
   const [sendDriverEmailId, setSendDriverEmailId] = useState(null);
+  const [sendCustomerEmailId, setSendCustomerEmailId] = useState(null);
   const [driverModal, setDriverModal] = useState(null);
   const [driverForm, setDriverForm] = useState({ name: '', phone: '', email: '', license_number: '', emergency_contact_name: '', emergency_contact_phone: '' });
   const [driverSubmitting, setDriverSubmitting] = useState(false);
@@ -89,6 +92,7 @@ const AdminDashboard = () => {
     to_location: '',
     passenger_name: '',
     passenger_phone: '',
+    passenger_email: '',
     fare_amount: '',
     service_type: 'local',
     number_of_hours: '',
@@ -135,6 +139,7 @@ const AdminDashboard = () => {
   const [othersAddCabSubmitting, setOthersAddCabSubmitting] = useState(false);
   const [driverHistory, setDriverHistory] = useState([]);
   const [driverHistoryLoading, setDriverHistoryLoading] = useState(false);
+  const [driverHistoryExpanded, setDriverHistoryExpanded] = useState({});
 
   const [tabFilter, setTabFilter] = useState({ search: '', serviceType: '', dateFrom: '', dateTo: '' });
 
@@ -496,10 +501,9 @@ const AdminDashboard = () => {
       if (activeTab !== TABS.dashboard) setStaleBookingsWarning(null);
       return;
     }
-    const terminal = ['completed', 'cancelled'];
     const cutoff = Date.now() - 24 * 60 * 60 * 1000;
     const stale = bookings.filter((b) => {
-      if (terminal.includes(b.booking_status)) return false;
+      if (b.booking_status !== 'pending') return false;
       const t = b.booking_date ? new Date(b.booking_date).getTime() : 0;
       return t > 0 && t < cutoff;
     });
@@ -525,6 +529,7 @@ const AdminDashboard = () => {
   useEffect(() => {
     if (detailBooking) {
       setEditingInvoiceNumber(detailBooking.invoice_number || '');
+      setEditingPassengerEmail(detailBooking.passenger_email || '');
     }
   }, [detailBooking]);
 
@@ -543,6 +548,22 @@ const AdminDashboard = () => {
       showToast(err.response?.data?.error || 'Failed to update invoice number', 'error');
     } finally {
       setInvoiceNumberSaving(false);
+    }
+  };
+
+  const handleSavePassengerEmail = async () => {
+    if (!detailBooking) return;
+    const val = (editingPassengerEmail || '').trim();
+    setPassengerEmailSaving(true);
+    try {
+      await api.put(`/admin/bookings/${detailBooking.id}`, { passenger_email: val || null });
+      setDetailBooking((prev) => (prev ? { ...prev, passenger_email: val || null } : null));
+      setBookings((prev) => prev.map((b) => (b.id === detailBooking.id ? { ...b, passenger_email: val || null } : b)));
+      showToast('Customer email updated.');
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to update customer email', 'error');
+    } finally {
+      setPassengerEmailSaving(false);
     }
   };
 
@@ -615,6 +636,19 @@ const AdminDashboard = () => {
       showToast(err.response?.data?.error || 'Failed to send email to driver', 'error');
     } finally {
       setSendDriverEmailId(null);
+    }
+  };
+
+  const handleSendCustomerEmail = async (booking) => {
+    if (!booking?.id) return;
+    setSendCustomerEmailId(booking.id);
+    try {
+      await api.post(`/admin/bookings/${booking.id}/send-customer-email`);
+      showToast('Driver info email sent to customer.');
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to send email to customer', 'error');
+    } finally {
+      setSendCustomerEmailId(null);
     }
   };
 
@@ -709,6 +743,7 @@ const AdminDashboard = () => {
         to_location: toAddress,
         passenger_name: createForm.passenger_name.trim(),
         passenger_phone: createForm.passenger_phone.trim(),
+        passenger_email: createForm.passenger_email?.trim() || undefined,
         fare_amount: Number(createForm.fare_amount),
         service_type: createForm.service_type,
         number_of_hours: createForm.service_type === 'local' && createForm.number_of_hours ? Number(createForm.number_of_hours) : null,
@@ -724,6 +759,7 @@ const AdminDashboard = () => {
         to_location: '',
         passenger_name: '',
         passenger_phone: '',
+        passenger_email: '',
         fare_amount: '',
         service_type: 'local',
         number_of_hours: '',
@@ -1664,6 +1700,7 @@ const AdminDashboard = () => {
                 <div className="admin-entry-card-row"><span className="key">From</span><span className="value">{b.from_location || '—'}</span></div>
                 <div className="admin-entry-card-row"><span className="key">To</span><span className="value">{b.to_location || '—'}</span></div>
                 <div className="admin-entry-card-row"><span className="key">Passenger</span><span className="value">{b.passenger_name || '—'}</span></div>
+                <div className="admin-entry-card-row"><span className="key">Email</span><span className="value">{b.passenger_email || '—'}</span></div>
                 <div className="admin-entry-card-row"><span className="key">Cab / Driver</span><span className="value">{(b.vehicle_number || b.driver_name || b.cab_id) ? [b.vehicle_number && `Cab: ${b.vehicle_number}`, b.driver_name && `Driver: ${b.driver_name}`].filter(Boolean).join(' · ') || (b.cab_id ? `Cab #${b.cab_id}` : '—') : '—'}</span></div>
               </div>
               <div className="admin-entry-card-actions">
@@ -1684,7 +1721,12 @@ const AdminDashboard = () => {
                   </>
                 )}
                 <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => openAssignModal(b, false)}>{b.cab_id ? 'Reassign' : 'Assign'}</button>
-                {b.cab_id && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendDriverEmail(b)} disabled={sendDriverEmailId === b.id}>{sendDriverEmailId === b.id ? '…' : 'Send email to driver'}</button>}
+                {b.cab_id && (
+                  <>
+                    <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendDriverEmail(b)} disabled={sendDriverEmailId === b.id}>{sendDriverEmailId === b.id ? '…' : 'Send email to driver'}</button>
+                    <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendCustomerEmail(b)} disabled={sendCustomerEmailId === b.id}>{sendCustomerEmailId === b.id ? '…' : 'Send email to customer'}</button>
+                  </>
+                )}
                 {b.maps_link && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link)}>Copy pickup map</button>}
                 {b.maps_link_drop && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link_drop)}>Copy drop map</button>}
                 {(b.driver_phone || b.driver_name) && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendWhatsApp(b)}>WhatsApp</button>}
@@ -2085,6 +2127,7 @@ const AdminDashboard = () => {
                           <div className="admin-entry-card-row"><span className="key">From</span><span className="value">{b.from_location || '—'}</span></div>
                           <div className="admin-entry-card-row"><span className="key">To</span><span className="value">{b.to_location || '—'}</span></div>
                           <div className="admin-entry-card-row"><span className="key">Passenger</span><span className="value">{b.passenger_name || '—'}</span></div>
+                          <div className="admin-entry-card-row"><span className="key">Email</span><span className="value">{b.passenger_email || '—'}</span></div>
                           <div className="admin-entry-card-row"><span className="key">Cab / Driver</span><span className="value">{(b.vehicle_number || b.driver_name || b.cab_id) ? [b.vehicle_number && `Cab: ${b.vehicle_number}`, b.driver_name && `Driver: ${b.driver_name}`].filter(Boolean).join(' · ') || (b.cab_id ? `Cab #${b.cab_id}` : '—') : '—'}</span></div>
                         </div>
                         <div className="admin-entry-card-actions">
@@ -2105,7 +2148,12 @@ const AdminDashboard = () => {
                             </>
                           )}
                           <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => openAssignModal(b, false)}>{b.cab_id ? 'Reassign' : 'Assign'}</button>
-                          {b.cab_id && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendDriverEmail(b)} disabled={sendDriverEmailId === b.id}>{sendDriverEmailId === b.id ? '…' : 'Send email to driver'}</button>}
+                          {b.cab_id && (
+                            <>
+                              <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendDriverEmail(b)} disabled={sendDriverEmailId === b.id}>{sendDriverEmailId === b.id ? '…' : 'Send email to driver'}</button>
+                              <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendCustomerEmail(b)} disabled={sendCustomerEmailId === b.id}>{sendCustomerEmailId === b.id ? '…' : 'Send email to customer'}</button>
+                            </>
+                          )}
                           {b.maps_link && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link)}>Copy pickup map</button>}
                           {b.maps_link_drop && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link_drop)}>Copy drop map</button>}
                           {(b.driver_phone || b.driver_name) && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendWhatsApp(b)}>WhatsApp</button>}
@@ -2287,6 +2335,15 @@ const AdminDashboard = () => {
                       value={createForm.passenger_phone}
                       onChange={(e) => setCreateForm((f) => ({ ...f, passenger_phone: e.target.value }))}
                       required
+                    />
+                  </div>
+                  <div className="admin-form-group">
+                    <label>Passenger email</label>
+                    <input
+                      type="email"
+                      value={createForm.passenger_email}
+                      onChange={(e) => setCreateForm((f) => ({ ...f, passenger_email: e.target.value }))}
+                      placeholder="Customer email for invoice/n8n"
                     />
                   </div>
                   <div className="admin-form-group">
@@ -2726,7 +2783,7 @@ const AdminDashboard = () => {
               <div className="admin-rate-meters-block admin-others-col open">
                 <button type="button" className="admin-rate-meters-block-btn" style={{ pointerEvents: 'none' }}>
                   <span>Add cabs</span>
-                  <span className="admin-rate-meters-block-meta">Add and manage cabs; assign driver and cab type</span>
+                  <span className="admin-rate-meters-block-meta">Add and manage cabs; assign cab type</span>
                 </button>
                 <div className="admin-rate-meters-block-body">
                   <div className="admin-modal-actions" style={{ marginBottom: 16 }}>
@@ -2739,21 +2796,17 @@ const AdminDashboard = () => {
                         <thead>
                           <tr>
                             <th>Vehicle number</th>
-                            <th>Driver</th>
-                            <th>Driver email</th>
                             <th>Cab type</th>
                             <th>Actions</th>
                           </tr>
                         </thead>
                         <tbody>
                           {(cabs || []).length === 0 && (
-                            <tr><td colSpan={5} className="admin-dashboard-list-empty">No cabs yet. Click "Add cab" and enter vehicle number and cab type.</td></tr>
+                            <tr><td colSpan={3} className="admin-dashboard-list-empty">No cabs yet. Click "Add cab" and enter vehicle number and cab type.</td></tr>
                           )}
                           {filteredCabs.map((c) => (
                             <tr key={c.id}>
                               <td>{c.name?.trim() || c.vehicle_number}</td>
-                              <td>{c.driver_name || '—'} {c.driver_phone ? `(${c.driver_phone})` : ''}</td>
-                              <td>{c.driver_email || '—'}</td>
                               <td>{c.cab_type_name || '—'}{c.cab_type_service_type ? ` (${(c.cab_type_service_type || '').charAt(0).toUpperCase() + (c.cab_type_service_type || '').slice(1).toLowerCase()})` : ''}</td>
                               <td className="actions">
                                 <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => { setOthersEditingCabId(c.id); setOthersAddCabForm({ cab_type_id: String(c.cab_type_id || ''), name: c.name || '', vehicle_number: c.vehicle_number || '', driver_name: c.driver_name || '', driver_phone: c.driver_phone || '', driver_email: c.driver_email || '' }); setOthersAddCabModalOpen(true); }}>Edit</button>
@@ -2771,54 +2824,75 @@ const AdminDashboard = () => {
               <div className="admin-rate-meters-block admin-others-col open">
                 <button type="button" className="admin-rate-meters-block-btn" style={{ pointerEvents: 'none' }}>
                   <span>Driver history</span>
-                  <span className="admin-rate-meters-block-meta">Previous bookings per driver</span>
+                  <span className="admin-rate-meters-block-meta">Full assignment history per driver (expand to see)</span>
                 </button>
                 <div className="admin-rate-meters-block-body">
                   {driverHistoryLoading && <p className="admin-dashboard-list-loading">Loading driver history…</p>}
                   {!driverHistoryLoading && (!driverHistory || driverHistory.length === 0) && (
-                    <p className="admin-dashboard-list-empty">No drivers or no bookings yet.</p>
+                    <p className="admin-dashboard-list-empty">No drivers or no assignments yet.</p>
                   )}
                   {!driverHistoryLoading && driverHistory && driverHistory.length > 0 && (
                     <div className="admin-driver-history-list">
-                      {driverHistory.map(({ driver, bookings: driverBookings }) => (
-                        <div key={driver.id} className="admin-driver-history-driver">
-                          <h4 className="admin-driver-history-driver-name">
-                            {driver.name}
-                            {driver.phone && <span className="admin-driver-history-driver-phone"> — {driver.phone}</span>}
-                            <span className="admin-driver-history-count"> ({driverBookings.length} booking{driverBookings.length !== 1 ? 's' : ''})</span>
-                          </h4>
-                          {driverBookings.length === 0 ? (
-                            <p className="admin-dashboard-list-empty">No previous bookings.</p>
-                          ) : (
-                            <div className="admin-table-wrap">
-                              <table className="admin-table">
-                                <thead>
-                                  <tr>
-                                    <th>Date</th>
-                                    <th>From → To</th>
-                                    <th>Passenger</th>
-                                    <th>Fare</th>
-                                    <th>Status</th>
-                                    <th>Invoice</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {driverBookings.map((b) => (
-                                    <tr key={b.id}>
-                                      <td>{(b.travel_date || b.booking_date) ? new Date(b.travel_date || b.booking_date).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : '—'}</td>
-                                      <td>{[b.from_location, b.to_location].filter(Boolean).join(' → ') || '—'}</td>
-                                      <td>{b.passenger_name || '—'}</td>
-                                      <td>{b.fare_amount != null ? `₹${Number(b.fare_amount).toLocaleString()}` : '—'}</td>
-                                      <td>{b.booking_status || '—'}</td>
-                                      <td>{b.invoice_number || '—'}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          )}
-                        </div>
-                      ))}
+                      {driverHistory.map(({ driver, assignments: driverAssignments }) => {
+                        const count = (driverAssignments || []).length;
+                        const driverKey = driver?.id ?? 'unknown';
+                        const isExpanded = driverHistoryExpanded[driverKey];
+                        return (
+                          <div key={driverKey} className="admin-driver-history-driver">
+                            <button
+                              type="button"
+                              className="admin-driver-history-driver-header"
+                              onClick={() => setDriverHistoryExpanded((prev) => ({ ...prev, [driverKey]: !prev[driverKey] }))}
+                              aria-expanded={!!isExpanded}
+                            >
+                              <span className="admin-driver-history-driver-name">
+                                {driver.name}
+                                {driver.phone && <span className="admin-driver-history-driver-phone"> — {driver.phone}</span>}
+                                <span className="admin-driver-history-count"> ({count} assignment{count !== 1 ? 's' : ''})</span>
+                              </span>
+                              <span className="admin-driver-history-toggle">{isExpanded ? '▼' : '▶'}</span>
+                            </button>
+                            {isExpanded && (
+                              <>
+                                {!count ? (
+                                  <p className="admin-dashboard-list-empty">No assignment history.</p>
+                                ) : (
+                                  <div className="admin-table-wrap">
+                                    <table className="admin-table">
+                                      <thead>
+                                        <tr>
+                                          <th>Assigned at</th>
+                                          <th>Unassigned at</th>
+                                          <th>Trip date</th>
+                                          <th>From → To</th>
+                                          <th>Passenger</th>
+                                          <th>Fare</th>
+                                          <th>Status</th>
+                                          <th>Invoice</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {(driverAssignments || []).map((a) => (
+                                          <tr key={`${a.booking_id}-${a.history_id || a.assigned_at}`}>
+                                            <td>{a.assigned_at ? new Date(a.assigned_at).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : '—'}</td>
+                                            <td>{a.unassigned_at ? new Date(a.unassigned_at).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : 'Current'}</td>
+                                            <td>{(a.travel_date || a.booking_date) ? new Date(a.travel_date || a.booking_date).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : '—'}</td>
+                                            <td>{[a.from_location, a.to_location].filter(Boolean).join(' → ') || '—'}</td>
+                                            <td>{a.passenger_name || '—'}</td>
+                                            <td>{a.fare_amount != null ? `₹${Number(a.fare_amount).toLocaleString()}` : '—'}</td>
+                                            <td>{a.booking_status || '—'}</td>
+                                            <td>{a.invoice_number || '—'}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -2859,18 +2933,6 @@ const AdminDashboard = () => {
                 <div className="admin-form-group">
                   <label>Vehicle number</label>
                   <input type="text" value={othersAddCabForm.vehicle_number} onChange={(e) => setOthersAddCabForm((f) => ({ ...f, vehicle_number: e.target.value }))} required />
-                </div>
-                <div className="admin-form-group">
-                  <label>Driver email</label>
-                  <input type="email" value={othersAddCabForm.driver_email} onChange={(e) => setOthersAddCabForm((f) => ({ ...f, driver_email: e.target.value }))} placeholder="Same as in Others → Drivers (for trip emails)" />
-                </div>
-                <div className="admin-form-group">
-                  <label>Driver name</label>
-                  <input type="text" value={othersAddCabForm.driver_name} onChange={(e) => setOthersAddCabForm((f) => ({ ...f, driver_name: e.target.value }))} placeholder="Optional" />
-                </div>
-                <div className="admin-form-group">
-                  <label>Driver phone</label>
-                  <input type="text" value={othersAddCabForm.driver_phone} onChange={(e) => setOthersAddCabForm((f) => ({ ...f, driver_phone: e.target.value }))} placeholder="Optional" />
                 </div>
               </div>
               <div className="admin-modal-actions">
@@ -2977,6 +3039,7 @@ const AdminDashboard = () => {
                         <div className="admin-entry-card-row"><span className="key">From</span><span className="value">{b.from_location || '—'}</span></div>
                         <div className="admin-entry-card-row"><span className="key">To</span><span className="value">{b.to_location || '—'}</span></div>
                         <div className="admin-entry-card-row"><span className="key">Passenger</span><span className="value">{b.passenger_name || '—'}</span></div>
+                        <div className="admin-entry-card-row"><span className="key">Email</span><span className="value">{b.passenger_email || '—'}</span></div>
                         <div className="admin-entry-card-row"><span className="key">Cab / Driver</span><span className="value">{(b.vehicle_number || b.driver_name || b.cab_id) ? [b.vehicle_number && `Cab: ${b.vehicle_number}`, b.driver_name && `Driver: ${b.driver_name}`].filter(Boolean).join(' · ') || (b.cab_id ? `Cab #${b.cab_id}` : '—') : '—'}</span></div>
                         <div className="admin-entry-card-row"><span className="key">Fare</span><span className="value">₹{b.fare_amount != null ? Number(b.fare_amount).toFixed(2) : '—'}</span></div>
                       </div>
@@ -3611,6 +3674,22 @@ const AdminDashboard = () => {
               <div className="admin-detail-row"><span className="key">From</span><span className="value">{detailBooking.from_location}</span></div>
               <div className="admin-detail-row"><span className="key">To</span><span className="value">{detailBooking.to_location}</span></div>
               <div className="admin-detail-row"><span className="key">Passenger</span><span className="value">{detailBooking.passenger_name} / {detailBooking.passenger_phone}</span></div>
+              <div className="admin-detail-row admin-detail-row-editable">
+                <span className="key">Customer email</span>
+                <span className="value" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <input
+                    type="email"
+                    className="admin-input admin-input-sm"
+                    value={editingPassengerEmail}
+                    onChange={(e) => setEditingPassengerEmail(e.target.value)}
+                    placeholder="For driver info / invoice emails"
+                    style={{ width: 240 }}
+                  />
+                  <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={handleSavePassengerEmail} disabled={passengerEmailSaving}>
+                    {passengerEmailSaving ? 'Saving…' : 'Save'}
+                  </button>
+                </span>
+              </div>
               <div className="admin-detail-row"><span className="key">Service type</span><span className="value">{detailBooking.service_type === 'local' ? 'Local' : detailBooking.service_type === 'airport' ? 'Airport' : detailBooking.service_type === 'outstation' ? 'Outstation' : detailBooking.service_type || '—'}</span></div>
               {detailBooking.service_type === 'local' && detailBooking.number_of_hours != null && (
                 <div className="admin-detail-row"><span className="key">Hour package</span><span className="value">{detailBooking.number_of_hours} {Number(detailBooking.number_of_hours) === 1 ? 'hour' : 'hours'}</span></div>
@@ -3633,6 +3712,15 @@ const AdminDashboard = () => {
                 <div className="admin-detail-row"><span className="key">Cab</span><span className="value">{detailBooking.vehicle_number || `#${detailBooking.cab_id}`}</span></div>
               )}
               <div className="admin-detail-row"><span className="key">Assigned driver</span><span className="value">{(detailBooking.driver_name || detailBooking.driver_phone) ? [detailBooking.driver_name, detailBooking.driver_phone].filter(Boolean).join(' — ') : '—'}</span></div>
+              {detailBooking.cab_id && (
+                <div className="admin-detail-row admin-detail-row-actions" style={{ gap: 8, flexWrap: 'wrap' }}>
+                  <span className="key">Send emails</span>
+                  <span className="value" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendDriverEmail(detailBooking)} disabled={sendDriverEmailId === detailBooking.id}>{sendDriverEmailId === detailBooking.id ? '…' : 'Send email to driver'}</button>
+                    <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendCustomerEmail(detailBooking)} disabled={sendCustomerEmailId === detailBooking.id}>{sendCustomerEmailId === detailBooking.id ? '…' : 'Send email to customer'}</button>
+                  </span>
+                </div>
+              )}
               <div className="admin-detail-row admin-detail-row-actions" style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #e5e7eb', gap: 8, flexWrap: 'wrap' }}>
                 <span className="key" style={{ width: '100%', marginBottom: 4 }}>Update status</span>
                 <span className="value" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>

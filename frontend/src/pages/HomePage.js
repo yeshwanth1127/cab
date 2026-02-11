@@ -48,6 +48,20 @@ const HomePage = () => {
 
   const fromAddress = fromLocation?.address || '';
 
+  // Minimum pickup = now (no dates/times before today/current moment)
+  const minPickupDatetime = () => new Date().toISOString().slice(0, 16);
+
+  // Return date cannot be before pickup; when pickup changes, clear return if it becomes invalid
+  useEffect(() => {
+    if (!travelDatetime || !outstationReturnDatetime) return;
+    if (new Date(outstationReturnDatetime) <= new Date(travelDatetime)) {
+      setOutstationReturnDatetime('');
+    }
+  }, [travelDatetime]);
+
+  const isPickupInPast = travelDatetime && new Date(travelDatetime) <= new Date();
+  const isReturnBeforePickup = outstationTripType !== 'one_way' && travelDatetime && outstationReturnDatetime && new Date(outstationReturnDatetime) <= new Date(travelDatetime);
+
   // Local service is only available within Bangalore
   const BANGALORE_BOUNDS = { latMin: 12.77, latMax: 13.22, lngMin: 77.38, lngMax: 77.82 };
   const isWithinBangalore = (location) => {
@@ -83,6 +97,7 @@ const HomePage = () => {
   const airportLocationAddress = airportLocation?.address || '';
 
   const handleContinueToOutstationCabSelection = () => {
+    if (isPickupInPast || isReturnBeforePickup) return;
     if (outstationTripType === 'one_way') {
       const fromAddr = outstationFrom?.address || '';
       const toAddr = outstationTo?.address || '';
@@ -98,7 +113,7 @@ const HomePage = () => {
           to_lat: outstationTo?.lat ?? null,
           to_lng: outstationTo?.lng ?? null,
           travel_datetime: travelDatetime || null,
-          return_datetime: outstationReturnDatetime || null,
+          return_datetime: null,
         },
       });
     } else if (outstationTripType === 'round_trip') {
@@ -349,14 +364,17 @@ const HomePage = () => {
                     value={travelDatetime}
                     onChange={setTravelDatetime}
                     placeholder="Select pickup date and time"
-                    min={new Date().toISOString().slice(0, 16)}
+                    min={minPickupDatetime()}
                     className="home-flow-datetime-picker"
                   />
+                  {isPickupInPast && (
+                    <p className="home-form-error" role="alert">Pickup date and time must be in the future.</p>
+                  )}
                 </div>
                 <button
                   type="button"
                   className="home-continue-btn"
-                  disabled={!airportLocationAddress.trim()}
+                  disabled={!airportLocationAddress.trim() || isPickupInPast}
                   onClick={handleContinueToAirportCabSelection}
                 >
                   Continue
@@ -513,29 +531,37 @@ const HomePage = () => {
                     value={travelDatetime}
                     onChange={setTravelDatetime}
                     placeholder="Select pickup date and time"
-                    min={new Date().toISOString().slice(0, 16)}
+                    min={minPickupDatetime()}
                     className="home-flow-datetime-picker"
                   />
+                  {isPickupInPast && (
+                    <p className="home-form-error" role="alert">Pickup date and time must be in the future.</p>
+                  )}
                 </div>
-                <div className="home-form-group">
-                  <label className="home-form-label">Return date (optional)</label>
-                  <DateTimePicker
-                    value={outstationReturnDatetime}
-                    onChange={setOutstationReturnDatetime}
-                    placeholder="Select return date and time"
-                    min={new Date().toISOString().slice(0, 16)}
-                    className="home-flow-datetime-picker"
-                  />
-                </div>
+                {outstationTripType !== 'one_way' && (
+                  <div className="home-form-group">
+                    <label className="home-form-label">Return date (optional)</label>
+                    <DateTimePicker
+                      value={outstationReturnDatetime}
+                      onChange={setOutstationReturnDatetime}
+                      placeholder="Select return date and time"
+                      min={travelDatetime || minPickupDatetime()}
+                      className="home-flow-datetime-picker"
+                    />
+                    {isReturnBeforePickup && (
+                      <p className="home-form-error" role="alert">Return date must be after pickup date.</p>
+                    )}
+                  </div>
+                )}
                 <button
                   type="button"
                   className="home-continue-btn"
                   disabled={
                     outstationTripType === 'one_way'
-                      ? !(outstationFrom?.address || '').trim() || !(outstationTo?.address || '').trim()
+                      ? !(outstationFrom?.address || '').trim() || !(outstationTo?.address || '').trim() || isPickupInPast
                       : outstationTripType === 'round_trip'
-                        ? !(outstationFrom?.address || '').trim() || !(Number(outstationRoundTripDays) >= 1)
-                        : !(outstationPickup?.address || '').trim() || outstationStops.every((s) => !(s?.address || '').trim())
+                        ? !(outstationFrom?.address || '').trim() || !(Number(outstationRoundTripDays) >= 1) || isPickupInPast || isReturnBeforePickup
+                        : !(outstationPickup?.address || '').trim() || outstationStops.every((s) => !(s?.address || '').trim()) || isPickupInPast || isReturnBeforePickup
                   }
                   onClick={handleContinueToOutstationCabSelection}
                 >
@@ -600,14 +626,17 @@ const HomePage = () => {
                       value={travelDatetime}
                       onChange={setTravelDatetime}
                       placeholder="Select pickup date and time"
-                      min={new Date().toISOString().slice(0, 16)}
+                      min={minPickupDatetime()}
                       className="home-flow-datetime-picker"
                     />
+                    {isPickupInPast && (
+                      <p className="home-form-error" role="alert">Pickup date and time must be in the future.</p>
+                    )}
                   </div>
                   <button
                     type="button"
                     className="home-continue-btn"
-                    disabled={!fromAddress.trim() || !numberOfHours}
+                    disabled={!fromAddress.trim() || !numberOfHours || isPickupInPast}
                     onClick={handleContinueToCabSelection}
                   >
                     Continue
@@ -812,7 +841,7 @@ const HomePage = () => {
                   value={confirmTravelDatetime}
                   onChange={setConfirmTravelDatetime}
                   placeholder="Select pickup date and time"
-                  min={new Date().toISOString().slice(0, 16)}
+                  min={minPickupDatetime()}
                   className="home-datetime-picker"
                 />
               </div>

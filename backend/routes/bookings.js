@@ -130,8 +130,10 @@ router.post('/', async (req, res) => {
     } catch (e) {
 
     }
+    const customerEmail = (newBooking.passenger_email || newBooking.PASSENGER_EMAIL || '').trim();
     triggerBookingSuccess({
-      customerEmail: newBooking.passenger_email || '',
+      customerEmail,
+      email: customerEmail,
       bookingId: 'NC' + newBooking.id,
       pickup: newBooking.from_location || '',
       drop: newBooking.to_location || '',
