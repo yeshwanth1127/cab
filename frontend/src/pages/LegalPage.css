@@ -1,0 +1,133 @@
+/* Legal pages: Privacy Policy, Terms of Service */
+.legal-page .booking-map-wrapper {
+  min-height: 30vh;
+}
+
+.legal-section {
+  min-height: 60vh;
+  padding-top: 32px;
+  padding-bottom: 48px;
+  background: radial-gradient(circle at 30% 10%, rgba(15, 23, 42, 0.95), #020617);
+  color: #e5e7eb;
+}
+
+.legal-inner {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 24px 28px 40px;
+}
+
+.legal-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 28px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 8px;
+}
+
+.legal-title-icon {
+  color: #16a34a;
+  flex-shrink: 0;
+}
+
+.legal-updated {
+  font-size: 14px;
+  color: #94a3b8;
+  margin-bottom: 28px;
+}
+
+.legal-content {
+  font-size: 15px;
+  line-height: 1.75;
+  color: #e5e7eb;
+}
+
+.legal-intro {
+  margin-bottom: 24px;
+  padding: 16px 20px;
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: 12px;
+  border-left: 4px solid #16a34a;
+}
+
+.legal-content h2 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #16a34a;
+  margin-top: 28px;
+  margin-bottom: 10px;
+}
+
+.legal-content h2:first-of-type {
+  margin-top: 0;
+}
+
+.legal-content p {
+  margin-bottom: 12px;
+  color: #cbd5e1;
+}
+
+.legal-content ul {
+  margin: 8px 0 16px;
+  padding-left: 22px;
+}
+
+.legal-content li {
+  margin-bottom: 6px;
+  color: #cbd5e1;
+}
+
+.legal-content a {
+  color: #16a34a;
+  text-decoration: none;
+}
+
+.legal-content a:hover {
+  text-decoration: underline;
+}
+
+.legal-footer-links {
+  margin-top: 40px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(148, 163, 184, 0.3);
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.legal-link {
+  color: #16a34a;
+  text-decoration: none;
+}
+
+.legal-link:hover {
+  text-decoration: underline;
+}
+
+.legal-sep {
+  color: #64748b;
+  user-select: none;
+}
+
+@media (max-width: 768px) {
+  .legal-inner {
+    padding: 20px 18px 32px;
+  }
+
+  .legal-title {
+    font-size: 22px;
+  }
+
+  .legal-content {
+    font-size: 14px;
+  }
+
+  .legal-content h2 {
+    font-size: 16px;
+  }
+}

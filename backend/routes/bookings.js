@@ -2,6 +2,7 @@ const express = require('express');
 const db = require('../db/database');
 const { generateGoogleMapsLink } = require('../utils/mapsLink');
 const { triggerBookingSuccess } = require('../services/n8nWebhooks');
+const { sendBookingConfirmation } = require('../services/whatsappService');
 
 const router = express.Router();
 
@@ -139,6 +140,8 @@ router.post('/', async (req, res) => {
       drop: newBooking.to_location || '',
       time: formatTimeForWebhook(newBooking.travel_date),
     });
+    // WhatsApp: send booking confirmation to customer (fire-and-forget)
+    sendBookingConfirmation(newBooking).catch((err) => console.error('[WhatsApp] Booking confirmation send failed:', err));
     res.status(201).json(newBooking);
   } catch (error) {
     console.error('Error creating booking:', error);

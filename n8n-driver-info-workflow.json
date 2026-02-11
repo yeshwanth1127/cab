@@ -105,8 +105,8 @@
       "parameters": {
         "fromEmail": "Namma Cabs <info@namma-cabs.com>",
         "toEmail": "={{ $json.customerEmail }}",
-        "subject": "Driver Details – {{ $json.bookingId }}",
-        "html": "<h3>Your Driver Details 🚖</h3><p><b>Name:</b> {{ $json.driverName }}</p><p><b>Phone:</b> {{ $json.driverPhone }}</p><p><b>Cab:</b> {{ $json.cabNumber }}</p><p><b>Pickup:</b> {{ $json.pickup }}</p><p><b>Drop:</b> {{ $json.drop }}</p>",
+        "subject": "={{ 'Driver Details – ' + $json.bookingId }}",
+        "html": "={{ '<h3>Your Driver Details 🚖</h3><p><b>Name:</b> ' + ($json.driverName || '') + '</p><p><b>Phone:</b> ' + ($json.driverPhone || '') + '</p><p><b>Cab:</b> ' + ($json.cabNumber || '') + '</p><p><b>Pickup:</b> ' + ($json.pickup || '') + '</p><p><b>Pickup time:</b> ' + ($json.pickupTime || '') + '</p><p><b>Drop:</b> ' + ($json.drop || '') + '</p>' }}",
         "options": {}
       },
       "id": "67f4219e-0174-4f2b-b3f2-072b2ef0c9eb",
@@ -125,8 +125,8 @@
       "parameters": {
         "fromEmail": "Namma Cabs Ops <info@namma-cabs.com>",
         "toEmail": "={{ $json.driverEmail }}",
-        "subject": "New Trip Assigned – {{ $json.bookingId }}",
-        "html": "<h3>New Trip Assigned</h3><p><b>Pickup:</b> {{ $json.pickup }}</p><p><b>Drop:</b> {{ $json.drop }}</p><p><b>Pickup time:</b> {{ $json.pickupTime }}</p>",
+        "subject": "={{ 'New Trip Assigned – ' + $json.bookingId }}",
+        "html": "={{ '<h3>New Trip Assigned</h3><p><b>Pickup:</b> ' + ($json.pickup || '') + '</p><p><b>Drop:</b> ' + ($json.drop || '') + '</p><p><b>Pickup time:</b> ' + ($json.pickupTime || '') + '</p>' }}",
         "options": {}
       },
       "id": "abed0cf5-7aa4-4d9a-bf0e-1ef9c0d86151",

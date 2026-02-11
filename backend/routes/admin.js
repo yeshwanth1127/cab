@@ -5,6 +5,7 @@ const { authenticateToken, requireAdmin } = require('../middleware/auth');
 const { generateInvoicePDF } = require('../services/invoiceService');
 const { generateGoogleMapsLink } = require('../utils/mapsLink');
 const { triggerDriverInfo, triggerInvoiceGenerated } = require('../services/n8nWebhooks');
+const { sendDriverInfoToCustomerWhatsApp } = require('../services/whatsappService');
 
 const router = express.Router();
 
@@ -379,6 +380,21 @@ router.put('/bookings/:id', async (req, res) => {
         sendDriverInfoToCustomer: true,
         sendTripToDriver: false,
       });
+      // WhatsApp: send driver info to customer when admin assigns driver
+      const customerPhone = pick(withCab, 'passenger_phone', 'PASSENGER_PHONE');
+      if (customerPhone) {
+        sendDriverInfoToCustomerWhatsApp(customerPhone, {
+          bookingId: 'NC' + id,
+          driverName,
+          driverPhone,
+          cabNumber,
+          pickup,
+          drop,
+          pickupTime,
+        }).catch((err) => console.error('[WhatsApp] Driver info to customer failed:', err));
+      } else {
+        n8nWarnings.push('Customer phone is missing — customer will not receive driver info via WhatsApp.');
+      }
       if (!customerEmailVal) n8nWarnings.push('Customer email is missing — customer will not receive driver info email.');
       if (!cabNumber) n8nWarnings.push('Cab number is missing.');
     }
@@ -519,6 +535,18 @@ router.post('/bookings/:id/send-customer-email', async (req, res) => {
       sendDriverInfoToCustomer: true,
       sendTripToDriver: false,
     });
+    const customerPhone = pick(withCab, 'passenger_phone', 'PASSENGER_PHONE');
+    if (customerPhone) {
+      sendDriverInfoToCustomerWhatsApp(customerPhone, {
+        bookingId: 'NC' + id,
+        driverName,
+        driverPhone,
+        cabNumber,
+        pickup,
+        drop,
+        pickupTime,
+      }).catch((err) => console.error('[WhatsApp] Driver info to customer failed:', err));
+    }
     res.json({ ok: true, message: 'Driver info email sent to customer' });
   } catch (error) {
     console.error('Error sending customer email:', error);

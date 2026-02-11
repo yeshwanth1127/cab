@@ -165,7 +165,7 @@ const CarOptions = () => {
           </div>
         </div>
         <div className="unified-cab-card-terms-block">
-          <a href="/terms" className="unified-cab-card-link">Terms &amp; Condition</a>
+          <Link to="/terms-of-service" className="unified-cab-card-link">Terms &amp; Conditions</Link>
           <span className="unified-cab-card-link-sep">|</span>
           <a href="/fare-details" className="unified-cab-card-link">Fare Details</a>
         </div>

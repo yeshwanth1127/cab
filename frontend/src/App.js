@@ -8,6 +8,8 @@ import AdminDashboard from './pages/AdminDashboard';
 import UserAuth from './pages/UserAuth';
 import AboutPage from './pages/AboutPage';
 import ContactPage from './pages/ContactPage';
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
+import TermsOfServicePage from './pages/TermsOfServicePage';
 import AccountPage from './pages/AccountPage';
 import CorporateBookingPage from './pages/CorporateBookingPage';
 import EventsPage from './pages/EventsPage';
@@ -40,6 +42,8 @@ function App() {
             <Route path="/check-booking" element={<CheckBooking />} />
             <Route path="/about" element={<AboutPage />} />
             <Route path="/contact" element={<ContactPage />} />
+            <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+            <Route path="/terms-of-service" element={<TermsOfServicePage />} />
             <Route path="/corporate" element={<CorporateBookingPage />} />
             <Route path="/events" element={<EventsPage />} />
             <Route path="/admin/login" element={<AdminLogin />} />
