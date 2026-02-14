@@ -124,6 +124,7 @@ export default function DateTimePicker({ value = '', onChange, placeholder, disa
     if (!slot) return;
     const d = new Date(date.getFullYear(), date.getMonth(), date.getDate(), slot.h, slot.m, 0, 0);
     onChange(toISOLocal(d));
+    setOpen(false);
   };
 
   const handleDateClick = (year, month, day) => {
@@ -136,8 +137,7 @@ export default function DateTimePicker({ value = '', onChange, placeholder, disa
   const handleTimeClick = (label) => {
     setSelectedTime(label);
     if (selectedDate) {
-      const d = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
-      commit(d, label);
+      commit(selectedDate, label);
     }
   };
 

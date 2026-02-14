@@ -3,13 +3,19 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import LocationInput from '../components/LocationInput';
 import Icon from '../components/Icon';
-import TimePicker from '../components/TimePicker';
 import AnimatedMapBackground from '../components/AnimatedMapBackground';
 import MainNavbar from '../components/MainNavbar';
 import './EventsPage.css';
 
 const handleDateInputClick = (e) => {
+  if (e.target.showPicker) {
+    e.target.showPicker();
+  } else {
+    e.target.focus();
+  }
+};
 
+const handleTimeInputClick = (e) => {
   if (e.target.showPicker) {
     e.target.showPicker();
   } else {
@@ -395,13 +401,18 @@ const EventsPage = () => {
 
                   <div className="form-group">
                     <label>Pickup Time *</label>
-                    <TimePicker
+                    <input
+                      type="time"
+                      name="pickup_time"
                       value={formData.pickup_time}
-                      onChange={(v) => handleChange({ target: { name: 'pickup_time', value: v } })}
-                      placeholder="Pick time"
+                      onChange={handleChange}
+                      onClick={handleTimeInputClick}
                       className={errors.pickup_time ? 'error' : ''}
+                      required
+                      aria-invalid={!!errors.pickup_time}
+                      aria-describedby={errors.pickup_time ? 'events-pickup-time-error' : undefined}
                     />
-                    {errors.pickup_time && <span className="error-message">{errors.pickup_time}</span>}
+                    {errors.pickup_time && <span id="events-pickup-time-error" className="error-message">{errors.pickup_time}</span>}
                   </div>
 
                   <div className="form-group">
