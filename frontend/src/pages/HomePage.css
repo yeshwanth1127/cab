@@ -1274,6 +1274,45 @@
   background: #15803d;
 }
 
+.home-routes-pages-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 40px 0 8px;
+}
+
+.home-routes-pages-desc {
+  font-size: 0.9rem;
+  color: #64748b;
+  margin: 0 0 20px;
+}
+
+.home-routes-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+  justify-content: center;
+  align-items: center;
+}
+
+.home-routes-link {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #16a34a;
+  text-decoration: none;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.home-routes-link:hover {
+  background: #dcfce7;
+  border-color: #16a34a;
+  color: #15803d;
+}
+
 
 .home-testimonials-section {
   padding: 56px 0 64px;

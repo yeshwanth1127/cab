@@ -17,7 +17,9 @@ if (!url) {
 
 const payload = {
   bookingId: 'NC-debug',
-  customerEmail: '',
+  customerEmail: 'customer@example.com',
+  customerName: 'Test Customer',
+  customerPhone: '9876543210',
   driverEmail: 'driver@example.com',
   driverName: 'Test Driver',
   driverPhone: '9999999999',

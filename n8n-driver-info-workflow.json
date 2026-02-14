@@ -126,7 +126,7 @@
         "fromEmail": "Namma Cabs Ops <info@namma-cabs.com>",
         "toEmail": "={{ $json.driverEmail }}",
         "subject": "={{ 'New Trip Assigned – ' + $json.bookingId }}",
-        "html": "={{ '<h3>New Trip Assigned</h3><p><b>Pickup:</b> ' + ($json.pickup || '') + '</p><p><b>Drop:</b> ' + ($json.drop || '') + '</p><p><b>Pickup time:</b> ' + ($json.pickupTime || '') + '</p>' }}",
+        "html": "={{ '<h3>New Trip Assigned</h3><p><b>Customer name:</b> ' + ($json.customerName || '—') + '</p><p><b>Customer phone:</b> ' + ($json.customerPhone || '—') + '</p><p><b>Customer email:</b> ' + ($json.customerEmail || '—') + '</p><p><b>Pickup:</b> ' + ($json.pickup || '') + '</p><p><b>Drop:</b> ' + ($json.drop || '') + '</p><p><b>Pickup time:</b> ' + ($json.pickupTime || '') + '</p>' }}",
         "options": {}
       },
       "id": "abed0cf5-7aa4-4d9a-bf0e-1ef9c0d86151",

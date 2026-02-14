@@ -83,6 +83,7 @@ const AdminDashboard = () => {
   const [assignSubmitting, setAssignSubmitting] = useState(false);
   const [sendDriverEmailId, setSendDriverEmailId] = useState(null);
   const [sendCustomerEmailId, setSendCustomerEmailId] = useState(null);
+  const [sendWhatsAppToCustomerId, setSendWhatsAppToCustomerId] = useState(null);
   const [driverModal, setDriverModal] = useState(null);
   const [driverForm, setDriverForm] = useState({ name: '', phone: '', email: '', license_number: '', emergency_contact_name: '', emergency_contact_phone: '' });
   const [driverSubmitting, setDriverSubmitting] = useState(false);
@@ -696,6 +697,23 @@ const AdminDashboard = () => {
     const link = booking.maps_link || '';
     const num = normalizePhoneForWhatsApp(phone);
     window.open(`https://wa.me/${num}${link ? `?text=${encodeURIComponent(link)}` : ''}`, '_blank');
+  };
+
+  const handleSendWhatsAppToCustomer = async (booking) => {
+    if (!booking.passenger_phone) {
+      showToast('No customer phone for this booking.', 'warning');
+      return;
+    }
+    setSendWhatsAppToCustomerId(booking.id);
+    try {
+      const { data } = await api.post(`/admin/bookings/${booking.id}/send-whatsapp`);
+      showToast(data.message || 'Booking details sent to customer via WhatsApp.', 'success');
+    } catch (err) {
+      const msg = err.response?.data?.error || err.message || 'Failed to send WhatsApp';
+      showToast(msg, 'error');
+    } finally {
+      setSendWhatsAppToCustomerId(null);
+    }
   };
 
   const handleCreateSubmit = async (e) => {
@@ -1729,7 +1747,12 @@ const AdminDashboard = () => {
                 )}
                 {b.maps_link && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link)}>Copy pickup map</button>}
                 {b.maps_link_drop && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link_drop)}>Copy drop map</button>}
-                {(b.driver_phone || b.driver_name) && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendWhatsApp(b)}>WhatsApp</button>}
+                {b.passenger_phone && (
+                  <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendWhatsAppToCustomer(b)} disabled={sendWhatsAppToCustomerId === b.id}>
+                    {sendWhatsAppToCustomerId === b.id ? '…' : 'WhatsApp (customer)'}
+                  </button>
+                )}
+                {(b.driver_phone || b.driver_name) && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendWhatsApp(b)}>Chat driver</button>}
               </div>
             </div>
           ))}
@@ -2156,7 +2179,12 @@ const AdminDashboard = () => {
                           )}
                           {b.maps_link && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link)}>Copy pickup map</button>}
                           {b.maps_link_drop && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link_drop)}>Copy drop map</button>}
-                          {(b.driver_phone || b.driver_name) && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendWhatsApp(b)}>WhatsApp</button>}
+                          {b.passenger_phone && (
+                            <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendWhatsAppToCustomer(b)} disabled={sendWhatsAppToCustomerId === b.id}>
+                              {sendWhatsAppToCustomerId === b.id ? '…' : 'WhatsApp (customer)'}
+                            </button>
+                          )}
+                          {(b.driver_phone || b.driver_name) && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendWhatsApp(b)}>Chat driver</button>}
                         </div>
                       </div>
                     ))}
@@ -3340,6 +3368,7 @@ const AdminDashboard = () => {
                       <div className="admin-entry-card-actions">
                         <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleOpenCorporateEdit(b)}>Edit booking</button>
                         <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => openAssignModal(b, true)}>{b.cab_id ? 'Reassign driver & cab' : 'Assign driver & cab'}</button>
+                        {b.cab_id && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendDriverEmail(b, true)} disabled={sendDriverEmailId === `corporate-${b.id}`}>{sendDriverEmailId === `corporate-${b.id}` ? '…' : 'Send email to driver'}</button>}
                         <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCorporateInvoiceDownload(b.id)}>Download invoice</button>
                       </div>
                     </div>

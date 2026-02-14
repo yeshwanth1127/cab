@@ -26,7 +26,7 @@ Then in n8n click **Listen for test event** and trigger from the backend within 
 
 This workflow receives driver/cab assignment data from the Namma Cabs backend and sends:
 1. **Driver details to customer** – when a driver is assigned (customer gets driver name, phone, cab number)
-2. **Trip details to driver** – when admin clicks "Send email to driver" (driver gets pickup/drop info)
+2. **Trip details to driver** – when admin clicks "Send email to driver" (driver gets customer name, phone, email, pickup/drop, and time)
 
 ## Backend payload (driver-info webhook)
 
@@ -35,7 +35,9 @@ The backend sends this JSON to `POST /webhook/driver-info`:
 | Field | Description |
 |-------|-------------|
 | `bookingId` | e.g. "NC123" |
-| `customerEmail` | Customer email (from `passenger_email`) for driver info email |
+| `customerEmail` | Customer email (for driver info email to customer; also included in email to driver for contact) |
+| `customerName` | Customer/passenger name (included in email to driver) |
+| `customerPhone` | Customer/passenger phone (included in email to driver) |
 | `driverEmail` | Driver email for trip details email |
 | `driverName` | Driver name |
 | `driverPhone` | Driver phone |

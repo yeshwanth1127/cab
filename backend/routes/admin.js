@@ -5,7 +5,7 @@ const { authenticateToken, requireAdmin } = require('../middleware/auth');
 const { generateInvoicePDF } = require('../services/invoiceService');
 const { generateGoogleMapsLink } = require('../utils/mapsLink');
 const { triggerDriverInfo, triggerInvoiceGenerated } = require('../services/n8nWebhooks');
-const { sendDriverInfoToCustomerWhatsApp } = require('../services/whatsappService');
+const { sendDriverInfoToCustomerWhatsApp, sendBookingConfirmation } = require('../services/whatsappService');
 
 const router = express.Router();
 
@@ -366,10 +366,15 @@ router.put('/bookings/:id', async (req, res) => {
       const pickup = pick(withCab, 'from_location', 'FROM_LOCATION');
       const drop = pick(withCab, 'to_location', 'TO_LOCATION');
       const pickupTime = pick(withCab, 'travel_date', 'TRAVEL_DATE') || pick(withCab, 'booking_date', 'BOOKING_DATE');
+      const customerName = pick(withCab, 'passenger_name', 'PASSENGER_NAME');
+      const customerPhone = pick(withCab, 'passenger_phone', 'PASSENGER_PHONE');
       triggerDriverInfo({
         bookingId: 'NC' + id,
         customerEmail: customerEmailVal,
         email: customerEmailVal,
+        customerName,
+        customerPhone,
+        customerEmail: customerEmailVal,
         driverEmail,
         driverName,
         driverPhone,
@@ -381,7 +386,6 @@ router.put('/bookings/:id', async (req, res) => {
         sendTripToDriver: false,
       });
       // WhatsApp: send driver info to customer when admin assigns driver
-      const customerPhone = pick(withCab, 'passenger_phone', 'PASSENGER_PHONE');
       if (customerPhone) {
         sendDriverInfoToCustomerWhatsApp(customerPhone, {
           bookingId: 'NC' + id,
@@ -453,9 +457,15 @@ router.post('/bookings/:id/send-driver-email', async (req, res) => {
     const pickup = pick(withCab, 'from_location', 'FROM_LOCATION');
     const drop = pick(withCab, 'to_location', 'TO_LOCATION');
     const pickupTime = pick(withCab, 'travel_date', 'TRAVEL_DATE') || pick(withCab, 'booking_date', 'BOOKING_DATE');
+    const customerName = pick(withCab, 'passenger_name', 'PASSENGER_NAME');
+    const customerPhone = pick(withCab, 'passenger_phone', 'PASSENGER_PHONE');
+    const customerEmailVal = pick(withCab, 'passenger_email', 'PASSENGER_EMAIL');
     triggerDriverInfo({
       bookingId: 'NC' + id,
       customerEmail: '',
+      customerName,
+      customerPhone,
+      customerEmail: customerEmailVal,
       driverEmail,
       driverName,
       driverPhone,
@@ -550,6 +560,42 @@ router.post('/bookings/:id/send-customer-email', async (req, res) => {
     res.json({ ok: true, message: 'Driver info email sent to customer' });
   } catch (error) {
     console.error('Error sending customer email:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+/** Send booking details to customer via WhatsApp (Meta API). From number = WHATSAPP_PHONE_NUMBER_ID (e.g. 9620267516). */
+router.post('/bookings/:id/send-whatsapp', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const booking = await db.getAsync(
+      `SELECT id, passenger_phone, passenger_name, from_location, to_location, fare_amount, travel_date, invoice_number
+       FROM bookings WHERE id = ?`,
+      [id]
+    );
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+    const phone = (booking.passenger_phone || booking.PASSENGER_PHONE || '').trim();
+    if (!phone) {
+      return res.status(400).json({ error: 'No passenger phone for this booking' });
+    }
+    const result = await sendBookingConfirmation({
+      id: booking.id ?? booking.ID,
+      passenger_phone: phone,
+      passenger_name: booking.passenger_name ?? booking.PASSENGER_NAME,
+      from_location: booking.from_location ?? booking.FROM_LOCATION,
+      to_location: booking.to_location ?? booking.TO_LOCATION,
+      fare_amount: booking.fare_amount ?? booking.FARE_AMOUNT,
+      travel_date: booking.travel_date ?? booking.TRAVEL_DATE,
+      invoice_number: booking.invoice_number ?? booking.INVOICE_NUMBER,
+    }, { force: true });
+    if (result.success) {
+      return res.json({ ok: true, message: 'Booking details sent to customer via WhatsApp' });
+    }
+    return res.status(400).json({ error: result.message || result.error || 'WhatsApp send failed' });
+  } catch (error) {
+    console.error('Error sending WhatsApp to customer:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

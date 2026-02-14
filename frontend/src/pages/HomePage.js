@@ -9,6 +9,12 @@ import './HomePage.css';
 
 const HOURS_OPTIONS = [4, 8, 12];
 
+const COMMON_ROUTES = [
+  'Mysore', 'Salem', 'Coorg', 'Chikmagalur', 'Mangalore', 'Anantapur', 'Hospete', 'Dharwad', 'Shivamogga',
+  'Chennai', 'Madurai', 'Coimbatore', 'Krishnagiri', 'Tirupati', 'Hyderabad', 'Hubli', 'Munnar',
+  'Vellore', 'Pondicherry', 'Hassan', 'Ooty', 'Chittor', 'Chitradurga', 'Tiruvannamalai', 'Dharmasthala',
+];
+
 const TESTIMONIALS = [
   { name: 'Priya S.', role: 'Frequent traveller', text: 'Used Namma Cabs for airport drops multiple times. Always on time, clean cars and no surge pricing. Highly recommend!', rating: 5 },
   { name: 'Rahul M.', role: 'Corporate', text: 'We use them for our team outstation trips. Professional drivers and transparent billing. Best cab service in Bangalore.', rating: 5 },
@@ -45,6 +51,7 @@ const HomePage = () => {
   const [localLocationError, setLocalLocationError] = useState('');
   const [travelDatetime, setTravelDatetime] = useState('');
   const [outstationReturnDatetime, setOutstationReturnDatetime] = useState('');
+  const [outstationNonPickupError, setOutstationNonPickupError] = useState('');
 
   const fromAddress = fromLocation?.address || '';
 
@@ -62,7 +69,7 @@ const HomePage = () => {
   const isPickupInPast = travelDatetime && new Date(travelDatetime) <= new Date();
   const isReturnBeforePickup = outstationTripType !== 'one_way' && travelDatetime && outstationReturnDatetime && new Date(outstationReturnDatetime) <= new Date(travelDatetime);
 
-  // Local service is only available within Bangalore
+  // Local service is only available within Bangalore; outstation destinations/stops must be outside Bangalore
   const BANGALORE_BOUNDS = { latMin: 12.77, latMax: 13.22, lngMin: 77.38, lngMax: 77.82 };
   const isWithinBangalore = (location) => {
     if (!location) return false;
@@ -73,6 +80,7 @@ const HomePage = () => {
     const addr = (location.address || '').toLowerCase();
     return addr.includes('bangalore') || addr.includes('bengaluru');
   };
+  const isOutsideBangalore = (location) => location && !isWithinBangalore(location);
 
   const handleBackToServices = () => {
     setServiceChoice(null);
@@ -89,6 +97,7 @@ const HomePage = () => {
     setOutstationPickup(null);
     setOutstationStops([null, null]);
     setOutstationReturnDatetime('');
+    setOutstationNonPickupError('');
     setLocalOffers([]);
     setLocalOffersError('');
     setTravelDatetime('');
@@ -98,10 +107,15 @@ const HomePage = () => {
 
   const handleContinueToOutstationCabSelection = () => {
     if (isPickupInPast || isReturnBeforePickup) return;
+    setOutstationNonPickupError('');
     if (outstationTripType === 'one_way') {
       const fromAddr = outstationFrom?.address || '';
       const toAddr = outstationTo?.address || '';
       if (!fromAddr.trim() || !toAddr.trim()) return;
+      if (!isOutsideBangalore(outstationTo)) {
+        setOutstationNonPickupError('Destination must be outside Bangalore for outstation trips.');
+        return;
+      }
       navigate('/car-options', {
         state: {
           service_type: 'outstation',
@@ -135,6 +149,11 @@ const HomePage = () => {
       const pickupAddr = (outstationPickup?.address || '').trim();
       const stopLocations = outstationStops.filter((s) => s && (s.address || '').trim());
       if (!pickupAddr || stopLocations.length === 0) return;
+      const invalidStop = stopLocations.find((s) => isWithinBangalore(s));
+      if (invalidStop) {
+        setOutstationNonPickupError('Stops and destination must be outside Bangalore for outstation trips.');
+        return;
+      }
       const allStops = [outstationPickup, ...stopLocations];
       const stopAddresses = allStops.map((loc) => (loc?.address || '').trim());
       navigate('/car-options', {
@@ -404,7 +423,10 @@ const HomePage = () => {
                   <select
                     className="home-outstation-select"
                     value={outstationTripType}
-                    onChange={(e) => setOutstationTripType(e.target.value)}
+                    onChange={(e) => {
+                      setOutstationTripType(e.target.value);
+                      setOutstationNonPickupError('');
+                    }}
                   >
                     <option value="one_way">One way</option>
                     <option value="round_trip">Round trip</option>
@@ -426,11 +448,22 @@ const HomePage = () => {
                     <div className="home-form-group">
                       <label className="home-form-label">To</label>
                       <LocationInput
-                        placeholder="Enter drop location"
+                        placeholder="Enter drop location (outside Bangalore)"
                         value={outstationTo}
-                        onSelect={setOutstationTo}
+                        onSelect={(loc) => {
+                          if (isWithinBangalore(loc)) {
+                            setOutstationTo(null);
+                            setOutstationNonPickupError('Destination must be outside Bangalore for outstation trips.');
+                          } else {
+                            setOutstationTo(loc);
+                            setOutstationNonPickupError('');
+                          }
+                        }}
                         label="To"
                       />
+                      {outstationNonPickupError && (
+                        <p className="home-form-error" role="alert">{outstationNonPickupError}</p>
+                      )}
                     </div>
                   </>
                 )}
@@ -475,26 +508,34 @@ const HomePage = () => {
                     <div className="home-form-group">
                       <label className="home-form-label">Stop 1 (optional)</label>
                       <LocationInput
-                        placeholder="Enter first stop or destination"
+                        placeholder="Enter first stop or destination (outside Bangalore)"
                         value={outstationStops[0] || null}
-                        onSelect={(loc) => setOutstationStops((prev) => {
-                          const next = [...prev];
-                          next[0] = loc;
-                          return next;
-                        })}
+                        onSelect={(loc) => {
+                          if (isWithinBangalore(loc)) {
+                            setOutstationStops((prev) => { const n = [...prev]; n[0] = null; return n; });
+                            setOutstationNonPickupError('Stops and destination must be outside Bangalore for outstation trips.');
+                          } else {
+                            setOutstationStops((prev) => { const n = [...prev]; n[0] = loc; return n; });
+                            setOutstationNonPickupError('');
+                          }
+                        }}
                         label="Stop 1"
                       />
                     </div>
                     <div className="home-form-group">
                       <label className="home-form-label">Stop 2 (optional)</label>
                       <LocationInput
-                        placeholder="Enter second stop"
+                        placeholder="Enter second stop (outside Bangalore)"
                         value={outstationStops[1] || null}
-                        onSelect={(loc) => setOutstationStops((prev) => {
-                          const next = [...prev];
-                          next[1] = loc;
-                          return next;
-                        })}
+                        onSelect={(loc) => {
+                          if (isWithinBangalore(loc)) {
+                            setOutstationStops((prev) => { const n = [...prev]; n[1] = null; return n; });
+                            setOutstationNonPickupError('Stops and destination must be outside Bangalore for outstation trips.');
+                          } else {
+                            setOutstationStops((prev) => { const n = [...prev]; n[1] = loc; return n; });
+                            setOutstationNonPickupError('');
+                          }
+                        }}
                         label="Stop 2"
                       />
                     </div>
@@ -502,17 +543,32 @@ const HomePage = () => {
                       <div key={idx} className="home-form-group">
                         <label className="home-form-label">Stop {idx + 3}</label>
                         <LocationInput
-                          placeholder="Enter destination"
+                          placeholder="Enter destination (outside Bangalore)"
                           value={stop || null}
-                          onSelect={(loc) => setOutstationStops((prev) => {
-                            const next = [...prev];
-                            next[idx + 2] = loc;
-                            return next;
-                          })}
+                          onSelect={(loc) => {
+                            if (isWithinBangalore(loc)) {
+                              setOutstationStops((prev) => {
+                                const n = [...prev];
+                                n[idx + 2] = null;
+                                return n;
+                              });
+                              setOutstationNonPickupError('Stops and destination must be outside Bangalore for outstation trips.');
+                            } else {
+                              setOutstationStops((prev) => {
+                                const n = [...prev];
+                                n[idx + 2] = loc;
+                                return n;
+                              });
+                              setOutstationNonPickupError('');
+                            }
+                          }}
                           label={`Stop ${idx + 3}`}
                         />
                       </div>
                     ))}
+                    {outstationNonPickupError && (
+                      <p className="home-form-error" role="alert">{outstationNonPickupError}</p>
+                    )}
                     <div className="home-form-group home-add-stop-wrap">
                       <button
                         type="button"
@@ -684,26 +740,28 @@ const HomePage = () => {
                   <span className="home-route-label">Bangalore Airport ↔ City</span>
                   <span className="home-route-hint">Pickup or drop at KIA</span>
                 </div>
-                <div className="home-route-card">
-                  <Icon name="road" size={28} className="home-route-icon" />
-                  <span className="home-route-label">Bangalore → Mysore</span>
-                  <span className="home-route-hint">One-way or round trip</span>
-                </div>
-                <div className="home-route-card">
-                  <Icon name="road" size={28} className="home-route-icon" />
-                  <span className="home-route-label">Bangalore → Coorg</span>
-                  <span className="home-route-hint">One-way or round trip</span>
-                </div>
-                <div className="home-route-card">
-                  <Icon name="road" size={28} className="home-route-icon" />
-                  <span className="home-route-label">Bangalore → Ooty</span>
-                  <span className="home-route-hint">One-way or round trip</span>
-                </div>
-                <div className="home-route-card">
-                  <Icon name="road" size={28} className="home-route-icon" />
-                  <span className="home-route-label">Bangalore → Chennai</span>
-                  <span className="home-route-hint">One-way or round trip</span>
-                </div>
+                {COMMON_ROUTES.map((dest) => (
+                  <div key={dest} className="home-route-card">
+                    <Icon name="road" size={28} className="home-route-icon" />
+                    <span className="home-route-label">Bangalore To {dest} Cabs</span>
+                    <span className="home-route-hint">One-way or round trip</span>
+                  </div>
+                ))}
+              </div>
+              <h3 className="home-routes-pages-title">Our pages</h3>
+              <p className="home-routes-pages-desc">Quick links to book, check status, and learn more.</p>
+              <div className="home-routes-links">
+                <Link to="/" className="home-routes-link">Home</Link>
+                <Link to="/car-options" className="home-routes-link">Car options</Link>
+                <Link to="/check-booking" className="home-routes-link">Check booking</Link>
+                <Link to="/about" className="home-routes-link">About</Link>
+                <Link to="/contact" className="home-routes-link">Contact</Link>
+                <Link to="/corporate" className="home-routes-link">Corporate</Link>
+                <Link to="/events" className="home-routes-link">Events</Link>
+                <Link to="/privacy-policy" className="home-routes-link">Privacy policy</Link>
+                <Link to="/terms-of-service" className="home-routes-link">Terms of service</Link>
+                <Link to="/login" className="home-routes-link">Login</Link>
+                <Link to="/account" className="home-routes-link">Account</Link>
               </div>
             </div>
           </section>

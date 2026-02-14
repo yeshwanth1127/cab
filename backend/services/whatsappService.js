@@ -24,10 +24,11 @@ function formatTravelDateForMessage(travelDate) {
 /**
  * Send booking confirmation to customer via WhatsApp.
  * Booking object: passenger_phone, passenger_name, from_location, to_location, fare_amount, travel_date, id, invoice_number.
- * Skips if WhatsApp not configured or SEND_WHATSAPP_ON_BOOKING=0.
+ * Skips if WhatsApp not configured or SEND_WHATSAPP_ON_BOOKING=0 (unless options.force is true, e.g. for admin-triggered send).
  */
-function sendBookingConfirmation(booking) {
-  const enabled = process.env.SEND_WHATSAPP_ON_BOOKING !== '0';
+function sendBookingConfirmation(booking, options) {
+  const force = options && options.force === true;
+  const enabled = force || process.env.SEND_WHATSAPP_ON_BOOKING !== '0';
   if (!enabled) return Promise.resolve({ success: false, message: 'WhatsApp booking messages disabled' });
   const phone = (booking.passenger_phone || booking.PASSENGER_PHONE || '').trim();
   if (!phone) {
@@ -122,6 +123,8 @@ function sendWhatsAppMessage(phone, message) {
     return Promise.resolve({ success: false, message: 'WhatsApp not configured' });
   }
 
+  // WhatsApp disabled: Meta session invalid (user logged out). Uncomment block below when token is refreshed.
+  /*
   const phoneNumberId = (process.env.WHATSAPP_PHONE_NUMBER_ID || '').trim();
   const accessToken = (process.env.WHATSAPP_ACCESS_TOKEN || '').trim();
   let version = (process.env.WHATSAPP_API_VERSION || 'v21.0').trim();
@@ -179,6 +182,8 @@ function sendWhatsAppMessage(phone, message) {
     req.write(postData, 'utf8');
     req.end();
   });
+  */
+  return Promise.resolve({ success: false, message: 'WhatsApp disabled (session invalid)' });
 }
 
 module.exports = {
