@@ -357,6 +357,37 @@
   color: #e5e7eb;
 }
 
+.home-stop-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.home-stop-row-head .home-form-label {
+  margin-bottom: 0;
+}
+
+.home-remove-stop-btn {
+  padding: 8px 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #fecaca;
+  background: rgba(248, 113, 113, 0.08);
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+  white-space: nowrap;
+}
+
+.home-remove-stop-btn:hover {
+  background: rgba(248, 113, 113, 0.14);
+  border-color: rgba(248, 113, 113, 0.55);
+  color: #fee2e2;
+}
+
 
 .home-local-cab-types-wrap {
   max-width: 640px;

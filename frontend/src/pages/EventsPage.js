@@ -28,6 +28,16 @@ const EventsPage = () => {
   const [searchParams] = useSearchParams();
   const eventTypeFromUrl = searchParams.get('type');
   const [activeTab, setActiveTab] = useState(eventTypeFromUrl || 'weddings');
+
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const getTodayLocalDate = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  };
+  const getNowLocalTime = () => {
+    const d = new Date();
+    return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  };
   
 
   useEffect(() => {
@@ -143,10 +153,27 @@ const EventsPage = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData(prev => {
+      const next = { ...prev, [name]: value };
+      // If user selects "today", prevent selecting a past time for today.
+      if (name === 'pickup_date') {
+        const today = getTodayLocalDate();
+        if (value === today && next.pickup_time) {
+          const minTime = getNowLocalTime();
+          if (next.pickup_time < minTime) next.pickup_time = '';
+        }
+      }
+      if (name === 'pickup_time') {
+        const today = getTodayLocalDate();
+        if (next.pickup_date === today) {
+          const minTime = getNowLocalTime();
+          if (value && value < minTime) {
+            next.pickup_time = value; // keep value; validateForm will show error
+          }
+        }
+      }
+      return next;
+    });
     if (errors[name]) {
       setErrors(prev => ({
         ...prev,
@@ -175,6 +202,15 @@ const EventsPage = () => {
     }
     if (!formData.pickup_time.trim()) {
       newErrors.pickup_time = 'Pickup time is required';
+    }
+    if (formData.pickup_date && formData.pickup_time) {
+      const today = getTodayLocalDate();
+      if (formData.pickup_date === today) {
+        const minTime = getNowLocalTime();
+        if (formData.pickup_time < minTime) {
+          newErrors.pickup_time = 'Pickup time cannot be in the past';
+        }
+      }
     }
 
     setErrors(newErrors);
@@ -393,7 +429,7 @@ const EventsPage = () => {
                       value={formData.pickup_date}
                       onChange={handleChange}
                       onClick={handleDateInputClick}
-                      min={new Date().toISOString().split('T')[0]}
+                      min={getTodayLocalDate()}
                       className={errors.pickup_date ? 'error' : ''}
                     />
                     {errors.pickup_date && <span className="error-message">{errors.pickup_date}</span>}
@@ -407,6 +443,7 @@ const EventsPage = () => {
                       value={formData.pickup_time}
                       onChange={handleChange}
                       onClick={handleTimeInputClick}
+                      min={formData.pickup_date === getTodayLocalDate() ? getNowLocalTime() : undefined}
                       className={errors.pickup_time ? 'error' : ''}
                       required
                       aria-invalid={!!errors.pickup_time}

@@ -35,8 +35,10 @@ const HomePage = () => {
   const [outstationTo, setOutstationTo] = useState(null);
   const [outstationRoundTripDays, setOutstationRoundTripDays] = useState('');
   const [outstationMultiStops, setOutstationMultiStops] = useState([null, null]);
+  const [outstationMultiwayDays, setOutstationMultiwayDays] = useState('');
   const [outstationPickup, setOutstationPickup] = useState(null);
-  const [outstationStops, setOutstationStops] = useState([null, null]);
+  const [outstationStops, setOutstationStops] = useState([]);
+  const [outstationFinalDrop, setOutstationFinalDrop] = useState(null);
   const [localOffers, setLocalOffers] = useState([]);
   const [localOffersLoading, setLocalOffersLoading] = useState(false);
   const [localOffersError, setLocalOffersError] = useState('');
@@ -55,19 +57,40 @@ const HomePage = () => {
 
   const fromAddress = fromLocation?.address || '';
 
+  const getCeilDaysDiff = (startIso, endIso) => {
+    try {
+      if (!startIso || !endIso) return null;
+      const start = new Date(startIso);
+      const end = new Date(endIso);
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+      const diffMs = end.getTime() - start.getTime();
+      if (diffMs <= 0) return null;
+      return Math.max(1, Math.ceil(diffMs / (24 * 60 * 60 * 1000)));
+    } catch {
+      return null;
+    }
+  };
+
   // Minimum pickup = now (no dates/times before today/current moment)
   const minPickupDatetime = () => new Date().toISOString().slice(0, 16);
 
   // Return date cannot be before pickup; when pickup changes, clear return if it becomes invalid
   useEffect(() => {
+    if (outstationTripType !== 'round_trip') return;
     if (!travelDatetime || !outstationReturnDatetime) return;
-    if (new Date(outstationReturnDatetime) <= new Date(travelDatetime)) {
-      setOutstationReturnDatetime('');
-    }
+    if (new Date(outstationReturnDatetime) <= new Date(travelDatetime)) setOutstationReturnDatetime('');
   }, [travelDatetime]);
 
   const isPickupInPast = travelDatetime && new Date(travelDatetime) <= new Date();
-  const isReturnBeforePickup = outstationTripType !== 'one_way' && travelDatetime && outstationReturnDatetime && new Date(outstationReturnDatetime) <= new Date(travelDatetime);
+  const isReturnBeforePickup = outstationTripType === 'round_trip' && travelDatetime && outstationReturnDatetime && new Date(outstationReturnDatetime) <= new Date(travelDatetime);
+  const computedRoundTripDays = outstationTripType === 'round_trip' ? getCeilDaysDiff(travelDatetime, outstationReturnDatetime) : null;
+  const selectedRoundTripDays = outstationTripType === 'round_trip' ? Number(outstationRoundTripDays) : null;
+  const isRoundTripDaysMismatch = outstationTripType === 'round_trip'
+    && computedRoundTripDays != null
+    && selectedRoundTripDays != null
+    && Number.isFinite(selectedRoundTripDays)
+    && selectedRoundTripDays >= 1
+    && computedRoundTripDays !== selectedRoundTripDays;
 
   // Local service is only available within Bangalore; outstation destinations/stops must be outside Bangalore
   const BANGALORE_BOUNDS = { latMin: 12.77, latMax: 13.22, lngMin: 77.38, lngMax: 77.82 };
@@ -94,8 +117,10 @@ const HomePage = () => {
     setOutstationTo(null);
     setOutstationRoundTripDays('');
     setOutstationMultiStops([null, null]);
+    setOutstationMultiwayDays('');
     setOutstationPickup(null);
-    setOutstationStops([null, null]);
+    setOutstationStops([]);
+    setOutstationFinalDrop(null);
     setOutstationReturnDatetime('');
     setOutstationNonPickupError('');
     setLocalOffers([]);
@@ -147,14 +172,16 @@ const HomePage = () => {
       });
     } else {
       const pickupAddr = (outstationPickup?.address || '').trim();
+      const days = Number(outstationMultiwayDays);
+      const finalDropAddr = (outstationFinalDrop?.address || '').trim();
       const stopLocations = outstationStops.filter((s) => s && (s.address || '').trim());
-      if (!pickupAddr || stopLocations.length === 0) return;
-      const invalidStop = stopLocations.find((s) => isWithinBangalore(s));
+      if (!pickupAddr || !finalDropAddr || !(days >= 1)) return;
+      const invalidStop = [...stopLocations, outstationFinalDrop].find((s) => isWithinBangalore(s));
       if (invalidStop) {
         setOutstationNonPickupError('Stops and destination must be outside Bangalore for outstation trips.');
         return;
       }
-      const allStops = [outstationPickup, ...stopLocations];
+      const allStops = [outstationPickup, ...stopLocations, outstationFinalDrop];
       const stopAddresses = allStops.map((loc) => (loc?.address || '').trim());
       navigate('/car-options', {
         state: {
@@ -163,8 +190,10 @@ const HomePage = () => {
           from_location: stopAddresses[0],
           to_location: stopAddresses[stopAddresses.length - 1],
           stops: stopAddresses,
+          stop_points: allStops,
+          number_of_days: days,
           travel_datetime: travelDatetime || null,
-          return_datetime: outstationReturnDatetime || null,
+          return_datetime: null,
         },
       });
     }
@@ -257,7 +286,8 @@ const HomePage = () => {
         passenger_email: (confirmPassengerEmail || '').trim() || undefined,
         fare_amount: fareAmount,
         number_of_hours: numberOfHours,
-        cab_id: confirmModal.cab?.id ?? null,
+        // Do not pre-assign a cab/driver from the customer flow; admin will assign.
+        cab_id: null,
         cab_type_id: confirmModal.cabType.id,
         pickup_lat: fromLocation?.lat ?? null,
         pickup_lng: fromLocation?.lng ?? null,
@@ -424,8 +454,16 @@ const HomePage = () => {
                     className="home-outstation-select"
                     value={outstationTripType}
                     onChange={(e) => {
-                      setOutstationTripType(e.target.value);
+                      const next = e.target.value;
+                      setOutstationTripType(next);
                       setOutstationNonPickupError('');
+                      if (next !== 'round_trip') setOutstationReturnDatetime('');
+                      if (next !== 'multiple_stops') {
+                        setOutstationMultiwayDays('');
+                        setOutstationPickup(null);
+                        setOutstationStops([]);
+                        setOutstationFinalDrop(null);
+                      }
                     }}
                   >
                     <option value="one_way">One way</option>
@@ -506,69 +544,56 @@ const HomePage = () => {
                       />
                     </div>
                     <div className="home-form-group">
-                      <label className="home-form-label">Stop 1 (optional)</label>
-                      <LocationInput
-                        placeholder="Enter first stop or destination (outside Bangalore)"
-                        value={outstationStops[0] || null}
-                        onSelect={(loc) => {
-                          if (isWithinBangalore(loc)) {
-                            setOutstationStops((prev) => { const n = [...prev]; n[0] = null; return n; });
-                            setOutstationNonPickupError('Stops and destination must be outside Bangalore for outstation trips.');
-                          } else {
-                            setOutstationStops((prev) => { const n = [...prev]; n[0] = loc; return n; });
-                            setOutstationNonPickupError('');
-                          }
-                        }}
-                        label="Stop 1"
+                      <label className="home-form-label">Number of days</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="30"
+                        className="home-outstation-days-input"
+                        placeholder="e.g. 2"
+                        value={outstationMultiwayDays}
+                        onChange={(e) => setOutstationMultiwayDays(e.target.value)}
                       />
                     </div>
-                    <div className="home-form-group">
-                      <label className="home-form-label">Stop 2 (optional)</label>
-                      <LocationInput
-                        placeholder="Enter second stop (outside Bangalore)"
-                        value={outstationStops[1] || null}
-                        onSelect={(loc) => {
-                          if (isWithinBangalore(loc)) {
-                            setOutstationStops((prev) => { const n = [...prev]; n[1] = null; return n; });
-                            setOutstationNonPickupError('Stops and destination must be outside Bangalore for outstation trips.');
-                          } else {
-                            setOutstationStops((prev) => { const n = [...prev]; n[1] = loc; return n; });
-                            setOutstationNonPickupError('');
-                          }
-                        }}
-                        label="Stop 2"
-                      />
-                    </div>
-                    {outstationStops.slice(2).map((stop, idx) => (
+                    {outstationNonPickupError && (
+                      <p className="home-form-error" role="alert">{outstationNonPickupError}</p>
+                    )}
+                    {outstationStops.map((stop, idx) => (
                       <div key={idx} className="home-form-group">
-                        <label className="home-form-label">Stop {idx + 3}</label>
+                        <div className="home-stop-row-head">
+                          <label className="home-form-label">Stop {idx + 1} (optional)</label>
+                          <button
+                            type="button"
+                            className="home-remove-stop-btn"
+                            onClick={() => setOutstationStops((prev) => prev.filter((_, i) => i !== idx))}
+                          >
+                            Remove
+                          </button>
+                        </div>
                         <LocationInput
-                          placeholder="Enter destination (outside Bangalore)"
+                          placeholder="Enter stop (outside Bangalore)"
                           value={stop || null}
                           onSelect={(loc) => {
                             if (isWithinBangalore(loc)) {
                               setOutstationStops((prev) => {
                                 const n = [...prev];
-                                n[idx + 2] = null;
+                                n[idx] = null;
                                 return n;
                               });
                               setOutstationNonPickupError('Stops and destination must be outside Bangalore for outstation trips.');
                             } else {
                               setOutstationStops((prev) => {
                                 const n = [...prev];
-                                n[idx + 2] = loc;
+                                n[idx] = loc;
                                 return n;
                               });
                               setOutstationNonPickupError('');
                             }
                           }}
-                          label={`Stop ${idx + 3}`}
+                          label={`Stop ${idx + 1}`}
                         />
                       </div>
                     ))}
-                    {outstationNonPickupError && (
-                      <p className="home-form-error" role="alert">{outstationNonPickupError}</p>
-                    )}
                     <div className="home-form-group home-add-stop-wrap">
                       <button
                         type="button"
@@ -577,6 +602,23 @@ const HomePage = () => {
                       >
                         + Add stop
                       </button>
+                    </div>
+                    <div className="home-form-group">
+                      <label className="home-form-label">Final drop point</label>
+                      <LocationInput
+                        placeholder="Enter final destination (outside Bangalore)"
+                        value={outstationFinalDrop}
+                        onSelect={(loc) => {
+                          if (isWithinBangalore(loc)) {
+                            setOutstationFinalDrop(null);
+                            setOutstationNonPickupError('Stops and destination must be outside Bangalore for outstation trips.');
+                          } else {
+                            setOutstationFinalDrop(loc);
+                            setOutstationNonPickupError('');
+                          }
+                        }}
+                        label="Final drop"
+                      />
                     </div>
                   </>
                 )}
@@ -594,7 +636,7 @@ const HomePage = () => {
                     <p className="home-form-error" role="alert">Pickup date and time must be in the future.</p>
                   )}
                 </div>
-                {outstationTripType !== 'one_way' && (
+                {outstationTripType === 'round_trip' && (
                   <div className="home-form-group">
                     <label className="home-form-label">Return date (optional)</label>
                     <DateTimePicker
@@ -607,6 +649,11 @@ const HomePage = () => {
                     {isReturnBeforePickup && (
                       <p className="home-form-error" role="alert">Return date must be after pickup date.</p>
                     )}
+                    {isRoundTripDaysMismatch && (
+                      <p className="home-form-error" role="alert">
+                        Number of days ({selectedRoundTripDays}) does not match pickup/return dates ({computedRoundTripDays} day(s)). Please correct it.
+                      </p>
+                    )}
                   </div>
                 )}
                 <button
@@ -616,8 +663,8 @@ const HomePage = () => {
                     outstationTripType === 'one_way'
                       ? !(outstationFrom?.address || '').trim() || !(outstationTo?.address || '').trim() || isPickupInPast
                       : outstationTripType === 'round_trip'
-                        ? !(outstationFrom?.address || '').trim() || !(Number(outstationRoundTripDays) >= 1) || isPickupInPast || isReturnBeforePickup
-                        : !(outstationPickup?.address || '').trim() || outstationStops.every((s) => !(s?.address || '').trim()) || isPickupInPast || isReturnBeforePickup
+                        ? !(outstationFrom?.address || '').trim() || !(Number(outstationRoundTripDays) >= 1) || isPickupInPast || isReturnBeforePickup || isRoundTripDaysMismatch
+                        : !(outstationPickup?.address || '').trim() || !(outstationFinalDrop?.address || '').trim() || !(Number(outstationMultiwayDays) >= 1) || isPickupInPast
                   }
                   onClick={handleContinueToOutstationCabSelection}
                 >

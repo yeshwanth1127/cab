@@ -16,6 +16,7 @@ async function ensureBookingsColumns() {
   const columns = [
     ['service_type', 'TEXT'],
     ['number_of_hours', 'INTEGER'],
+    ['number_of_days', 'INTEGER'],
     ['pickup_lat', 'REAL'],
     ['pickup_lng', 'REAL'],
     ['destination_lat', 'REAL'],
@@ -98,7 +99,7 @@ router.get('/bookings', async (req, res) => {
       `SELECT b.id, b.user_id, b.cab_id, b.cab_type_id, b.car_option_id, b.from_location, b.to_location,
               b.distance_km, b.estimated_time_minutes, b.fare_amount, b.booking_status, b.booking_date,
               b.travel_date, b.passenger_name, b.passenger_phone, b.passenger_email, b.notes,
-              b.service_type, b.number_of_hours, b.trip_type, b.pickup_lat, b.pickup_lng,
+              b.service_type, b.number_of_hours, b.number_of_days, b.trip_type, b.pickup_lat, b.pickup_lng,
               b.destination_lat, b.destination_lng, b.maps_link, b.maps_link_drop, b.assigned_at, b.invoice_number,
               b."return_date",
               c.vehicle_number,
@@ -987,12 +988,15 @@ router.post('/invoice/create', [
       number_of_hours,
       trip_type,
       with_gst,
+      invoice_number,
     } = req.body;
 
     const svcType = service_type || 'local';
     const outstationTripType = svcType === 'outstation' && trip_type && ['one_way', 'round_trip', 'multiple_stops'].includes(trip_type) ? trip_type : null;
 
-    const invoiceNumber = await generateDefaultInvoiceNumber();
+    const invoiceNumber = (invoice_number != null && String(invoice_number).trim() !== '')
+      ? String(invoice_number).trim()
+      : await generateDefaultInvoiceNumber();
     const result = await db.runAsync(
       `INSERT INTO bookings (
         from_location, to_location, distance_km, estimated_time_minutes, fare_amount,

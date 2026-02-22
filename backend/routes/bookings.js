@@ -22,6 +22,7 @@ async function ensureBookingsColumns() {
   const columns = [
     ['service_type', 'TEXT'],
     ['number_of_hours', 'INTEGER'],
+    ['number_of_days', 'INTEGER'],
     ['trip_type', 'TEXT'],
     ['pickup_lat', 'REAL'],
     ['pickup_lng', 'REAL'],
@@ -71,8 +72,10 @@ router.post('/', async (req, res) => {
       passenger_name,
       passenger_phone,
       passenger_email,
+      notes,
       fare_amount,
       number_of_hours,
+      number_of_days,
       trip_type,
       cab_id,
       cab_type_id,
@@ -80,6 +83,8 @@ router.post('/', async (req, res) => {
       pickup_lng,
       destination_lat,
       destination_lng,
+      distance_km,
+      estimated_time_minutes,
       travel_date,
       return_date,
     } = req.body;
@@ -88,30 +93,82 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'from_location, to_location, passenger_name, passenger_phone, and fare_amount are required' });
     }
 
-    const distance_km = 0;
-    const estimated_time_minutes = null;
+    const serviceType = service_type || 'local';
+    const tripType = trip_type || null;
+
+    const parseDate = (v) => {
+      if (!v) return null;
+      const d = new Date(v);
+      return Number.isNaN(d.getTime()) ? null : d;
+    };
+
+    const ceilDaysDiff = (start, end) => {
+      if (!start || !end) return null;
+      const diffMs = end.getTime() - start.getTime();
+      if (diffMs <= 0) return null;
+      return Math.max(1, Math.ceil(diffMs / (24 * 60 * 60 * 1000)));
+    };
+
+    const distanceKmVal = distance_km != null && distance_km !== '' ? Number(distance_km) : 0;
+    const estimatedMinutesVal = estimated_time_minutes != null && estimated_time_minutes !== ''
+      ? Number(estimated_time_minutes)
+      : null;
+    const numberOfDaysVal = number_of_days != null && number_of_days !== ''
+      ? Math.max(1, parseInt(number_of_days, 10) || 1)
+      : null;
+
+    if (serviceType === 'outstation') {
+      if (tripType === 'round_trip' || tripType === 'multiple_stops') {
+        if (numberOfDaysVal == null) {
+          return res.status(400).json({ error: 'number_of_days is required for outstation round trip / multi way bookings' });
+        }
+      }
+      if (tripType === 'round_trip' && return_date) {
+        const start = parseDate(travel_date);
+        const end = parseDate(return_date);
+        if (!start) {
+          return res.status(400).json({ error: 'travel_date is required when return_date is provided' });
+        }
+        if (!end) {
+          return res.status(400).json({ error: 'Invalid return_date' });
+        }
+        if (end <= start) {
+          return res.status(400).json({ error: 'return_date must be after travel_date' });
+        }
+        const computed = ceilDaysDiff(start, end);
+        if (computed != null && numberOfDaysVal != null && computed !== numberOfDaysVal) {
+          return res.status(400).json({
+            error: `number_of_days (${numberOfDaysVal}) does not match pickup/return dates (${computed} day(s))`,
+          });
+        }
+      }
+    }
+
     const invoiceNumber = await generateDefaultInvoiceNumber();
     const result = await db.runAsync(
       `INSERT INTO bookings (
         from_location, to_location, distance_km, estimated_time_minutes, fare_amount,
-        passenger_name, passenger_phone, passenger_email, cab_id, cab_type_id,
-        service_type, number_of_hours, trip_type, pickup_lat, pickup_lng, destination_lat, destination_lng,
+        passenger_name, passenger_phone, passenger_email, notes, cab_id, cab_type_id,
+        service_type, number_of_hours, trip_type, number_of_days, pickup_lat, pickup_lng, destination_lat, destination_lng,
         invoice_number, travel_date, "return_date"
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         from_location,
         to_location,
-        distance_km,
-        estimated_time_minutes,
+        distanceKmVal,
+        estimatedMinutesVal,
         Number(fare_amount),
         passenger_name,
         passenger_phone,
         passenger_email != null && String(passenger_email).trim() ? String(passenger_email).trim() : null,
-        cab_id || null,
+        notes != null && String(notes).trim() ? String(notes).trim() : null,
+        // Do not allow public booking flow to pre-assign a cab/driver; admin will assign.
+        null,
         cab_type_id || null,
-        service_type || 'local',
+        serviceType,
         number_of_hours != null ? Number(number_of_hours) : null,
-        trip_type || null,
+        tripType,
+        numberOfDaysVal,
         pickup_lat != null ? Number(pickup_lat) : null,
         pickup_lng != null ? Number(pickup_lng) : null,
         destination_lat != null ? Number(destination_lat) : null,

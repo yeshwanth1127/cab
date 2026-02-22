@@ -5,6 +5,7 @@ import MainNavbar from '../components/MainNavbar';
 import Icon from '../components/Icon';
 import DateTimePicker from '../components/DateTimePicker';
 import AnimatedMapBackground from '../components/AnimatedMapBackground';
+import { getMultiLegDistance } from '../utils/distanceService';
 import './CarOptions.css';
 
 const CarOptions = () => {
@@ -21,6 +22,7 @@ const CarOptions = () => {
   const [airportFares, setAirportFares] = useState({});
   const [outstationOffers, setOutstationOffers] = useState([]);
   const [outstationFares, setOutstationFares] = useState({});
+  const [outstationDistanceKm, setOutstationDistanceKm] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [confirmModal, setConfirmModal] = useState(null);
@@ -28,10 +30,25 @@ const CarOptions = () => {
   const [confirmPassengerPhone, setConfirmPassengerPhone] = useState('');
   const [confirmPassengerEmail, setConfirmPassengerEmail] = useState('');
   const [confirmTravelDatetime, setConfirmTravelDatetime] = useState('');
+  const [confirmCrystaSeater, setConfirmCrystaSeater] = useState('7+1');
   const [confirmSubmitting, setConfirmSubmitting] = useState(false);
   const [confirmError, setConfirmError] = useState('');
   const [reconfirmData, setReconfirmData] = useState(null);
   const [successBookingId, setSuccessBookingId] = useState(null);
+
+  const ceilDaysDiff = (startIso, endIso) => {
+    try {
+      if (!startIso || !endIso) return null;
+      const start = new Date(startIso);
+      const end = new Date(endIso);
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+      const diffMs = end.getTime() - start.getTime();
+      if (diffMs <= 0) return null;
+      return Math.max(1, Math.ceil(diffMs / (24 * 60 * 60 * 1000)));
+    } catch {
+      return null;
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -67,6 +84,7 @@ const CarOptions = () => {
         } else if (isOutstationFlow) {
           const tripType = bookingState.trip_type || 'one_way';
           const estimateParams = { trip_type: tripType };
+          let computedMultiStopDistanceKm = null;
           if (tripType === 'one_way' && bookingState.from_lat != null && bookingState.from_lng != null && bookingState.to_lat != null && bookingState.to_lng != null) {
             estimateParams.from_lat = bookingState.from_lat;
             estimateParams.from_lng = bookingState.from_lng;
@@ -74,6 +92,22 @@ const CarOptions = () => {
             estimateParams.to_lng = bookingState.to_lng;
           } else if (tripType === 'round_trip' && bookingState.number_of_days) {
             estimateParams.number_of_days = bookingState.number_of_days;
+          } else if (tripType === 'multiple_stops') {
+            if (bookingState.number_of_days) estimateParams.number_of_days = bookingState.number_of_days;
+            const pts = Array.isArray(bookingState.stop_points) ? bookingState.stop_points : [];
+            const hasPts = pts.length >= 2 && pts.every((p) => p && p.lat != null && p.lng != null);
+            if (hasPts) {
+              try {
+                const dist = await getMultiLegDistance(pts);
+                computedMultiStopDistanceKm = dist?.distance_km ?? null;
+                if (computedMultiStopDistanceKm != null) {
+                  estimateParams.distance_km = computedMultiStopDistanceKm;
+                }
+              } catch (e) {
+                // Distance calc is best-effort; backend will still apply min km/day on 0km if needed.
+                computedMultiStopDistanceKm = null;
+              }
+            }
           }
           const [offersRes, estimateRes] = await Promise.all([
             api.get('/cabs/outstation-offers'),
@@ -83,6 +117,7 @@ const CarOptions = () => {
           const fareMap = {};
           (estimateRes.data?.fares || []).forEach((f) => { fareMap[f.cab_type_id] = f.fare_amount; });
           setOutstationFares(fareMap);
+          setOutstationDistanceKm(tripType === 'multiple_stops' ? computedMultiStopDistanceKm : null);
           setLocalOffers([]);
           setAirportOffers([]);
           setOptions([]);
@@ -107,7 +142,7 @@ const CarOptions = () => {
     };
 
     fetchData();
-  }, [isLocalFlow, isAirportFlow, isOutstationFlow, bookingState.from_lat, bookingState.from_lng, bookingState.to_lat, bookingState.to_lng, bookingState.trip_type, bookingState.number_of_days]);
+  }, [isLocalFlow, isAirportFlow, isOutstationFlow, bookingState.from_lat, bookingState.from_lng, bookingState.to_lat, bookingState.to_lng, bookingState.trip_type, bookingState.number_of_days, bookingState.stop_points]);
 
   const selectedHours = bookingState.number_of_hours ? Number(bookingState.number_of_hours) : null;
   const fromLocation = bookingState.from_location || '';
@@ -122,7 +157,6 @@ const CarOptions = () => {
       nightCharges,
     } = opts;
     const imageUrl = (cab?.image_url ? getImageUrl(cab.image_url) : null) || (ct.image_url ? getImageUrl(ct.image_url) : null) || (ct.cabs?.[0]?.image_url ? getImageUrl(ct.cabs[0].image_url) : null);
-    const seating = ct.seatingCapacity != null ? `${ct.seatingCapacity - 1}+1 seater` : '—';
     const gstText = ct.gstIncluded === true ? 'Includes GST' : ct.gstIncluded === false ? 'Excludes GST' : 'Includes GST';
     const driverText = driverCharges == null || Number(driverCharges) === 0 ? 'Included' : `₹${driverCharges}`;
     const nightText = nightCharges == null || Number(nightCharges) === 0 ? 'Included' : `₹${nightCharges}`;
@@ -136,10 +170,6 @@ const CarOptions = () => {
           ) : (
             <div className="unified-cab-card-image-placeholder"><Icon name="car" size={48} /></div>
           )}
-        </div>
-        <div className="unified-cab-card-seating-row">
-          <span className="unified-cab-card-seating">{seating}</span>
-          <span className="unified-cab-card-seating-dash">—</span>
         </div>
         <div className="unified-cab-card-fare">
           <span className="unified-cab-card-fare-amount">₹{displayFare != null ? displayFare : '—'}/-</span>
@@ -183,6 +213,7 @@ const CarOptions = () => {
     setConfirmPassengerName('');
     setConfirmPassengerPhone('');
     setConfirmTravelDatetime(bookingState.travel_datetime || '');
+    setConfirmCrystaSeater('7+1');
     setConfirmModal({ cab, cabType });
   };
 
@@ -191,6 +222,7 @@ const CarOptions = () => {
     setReconfirmData(null);
     setConfirmError('');
     setConfirmTravelDatetime('');
+    setConfirmCrystaSeater('7+1');
   };
 
   const handleConfirmBooking = (e) => {
@@ -216,7 +248,11 @@ const CarOptions = () => {
       if (bookingState.trip_type === 'round_trip') {
         summaryLines.push({ label: 'Days', value: String(bookingState.number_of_days || '—') });
       }
-      if (bookingState.return_datetime) {
+      if (bookingState.trip_type === 'multiple_stops') {
+        summaryLines.push({ label: 'Days', value: String(bookingState.number_of_days || '—') });
+        if (outstationDistanceKm != null) summaryLines.push({ label: 'Distance', value: `${outstationDistanceKm} km` });
+      }
+      if (bookingState.trip_type === 'round_trip' && bookingState.return_datetime) {
         try {
           const rd = new Date(bookingState.return_datetime);
           summaryLines.push({ label: 'Return date', value: rd.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) });
@@ -233,7 +269,11 @@ const CarOptions = () => {
       summaryLines.push({ label: 'From', value: fromLocation || '—' });
       summaryLines.push({ label: 'Package', value: `${selectedHours}h` });
     }
+    const isCrystaSelected = /crysta/i.test(confirmModal.cabType.name || '');
     summaryLines.push({ label: 'Cab type', value: confirmModal.cabType.name });
+    if (isCrystaSelected) {
+      summaryLines.push({ label: 'Seater', value: confirmCrystaSeater });
+    }
     summaryLines.push({ label: 'Vehicle', value: confirmModal.cab.vehicle_number || confirmModal.cabType.name });
     summaryLines.push({ label: 'Name', value: name });
     summaryLines.push({ label: 'Phone', value: phone });
@@ -253,6 +293,7 @@ const CarOptions = () => {
       passengerPhone: phone,
       passengerEmail: (confirmPassengerEmail || '').trim() || undefined,
       travelDatetime: confirmTravelDatetime,
+      crystaSeater: isCrystaSelected ? confirmCrystaSeater : null,
       fareAmount,
       summaryLines,
     });
@@ -267,7 +308,9 @@ const CarOptions = () => {
     setConfirmSubmitting(true);
     setConfirmError('');
     try {
-      const { cab, cabType, passengerName, passengerPhone, passengerEmail, fareAmount, travelDatetime } = reconfirmData;
+      const { cab, cabType, passengerName, passengerPhone, passengerEmail, fareAmount, travelDatetime, crystaSeater } = reconfirmData;
+      const isCrystaSelected = /crysta/i.test(cabType?.name || '');
+      const notes = (isCrystaSelected && crystaSeater) ? `Crysta seater: ${crystaSeater}` : undefined;
       if (isAirportFlow) {
         const payload = {
           service_type: 'airport',
@@ -277,9 +320,11 @@ const CarOptions = () => {
           passenger_phone: passengerPhone,
           passenger_email: passengerEmail,
           fare_amount: fareAmount,
-          cab_id: cab?.id ?? null,
+          // Do not pre-assign a cab/driver from the customer flow; admin will assign.
+          cab_id: null,
           cab_type_id: cabType.id,
           travel_date: travelDatetime || null,
+          notes,
         };
         if (bookingState.from_lat != null && bookingState.from_lng != null) {
           payload.pickup_lat = bookingState.from_lat;
@@ -294,6 +339,18 @@ const CarOptions = () => {
         setConfirmModal(null);
         setReconfirmData(null);
       } else if (isOutstationFlow) {
+        if ((bookingState.trip_type === 'round_trip' || bookingState.trip_type === 'multiple_stops') && (bookingState.number_of_days == null || bookingState.number_of_days === '')) {
+          setConfirmError('Number of days is missing. Please go back and re-enter booking details.');
+          return;
+        }
+        if (bookingState.trip_type === 'round_trip' && bookingState.return_datetime) {
+          const computedDays = ceilDaysDiff(travelDatetime, bookingState.return_datetime);
+          const selectedDays = bookingState.number_of_days != null ? Number(bookingState.number_of_days) : null;
+          if (computedDays != null && Number.isFinite(selectedDays) && selectedDays >= 1 && computedDays !== selectedDays) {
+            setConfirmError(`Number of days (${selectedDays}) does not match pickup/return dates (${computedDays} day(s)). Please fix it.`);
+            return;
+          }
+        }
         const payload = {
           service_type: 'outstation',
           trip_type: bookingState.trip_type || 'one_way',
@@ -303,11 +360,15 @@ const CarOptions = () => {
           passenger_phone: passengerPhone,
           passenger_email: passengerEmail,
           fare_amount: fareAmount,
-          cab_id: cab?.id ?? null,
+          // Do not pre-assign a cab/driver from the customer flow; admin will assign.
+          cab_id: null,
           cab_type_id: cabType.id,
           travel_date: travelDatetime || null,
-          return_date: bookingState.return_datetime || null,
+          return_date: bookingState.trip_type === 'round_trip' ? (bookingState.return_datetime || null) : null,
+          notes,
         };
+        if (bookingState.number_of_days != null) payload.number_of_days = bookingState.number_of_days;
+        if (outstationDistanceKm != null) payload.distance_km = outstationDistanceKm;
         if (bookingState.from_lat != null && bookingState.from_lng != null) {
           payload.pickup_lat = bookingState.from_lat;
           payload.pickup_lng = bookingState.from_lng;
@@ -330,11 +391,13 @@ const CarOptions = () => {
           passenger_email: passengerEmail,
           fare_amount: fareAmount,
           number_of_hours: selectedHours,
-          cab_id: cab.id ?? null,
+          // Do not pre-assign a cab/driver from the customer flow; admin will assign.
+          cab_id: null,
           cab_type_id: cabType.id,
           pickup_lat: bookingState.from_lat ?? null,
           pickup_lng: bookingState.from_lng ?? null,
           travel_date: travelDatetime || null,
+          notes,
         });
         setSuccessBookingId(res.data?.id);
         setConfirmModal(null);
@@ -379,7 +442,15 @@ const CarOptions = () => {
                 <span>
                   {bookingState.trip_type === 'one_way' && `${bookingState.from_location} → ${bookingState.to_location}`}
                   {bookingState.trip_type === 'round_trip' && `Round trip from ${bookingState.from_location} (${bookingState.number_of_days} day(s))`}
-                  {bookingState.trip_type === 'multiple_stops' && (bookingState.stops && bookingState.stops.length > 1 ? `${bookingState.stops.length} stops` : bookingState.from_location)}
+                  {bookingState.trip_type === 'multiple_stops' && (() => {
+                    const pts = Array.isArray(bookingState.stops) ? bookingState.stops : [];
+                    const intermediateStops = Math.max(0, pts.length - 2);
+                    const daysText = bookingState.number_of_days ? ` · ${bookingState.number_of_days} day(s)` : '';
+                    if (bookingState.from_location && bookingState.to_location) {
+                      return `Multi way: ${bookingState.from_location} → ${bookingState.to_location} (${intermediateStops} stop(s))${daysText}`;
+                    }
+                    return `Multi way (${intermediateStops} stop(s))${daysText}`;
+                  })()}
                 </span>
               </div>
             )}
@@ -719,6 +790,15 @@ const CarOptions = () => {
                       placeholder="Enter email for confirmation and updates"
                     />
                   </div>
+                  {/crysta/i.test(confirmModal.cabType.name || '') && (
+                    <div className="car-options-confirm-field">
+                      <label>Seater option (Crysta)</label>
+                      <select value={confirmCrystaSeater} onChange={(e) => setConfirmCrystaSeater(e.target.value)}>
+                        <option value="6+1">6+1 seater</option>
+                        <option value="7+1">7+1 seater</option>
+                      </select>
+                    </div>
+                  )}
                   <div className="car-options-confirm-field">
                     <label>Date and time</label>
                     <DateTimePicker

@@ -16,6 +16,20 @@ async function runMigration() {
       } else throw e;
     }
 
+    try {
+      await db.runAsync('ALTER TABLE cab_types ADD COLUMN image_url TEXT');
+      console.log('Added image_url to cab_types');
+    } catch (e) {
+      if (e.message && e.message.includes('duplicate column')) {
+        console.log('cab_types.image_url already exists');
+      } else if (e.message && (e.message.includes('already exists') || e.message.includes('duplicate column name'))) {
+        console.log('cab_types.image_url already exists');
+      } else {
+        // Keep migration best-effort; some DBs may not support this exact syntax
+        console.log('Skipping cab_types.image_url add:', e.message);
+      }
+    }
+
     const tableInfo = await db.getAsync(
       "SELECT name FROM sqlite_master WHERE type='table' AND name='cab_types'"
     );
@@ -27,11 +41,19 @@ async function runMigration() {
       if (sql && sql.includes('UNIQUE(name, service_type)')) {
         console.log('cab_types already has UNIQUE(name, service_type)');
       } else {
+        let hasImageUrl = false;
+        try {
+          const cols = await db.allAsync('PRAGMA table_info(cab_types)');
+          hasImageUrl = Array.isArray(cols) && cols.some((c) => (c && c.name) === 'image_url');
+        } catch (e) {
+          hasImageUrl = false;
+        }
         await db.runAsync(`
           CREATE TABLE cab_types_new (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             description TEXT,
+            image_url TEXT,
             base_fare REAL NOT NULL DEFAULT 0,
             per_km_rate REAL NOT NULL DEFAULT 0,
             per_minute_rate REAL DEFAULT 0,
@@ -43,8 +65,9 @@ async function runMigration() {
           )
         `);
         await db.runAsync(`
-          INSERT INTO cab_types_new (id, name, description, base_fare, per_km_rate, per_minute_rate, capacity, is_active, created_at, service_type)
-          SELECT id, name, description, base_fare, per_km_rate, per_minute_rate, capacity, is_active, created_at, COALESCE(service_type, 'local') FROM cab_types
+          INSERT INTO cab_types_new (id, name, description, image_url, base_fare, per_km_rate, per_minute_rate, capacity, is_active, created_at, service_type)
+          SELECT id, name, description, ${hasImageUrl ? 'image_url' : 'NULL'} as image_url, base_fare, per_km_rate, per_minute_rate, capacity, is_active, created_at, COALESCE(service_type, 'local')
+          FROM cab_types
         `);
         await db.runAsync('DROP TABLE cab_types');
         await db.runAsync('ALTER TABLE cab_types_new RENAME TO cab_types');

@@ -494,7 +494,9 @@ router.get('/rate-meter/airport/:cabTypeId', param('cabTypeId').isInt({ min: 1 }
     if (!ct) return res.status(404).json({ error: 'Cab type not found' });
     const row = await db.getAsync(
       `SELECT id, base_fare, per_km_rate, driver_charges, night_charges FROM rate_meters
-       WHERE service_type = 'airport' AND car_category = ? AND (trip_type IS NULL OR trip_type = '') AND is_active = 1 LIMIT 1`,
+       WHERE service_type = 'airport' AND car_category = ? AND (trip_type IS NULL OR trip_type = '') AND is_active = 1
+       ORDER BY id DESC
+       LIMIT 1`,
       [ct.name]
     );
     res.json({
@@ -520,7 +522,9 @@ router.put(
       const ct = await db.getAsync('SELECT id, name FROM cab_types WHERE id = ? AND service_type = \'airport\'', [cabTypeId]);
       if (!ct) return res.status(404).json({ error: 'Cab type not found' });
       const existing = await db.getAsync(
-        `SELECT id FROM rate_meters WHERE service_type = 'airport' AND car_category = ? AND (trip_type IS NULL OR trip_type = '')`,
+        `SELECT id FROM rate_meters WHERE service_type = 'airport' AND car_category = ? AND (trip_type IS NULL OR trip_type = '') AND is_active = 1
+         ORDER BY id DESC
+         LIMIT 1`,
         [ct.name]
       );
       const bf = base_fare != null ? Number(base_fare) : 0;
@@ -540,7 +544,9 @@ router.put(
       }
       const row = await db.getAsync(
         `SELECT base_fare, per_km_rate, driver_charges, night_charges FROM rate_meters
-         WHERE service_type = 'airport' AND car_category = ? AND (trip_type IS NULL OR trip_type = '') LIMIT 1`,
+         WHERE service_type = 'airport' AND car_category = ? AND (trip_type IS NULL OR trip_type = '') AND is_active = 1
+         ORDER BY id DESC
+         LIMIT 1`,
         [ct.name]
       );
       res.json({
@@ -563,9 +569,9 @@ router.get('/rate-meter/outstation/:cabTypeId', param('cabTypeId').isInt({ min: 
     const ct = await db.getAsync('SELECT id, name FROM cab_types WHERE id = ? AND service_type = \'outstation\'', [cabTypeId]);
     if (!ct) return res.status(404).json({ error: 'Cab type not found' });
     const [oneWay, roundTrip, multiStop] = await Promise.all([
-      db.getAsync(`SELECT min_km, base_fare, extra_km_rate, driver_charges, night_charges FROM rate_meters WHERE service_type = 'outstation' AND car_category = ? AND trip_type = 'one_way' AND is_active = 1 LIMIT 1`, [ct.name]),
-      db.getAsync(`SELECT base_km_per_day, per_km_rate, extra_km_rate, driver_charges, night_charges FROM rate_meters WHERE service_type = 'outstation' AND car_category = ? AND trip_type = 'round_trip' AND is_active = 1 LIMIT 1`, [ct.name]),
-      db.getAsync(`SELECT base_fare, per_km_rate, driver_charges, night_charges FROM rate_meters WHERE service_type = 'outstation' AND car_category = ? AND trip_type = 'multiple_stops' AND is_active = 1 LIMIT 1`, [ct.name]),
+      db.getAsync(`SELECT min_km, base_fare, extra_km_rate, driver_charges, night_charges FROM rate_meters WHERE service_type = 'outstation' AND car_category = ? AND trip_type = 'one_way' AND is_active = 1 ORDER BY id DESC LIMIT 1`, [ct.name]),
+      db.getAsync(`SELECT base_km_per_day, per_km_rate, extra_km_rate, driver_charges, night_charges FROM rate_meters WHERE service_type = 'outstation' AND car_category = ? AND trip_type = 'round_trip' AND is_active = 1 ORDER BY id DESC LIMIT 1`, [ct.name]),
+      db.getAsync(`SELECT base_fare, per_km_rate, driver_charges, night_charges FROM rate_meters WHERE service_type = 'outstation' AND car_category = ? AND trip_type = 'multiple_stops' AND is_active = 1 ORDER BY id DESC LIMIT 1`, [ct.name]),
     ]);
     res.json({
       cab_type_id: ct.id,
@@ -592,7 +598,9 @@ router.put(
 
       const upsert = async (tripType, fields) => {
         const existing = await db.getAsync(
-          `SELECT id FROM rate_meters WHERE service_type = 'outstation' AND car_category = ? AND trip_type = ?`,
+          `SELECT id FROM rate_meters WHERE service_type = 'outstation' AND car_category = ? AND trip_type = ? AND is_active = 1
+           ORDER BY id DESC
+           LIMIT 1`,
           [cat, tripType]
         );
         if (existing) {
@@ -633,9 +641,9 @@ router.put(
       }
 
       const [oneWayRow, roundTripRow, multiStopRow] = await Promise.all([
-        db.getAsync(`SELECT min_km, base_fare, extra_km_rate, driver_charges, night_charges FROM rate_meters WHERE service_type = 'outstation' AND car_category = ? AND trip_type = 'one_way' LIMIT 1`, [cat]),
-        db.getAsync(`SELECT base_km_per_day, per_km_rate, extra_km_rate, driver_charges, night_charges FROM rate_meters WHERE service_type = 'outstation' AND car_category = ? AND trip_type = 'round_trip' LIMIT 1`, [cat]),
-        db.getAsync(`SELECT base_fare, per_km_rate, driver_charges, night_charges FROM rate_meters WHERE service_type = 'outstation' AND car_category = ? AND trip_type = 'multiple_stops' LIMIT 1`, [cat]),
+        db.getAsync(`SELECT min_km, base_fare, extra_km_rate, driver_charges, night_charges FROM rate_meters WHERE service_type = 'outstation' AND car_category = ? AND trip_type = 'one_way' AND is_active = 1 ORDER BY id DESC LIMIT 1`, [cat]),
+        db.getAsync(`SELECT base_km_per_day, per_km_rate, extra_km_rate, driver_charges, night_charges FROM rate_meters WHERE service_type = 'outstation' AND car_category = ? AND trip_type = 'round_trip' AND is_active = 1 ORDER BY id DESC LIMIT 1`, [cat]),
+        db.getAsync(`SELECT base_fare, per_km_rate, driver_charges, night_charges FROM rate_meters WHERE service_type = 'outstation' AND car_category = ? AND trip_type = 'multiple_stops' AND is_active = 1 ORDER BY id DESC LIMIT 1`, [cat]),
       ]);
       res.json({
         cab_type_id: Number(cabTypeId),

@@ -236,6 +236,19 @@
   color: #fff;
 }
 
+.datetime-picker-time-slot-disabled {
+  color: #9ca3af;
+  cursor: not-allowed;
+  background: #f3f4f6;
+  border-color: transparent;
+  opacity: 0.9;
+}
+
+.datetime-picker-time-slot-disabled:hover {
+  background: #f3f4f6;
+  border-color: transparent;
+}
+
 @media (max-width: 480px) {
   .datetime-picker-dropdown {
     flex-direction: column;

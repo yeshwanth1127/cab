@@ -160,7 +160,12 @@ function generateInvoicePDF(booking, withGST = true) {
     ];
     const totalKms = booking.distance_km != null ? Number(booking.distance_km) : 0;
     const noOfDays = booking.number_of_days != null ? Number(booking.number_of_days) : 1;
-    const amount = Number(booking.fare_amount) || 0;
+    const baseAmount = Number(booking.fare_amount) || 0;
+    const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+    const gstRate = 0.05;
+    const gstAmount = withGST ? round2(baseAmount * gstRate) : 0;
+    const grandTotal = round2(baseAmount + gstAmount);
+    const formatMoney = (n) => round2(n).toFixed(2);
 
     let rowY = tableTop + headerH;
     const firstRowH = rowH * 5;
@@ -175,7 +180,7 @@ function generateInvoicePDF(booking, withGST = true) {
     doc.text(String(totalKms || '0'), colKms + cellPad, rowY + 4, { width: colW.kms - cellPad });
     doc.text(String(noOfDays), colDays + cellPad, rowY + 4, { width: colW.days - cellPad });
     doc.text('NA', colRate + cellPad, rowY + 4, { width: colW.rate - cellPad });
-    doc.text(String(Math.round(amount)), colAmount + cellPad, rowY + 4, { width: colW.amount - cellPad, align: 'right' });
+    doc.text(formatMoney(baseAmount), colAmount + cellPad, rowY + 4, { width: colW.amount - cellPad, align: 'right' });
 
     const extraRows = [
       { label: 'Toll tax', val: 0 },
@@ -202,21 +207,32 @@ function generateInvoicePDF(booking, withGST = true) {
       doc.moveTo(x, rowY).lineTo(x, rowY + rowH).stroke();
     });
     doc.font('Helvetica-Bold').text('Sub Total', colDesc + cellPad, rowY + 5, { width: colW.desc - cellPad });
-    doc.text(String(Math.round(amount)), colAmount + cellPad, rowY + 5, { width: colW.amount - cellPad, align: 'right' });
+    doc.text(formatMoney(baseAmount), colAmount + cellPad, rowY + 5, { width: colW.amount - cellPad, align: 'right' });
     rowY += rowH;
+
+    if (withGST) {
+      doc.rect(margin, rowY, tableWidth, rowH).stroke();
+      [colDesc, colKms, colDays, colRate, colAmount].forEach((x) => {
+        doc.moveTo(x, rowY).lineTo(x, rowY + rowH).stroke();
+      });
+      doc.font('Helvetica-Bold').text('GST @ 5%', colDesc + cellPad, rowY + 5, { width: colW.desc - cellPad });
+      doc.text(formatMoney(gstAmount), colAmount + cellPad, rowY + 5, { width: colW.amount - cellPad, align: 'right' });
+      rowY += rowH;
+    }
+
     doc.rect(margin, rowY, tableWidth, rowH).stroke();
     [colDesc, colKms, colDays, colRate, colAmount].forEach((x) => {
       doc.moveTo(x, rowY).lineTo(x, rowY + rowH).stroke();
     });
     doc.text('Grand Total', colDesc + cellPad, rowY + 5, { width: colW.desc - cellPad });
-    doc.text(amount.toFixed(2), colAmount + cellPad, rowY + 5, { width: colW.amount - cellPad, align: 'right' });
+    doc.text(formatMoney(grandTotal), colAmount + cellPad, rowY + 5, { width: colW.amount - cellPad, align: 'right' });
     doc.moveTo(colAmount + cellPad, rowY + rowH - 4).lineTo(colAmount + colW.amount - cellPad, rowY + rowH - 4).stroke();
     doc.moveTo(colAmount + cellPad, rowY + rowH - 2).lineTo(colAmount + colW.amount - cellPad, rowY + rowH - 2).stroke();
     doc.font('Helvetica');
 
     rowY += rowH + 14;
     doc.fontSize(9).fillColor('#374151');
-    doc.text(`Amount in Words (Rs): ${numberToWords(amount)}`, margin, rowY);
+    doc.text(`Amount in Words (Rs): ${numberToWords(Math.round(grandTotal))}`, margin, rowY);
 
     let termsY = rowY + 36;
     doc.fontSize(10).font('Helvetica-Bold').fillColor('black').text('Terms & Conditions', margin, termsY);

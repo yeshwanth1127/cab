@@ -12,6 +12,16 @@ const CorporateBookingPage = () => {
   const dateInputRef = useRef(null);
   const timeInputRef = useRef(null);
 
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const getTodayLocalDate = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  };
+  const getNowLocalTime = () => {
+    const d = new Date();
+    return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  };
+
   const handleDateInputClick = (e) => {
     if (e.target.showPicker) {
       e.target.showPicker();
@@ -109,10 +119,17 @@ const CorporateBookingPage = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData(prev => {
+      const next = { ...prev, [name]: value };
+      if (name === 'travel_date') {
+        const today = getTodayLocalDate();
+        if (value === today && next.travel_time) {
+          const minTime = getNowLocalTime();
+          if (next.travel_time < minTime) next.travel_time = '';
+        }
+      }
+      return next;
+    });
 
     if (errors[name]) {
       setErrors(prev => ({
@@ -142,6 +159,15 @@ const CorporateBookingPage = () => {
     }
     if (!formData.travel_time) {
       newErrors.travel_time = 'Travel time is required';
+    }
+    if (formData.travel_date && formData.travel_time) {
+      const today = getTodayLocalDate();
+      if (formData.travel_date === today) {
+        const minTime = getNowLocalTime();
+        if (formData.travel_time < minTime) {
+          newErrors.travel_time = 'Travel time cannot be in the past';
+        }
+      }
     }
 
     setErrors(newErrors);
@@ -323,7 +349,7 @@ const CorporateBookingPage = () => {
                         value={formData.travel_date}
                         onChange={handleChange}
                         onClick={handleDateInputClick}
-                        min={new Date().toISOString().split('T')[0]}
+                        min={getTodayLocalDate()}
                         className="corporate-datetime-input"
                         aria-hidden="true"
                         tabIndex={-1}
@@ -347,6 +373,7 @@ const CorporateBookingPage = () => {
                         value={formData.travel_time}
                         onChange={handleChange}
                         onClick={handleDateInputClick}
+                        min={formData.travel_date === getTodayLocalDate() ? getNowLocalTime() : undefined}
                         className="corporate-datetime-input"
                         aria-hidden="true"
                         tabIndex={-1}

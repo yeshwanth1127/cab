@@ -62,13 +62,18 @@ function parseValue(value) {
   }
 }
 
-export default function DateTimePicker({ value = '', onChange, placeholder, disabled, min, max, className = '', id }) {
+export default function DateTimePicker({ value = '', onChange, placeholder, disabled, min, max, className = '', id, disablePast = true }) {
   const containerRef = useRef(null);
   const timeListRef = useRef(null);
   const [open, setOpen] = useState(false);
   const parsed = parseValue(value);
-  const minDate = min ? new Date(min) : null;
-  const maxDate = max ? new Date(max) : null;
+  const nowAtRender = new Date();
+  const rawMinDate = min ? new Date(min) : null;
+  const rawMaxDate = max ? new Date(max) : null;
+  const minDate = disablePast
+    ? (rawMinDate && rawMinDate > nowAtRender ? rawMinDate : nowAtRender)
+    : rawMinDate;
+  const maxDate = rawMaxDate;
 
   const [viewDate, setViewDate] = useState(() => {
     const d = parsed || new Date();
@@ -123,6 +128,8 @@ export default function DateTimePicker({ value = '', onChange, placeholder, disa
     const slot = TIME_SLOTS.find((s) => s.label === timeLabel);
     if (!slot) return;
     const d = new Date(date.getFullYear(), date.getMonth(), date.getDate(), slot.h, slot.m, 0, 0);
+    if (minDate && d < minDate) return;
+    if (maxDate && d > maxDate) return;
     onChange(toISOLocal(d));
     setOpen(false);
   };
@@ -170,11 +177,27 @@ export default function DateTimePicker({ value = '', onChange, placeholder, disa
     return false;
   };
 
-  const now = new Date();
-  const yearMin = minDate ? minDate.getFullYear() : now.getFullYear();
-  const yearMax = maxDate ? maxDate.getFullYear() : now.getFullYear() + 2;
+  const yearMin = minDate ? minDate.getFullYear() : nowAtRender.getFullYear();
+  const yearMax = maxDate ? maxDate.getFullYear() : nowAtRender.getFullYear() + 2;
   const years = [];
   for (let y = yearMin; y <= yearMax; y++) years.push(y);
+
+  const isTimeDisabled = (slot) => {
+    if (!slot) return true;
+    if (!selectedDate) return false;
+    const slotDateTime = new Date(
+      selectedDate.getFullYear(),
+      selectedDate.getMonth(),
+      selectedDate.getDate(),
+      slot.h,
+      slot.m,
+      0,
+      0
+    );
+    if (minDate && slotDateTime < minDate) return true;
+    if (maxDate && slotDateTime > maxDate) return true;
+    return false;
+  };
 
   return (
     <div ref={containerRef} className={`datetime-picker-wrap ${value ? 'has-value' : ''} ${className}`.trim()}>
@@ -239,12 +262,14 @@ export default function DateTimePicker({ value = '', onChange, placeholder, disa
             <div className="datetime-picker-time-list-wrap" ref={timeListRef}>
               {TIME_SLOTS.map((slot) => {
                 const selected = selectedTime === slot.label;
+                const disabled = isTimeDisabled(slot);
                 return (
                   <button
                     key={slot.label}
                     type="button"
-                    className={`datetime-picker-time-slot ${selected ? 'datetime-picker-time-slot-selected' : ''}`}
-                    onClick={() => handleTimeClick(slot.label)}
+                    className={`datetime-picker-time-slot ${selected ? 'datetime-picker-time-slot-selected' : ''} ${disabled ? 'datetime-picker-time-slot-disabled' : ''}`}
+                    disabled={disabled}
+                    onClick={() => !disabled && handleTimeClick(slot.label)}
                   >
                     {slot.label}
                   </button>

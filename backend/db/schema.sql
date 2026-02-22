@@ -9,14 +9,17 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE TABLE IF NOT EXISTS cab_types (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
     description TEXT,
-    base_fare REAL NOT NULL,
-    per_km_rate REAL NOT NULL,
+    image_url TEXT,
+    service_type TEXT DEFAULT 'local' CHECK (service_type IN ('local', 'airport', 'outstation')),
+    base_fare REAL NOT NULL DEFAULT 0,
+    per_km_rate REAL NOT NULL DEFAULT 0,
     per_minute_rate REAL DEFAULT 0,
     capacity INTEGER DEFAULT 4,
     is_active INTEGER DEFAULT 1,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(name, service_type)
 );
 
 CREATE TABLE IF NOT EXISTS cabs (
@@ -27,11 +30,41 @@ CREATE TABLE IF NOT EXISTS cabs (
     driver_phone TEXT,
     driver_email TEXT,
     driver_id INTEGER,
+    name TEXT,
+    description TEXT,
+    image_url TEXT,
     is_available INTEGER DEFAULT 1,
     is_active INTEGER DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (cab_type_id) REFERENCES cab_types(id) ON DELETE SET NULL,
     FOREIGN KEY (driver_id) REFERENCES drivers(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS rate_meters (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    service_type TEXT NOT NULL,
+    car_category TEXT NOT NULL,
+    trip_type TEXT,
+    base_fare REAL DEFAULT 0,
+    per_km_rate REAL DEFAULT 0,
+    extra_km_rate REAL DEFAULT 0,
+    min_km INTEGER,
+    base_km_per_day INTEGER,
+    driver_charges REAL DEFAULT 0,
+    night_charges REAL DEFAULT 0,
+    is_active INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS local_package_rates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cab_type_id INTEGER NOT NULL,
+    hours INTEGER NOT NULL,
+    package_fare REAL,
+    extra_hour_rate REAL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (cab_type_id) REFERENCES cab_types(id) ON DELETE CASCADE,
+    UNIQUE(cab_type_id, hours)
 );
 
 CREATE TABLE IF NOT EXISTS drivers (
@@ -86,12 +119,15 @@ CREATE TABLE IF NOT EXISTS bookings (
 
 CREATE TABLE IF NOT EXISTS car_options (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cab_type_id INTEGER,
     name TEXT NOT NULL,
     description TEXT,
+    car_subtype TEXT,
     image_url TEXT,
     is_active INTEGER DEFAULT 1,
     sort_order INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (cab_type_id) REFERENCES cab_types(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS corporate_companies (
@@ -228,7 +264,11 @@ CREATE TABLE IF NOT EXISTS event_booking_assignments (
     FOREIGN KEY (driver_id) REFERENCES drivers(id) ON DELETE SET NULL
 );
 
-INSERT OR IGNORE INTO cab_types (name, description, base_fare, per_km_rate, per_minute_rate, capacity) VALUES
-('Local', 'Local city rides', 50.00, 10.00, 1.00, 4),
-('Airport', 'Airport pick-up and drop', 80.00, 12.00, 1.20, 4),
-('Outstation', 'Outstation / intercity trips', 100.00, 15.00, 1.50, 4);
+INSERT OR IGNORE INTO cab_types (name, description, service_type, base_fare, per_km_rate, per_minute_rate, capacity) VALUES
+('Sedan', 'Sedan cars', 'local', 0, 0, 0, 4),
+('SUV', 'SUV cars', 'local', 0, 0, 0, 6),
+('Innova Crysta', 'Innova Crysta', 'local', 0, 0, 0, 6),
+('Sedan', 'Sedan cars', 'airport', 0, 0, 0, 4),
+('SUV', 'SUV cars', 'airport', 0, 0, 0, 6),
+('Sedan', 'Sedan cars', 'outstation', 0, 0, 0, 4),
+('SUV', 'SUV cars', 'outstation', 0, 0, 0, 6);

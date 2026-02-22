@@ -144,6 +144,12 @@ const AdminDashboard = () => {
 
   const [tabFilter, setTabFilter] = useState({ search: '', serviceType: '', dateFrom: '', dateTo: '' });
 
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const getTodayLocalDate = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  };
+
   const [invoiceForm, setInvoiceForm] = useState({
     from_location: '',
     to_location: '',
@@ -157,6 +163,35 @@ const AdminDashboard = () => {
     extra_stops: [],
     with_gst: true,
   });
+  const [invoiceBuilder, setInvoiceBuilder] = useState({
+    invoice_number: '',
+    invoice_date: getTodayLocalDate(),
+    due_date: '',
+    currency: 'INR',
+    bill_to_name: '',
+    bill_to_phone: '',
+    bill_to_email: '',
+    bill_to_address: '',
+    bill_to_gstin: '',
+    payment_bank_name: '',
+    payment_account_number: '',
+    payment_ifsc: '',
+    payment_upi_id: '',
+    notes: '',
+    terms: '',
+    items: [{ description: 'Cab service', quantity: 1, rate: '' }],
+  });
+
+  const invoiceItemsSubtotal = (Array.isArray(invoiceBuilder.items) ? invoiceBuilder.items : []).reduce((sum, item) => {
+    const qty = Number(item?.quantity) || 0;
+    const rate = Number(item?.rate) || 0;
+    if (qty <= 0 || rate < 0) return sum;
+    return sum + qty * rate;
+  }, 0);
+  const invoiceGstRate = invoiceForm.with_gst ? 0.05 : 0;
+  const invoiceGstAmount = Math.round(invoiceItemsSubtotal * invoiceGstRate * 100) / 100;
+  const invoiceGrandTotal = Math.round((invoiceItemsSubtotal + invoiceGstAmount) * 100) / 100;
+
   const [invoiceFromLocation, setInvoiceFromLocation] = useState(null);
   const [invoiceToLocation, setInvoiceToLocation] = useState(null);
   const [invoiceSubmitting, setInvoiceSubmitting] = useState(false);
@@ -673,8 +708,10 @@ const AdminDashboard = () => {
       if (detailBooking && detailBooking.id === bookingId) {
         setDetailBooking((prev) => (prev ? { ...prev, booking_status: newStatus } : null));
       }
+      return true;
     } catch (err) {
       showToast(err.response?.data?.error || 'Failed to update status', 'error');
+      return false;
     } finally {
       setStatusUpdatingId(null);
     }
@@ -733,11 +770,16 @@ const AdminDashboard = () => {
       toAddress = fromAddress;
     } else if (multipleStops) {
       if (!fromAddress) {
-        showToast('Please select From (first stop).', 'error');
+        showToast('Please select From (A).', 'error');
         return;
       }
-      const stops = (extra_stops || []).filter(Boolean).map((s) => (typeof s === 'string' ? s : s?.address || s).trim());
-      toAddress = stops.length ? stops.join(', ') : fromAddress;
+      const destAddress = (toLocation?.address || createForm.to_location || '').trim();
+      if (!destAddress) {
+        showToast('Please select Destination (B).', 'error');
+        return;
+      }
+      const intermediate = (extra_stops || []).filter(Boolean).map((s) => (typeof s === 'string' ? s : s?.address || s).trim());
+      toAddress = intermediate.length ? [...intermediate, destAddress].join(', ') : destAddress;
     } else if (service_type === 'local') {
       if (!fromAddress) {
         showToast('Please select From location.', 'error');
@@ -831,7 +873,18 @@ const AdminDashboard = () => {
 
   const handleCreateInvoiceSubmit = async (e) => {
     e.preventDefault();
-    const { from_location, to_location, passenger_name, passenger_phone, fare_amount, service_type, number_of_hours, outstation_trip_type, extra_stops, with_gst } = invoiceForm;
+    const {
+      from_location,
+      to_location,
+      passenger_name,
+      passenger_phone,
+      fare_amount,
+      service_type,
+      number_of_hours,
+      outstation_trip_type,
+      extra_stops,
+      with_gst,
+    } = invoiceForm;
     const isOutstation = service_type === 'outstation';
     const roundTrip = isOutstation && outstation_trip_type === 'round_trip';
     const multipleStops = isOutstation && outstation_trip_type === 'multiple_stops';
@@ -856,8 +909,21 @@ const AdminDashboard = () => {
         return;
       }
     }
-    if (!passenger_name?.trim() || !passenger_phone?.trim() || fare_amount === '' || Number(fare_amount) < 0) {
-      showToast('Please fill Passenger name, Phone, and Fare.', 'error');
+    const billToName = invoiceBuilder.bill_to_name?.trim() || passenger_name?.trim() || '';
+    const billToPhone = invoiceBuilder.bill_to_phone?.trim() || passenger_phone?.trim() || '';
+    const billToEmail = invoiceBuilder.bill_to_email?.trim() || invoiceForm.passenger_email?.trim() || '';
+
+    const items = Array.isArray(invoiceBuilder.items) ? invoiceBuilder.items : [];
+    const itemsSubtotal = items.reduce((sum, item) => {
+      const qty = Number(item?.quantity) || 0;
+      const rate = Number(item?.rate) || 0;
+      if (qty <= 0 || rate < 0) return sum;
+      return sum + qty * rate;
+    }, 0);
+    const baseAmount = itemsSubtotal > 0 ? itemsSubtotal : (fare_amount === '' ? 0 : Number(fare_amount));
+
+    if (!billToName || !billToPhone || !Number.isFinite(baseAmount) || baseAmount < 0) {
+      showToast('Please fill Customer name, Phone, and a valid amount.', 'error');
       return;
     }
     setInvoiceSubmitting(true);
@@ -865,10 +931,11 @@ const AdminDashboard = () => {
       const payload = {
         from_location: fromVal,
         to_location: toVal,
-        passenger_name: passenger_name.trim(),
-        passenger_phone: passenger_phone.trim(),
-        passenger_email: invoiceForm.passenger_email?.trim() || undefined,
-        fare_amount: Number(fare_amount),
+        passenger_name: billToName,
+        passenger_phone: billToPhone,
+        passenger_email: billToEmail || undefined,
+        invoice_number: invoiceBuilder.invoice_number?.trim() || undefined,
+        fare_amount: Number(baseAmount),
         service_type: service_type || 'local',
         number_of_hours: service_type === 'local' && number_of_hours ? Number(number_of_hours) : undefined,
         with_gst: with_gst,
@@ -898,6 +965,22 @@ const AdminDashboard = () => {
       setInvoiceFromLocation(null);
       setInvoiceToLocation(null);
       setInvoiceForm((f) => ({ ...f, from_location: '', to_location: '', passenger_name: '', passenger_phone: '', passenger_email: '', fare_amount: '', number_of_hours: '', extra_stops: [] }));
+      setInvoiceBuilder((b) => ({
+        ...b,
+        invoice_number: '',
+        bill_to_name: '',
+        bill_to_phone: '',
+        bill_to_email: '',
+        bill_to_address: '',
+        bill_to_gstin: '',
+        payment_bank_name: '',
+        payment_account_number: '',
+        payment_ifsc: '',
+        payment_upi_id: '',
+        notes: '',
+        terms: '',
+        items: [{ description: 'Cab service', quantity: 1, rate: '' }],
+      }));
       fetchBookings();
     } catch (err) {
       let msg = 'Failed to create invoice';
@@ -1560,7 +1643,9 @@ const AdminDashboard = () => {
   };
 
   const sortLatestFirst = (a, b) => (Number(b.id) || 0) - (Number(a.id) || 0);
-  const enquiriesBookings = [...bookings].sort(sortLatestFirst);
+  const enquiriesBookings = bookings
+    .filter((b) => b.booking_status === 'pending')
+    .sort(sortLatestFirst);
   const confirmedBookingsList = bookings
     .filter((b) => b.booking_status === 'confirmed')
     .sort(sortLatestFirst);
@@ -1700,7 +1785,7 @@ const AdminDashboard = () => {
     setTabFilter({ search: '', serviceType: '', dateFrom: '', dateTo: '' });
   };
 
-  const renderBookingsTable = (list, title, desc) => (
+  const renderBookingsTable = (list, title, desc, actionsVariant = 'default') => (
     <div className="admin-tab-section admin-dashboard-box">
       <h2 className="admin-dashboard-box-heading">{title}</h2>
       <p className="admin-bookings-desc">{desc}</p>
@@ -1723,36 +1808,79 @@ const AdminDashboard = () => {
               </div>
               <div className="admin-entry-card-actions">
                 <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setDetailBooking(b)}>View</button>
-                {b.booking_status === 'pending' && (
-                  <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => handleUpdateBookingStatus(b.id, 'confirmed')} disabled={statusUpdatingId === b.id}>
-                    {statusUpdatingId === b.id ? '…' : 'Confirm'}
-                  </button>
-                )}
-                {b.booking_status === 'confirmed' && (
-                  <>
-                    <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => handleUpdateBookingStatus(b.id, 'completed')} disabled={statusUpdatingId === b.id}>
-                      {statusUpdatingId === b.id ? '…' : 'Trip completed'}
+                {actionsVariant === 'enquiries' ? (
+                  b.booking_status === 'pending' ? (
+                    <button
+                      type="button"
+                      className="admin-btn admin-btn-primary admin-btn-sm"
+                      onClick={() => handleUpdateBookingStatus(b.id, 'confirmed')}
+                      disabled={statusUpdatingId === b.id}
+                    >
+                      {statusUpdatingId === b.id ? '…' : 'Confirm'}
                     </button>
-                    <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleUpdateBookingStatus(b.id, 'cancelled')} disabled={statusUpdatingId === b.id}>
-                      {statusUpdatingId === b.id ? '…' : 'Cancel'}
+                  ) : null
+                ) : actionsVariant === 'cancelled' ? (
+                  <button
+                    type="button"
+                    className="admin-btn admin-btn-primary admin-btn-sm"
+                    onClick={() => handleUpdateBookingStatus(b.id, 'confirmed')}
+                    disabled={statusUpdatingId === b.id}
+                  >
+                    {statusUpdatingId === b.id ? '…' : 'Confirm again'}
+                  </button>
+                ) : actionsVariant === 'tripEnd' ? (
+                  <>
+                    <button
+                      type="button"
+                      className="admin-btn admin-btn-primary admin-btn-sm"
+                      onClick={() => openDownloadInvoiceModal(b, true)}
+                    >
+                      Download (with GST)
+                    </button>
+                    <button
+                      type="button"
+                      className="admin-btn admin-btn-secondary admin-btn-sm"
+                      onClick={() => openDownloadInvoiceModal(b, false)}
+                    >
+                      Download (without GST)
                     </button>
                   </>
-                )}
-                <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => openAssignModal(b, false)}>{b.cab_id ? 'Reassign' : 'Assign'}</button>
-                {b.cab_id && (
+                ) : (
                   <>
-                    <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendDriverEmail(b)} disabled={sendDriverEmailId === b.id}>{sendDriverEmailId === b.id ? '…' : 'Send email to driver'}</button>
-                    <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendCustomerEmail(b)} disabled={sendCustomerEmailId === b.id}>{sendCustomerEmailId === b.id ? '…' : 'Send email to customer'}</button>
+                    {b.booking_status === 'pending' && (
+                      <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => handleUpdateBookingStatus(b.id, 'confirmed')} disabled={statusUpdatingId === b.id}>
+                        {statusUpdatingId === b.id ? '…' : 'Confirm'}
+                      </button>
+                    )}
+                    {b.booking_status === 'confirmed' && (
+                      <>
+                        <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => handleUpdateBookingStatus(b.id, 'completed')} disabled={statusUpdatingId === b.id}>
+                          {statusUpdatingId === b.id ? '…' : 'Trip completed'}
+                        </button>
+                        <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleUpdateBookingStatus(b.id, 'cancelled')} disabled={statusUpdatingId === b.id}>
+                          {statusUpdatingId === b.id ? '…' : 'Cancel'}
+                        </button>
+                      </>
+                    )}
+                    {['confirmed', 'in_progress'].includes(b.booking_status) && (
+                      <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => openAssignModal(b, false)}>{b.cab_id ? 'Reassign' : 'Assign'}</button>
+                    )}
+                    {b.cab_id && ['confirmed', 'in_progress'].includes(b.booking_status) && (
+                      <>
+                        <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendDriverEmail(b)} disabled={sendDriverEmailId === b.id}>{sendDriverEmailId === b.id ? '…' : 'Send email to driver'}</button>
+                        <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendCustomerEmail(b)} disabled={sendCustomerEmailId === b.id}>{sendCustomerEmailId === b.id ? '…' : 'Send email to customer'}</button>
+                      </>
+                    )}
+                    {b.maps_link && ['confirmed', 'in_progress'].includes(b.booking_status) && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link)}>Copy pickup map</button>}
+                    {b.maps_link_drop && ['confirmed', 'in_progress'].includes(b.booking_status) && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link_drop)}>Copy drop map</button>}
+                    {b.passenger_phone && ['confirmed', 'in_progress'].includes(b.booking_status) && (
+                      <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendWhatsAppToCustomer(b)} disabled={sendWhatsAppToCustomerId === b.id}>
+                        {sendWhatsAppToCustomerId === b.id ? '…' : 'WhatsApp (customer)'}
+                      </button>
+                    )}
+                    {(b.driver_phone || b.driver_name) && ['confirmed', 'in_progress'].includes(b.booking_status) && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendWhatsApp(b)}>Chat driver</button>}
                   </>
                 )}
-                {b.maps_link && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link)}>Copy pickup map</button>}
-                {b.maps_link_drop && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link_drop)}>Copy drop map</button>}
-                {b.passenger_phone && (
-                  <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendWhatsAppToCustomer(b)} disabled={sendWhatsAppToCustomerId === b.id}>
-                    {sendWhatsAppToCustomerId === b.id ? '…' : 'WhatsApp (customer)'}
-                  </button>
-                )}
-                {(b.driver_phone || b.driver_name) && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendWhatsApp(b)}>Chat driver</button>}
               </div>
             </div>
           ))}
@@ -2170,21 +2298,23 @@ const AdminDashboard = () => {
                               </button>
                             </>
                           )}
-                          <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => openAssignModal(b, false)}>{b.cab_id ? 'Reassign' : 'Assign'}</button>
-                          {b.cab_id && (
+                          {['confirmed', 'in_progress'].includes(b.booking_status) && (
+                            <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => openAssignModal(b, false)}>{b.cab_id ? 'Reassign' : 'Assign'}</button>
+                          )}
+                          {b.cab_id && ['confirmed', 'in_progress'].includes(b.booking_status) && (
                             <>
                               <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendDriverEmail(b)} disabled={sendDriverEmailId === b.id}>{sendDriverEmailId === b.id ? '…' : 'Send email to driver'}</button>
                               <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendCustomerEmail(b)} disabled={sendCustomerEmailId === b.id}>{sendCustomerEmailId === b.id ? '…' : 'Send email to customer'}</button>
                             </>
                           )}
-                          {b.maps_link && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link)}>Copy pickup map</button>}
-                          {b.maps_link_drop && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link_drop)}>Copy drop map</button>}
-                          {b.passenger_phone && (
+                          {b.maps_link && ['confirmed', 'in_progress'].includes(b.booking_status) && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link)}>Copy pickup map</button>}
+                          {b.maps_link_drop && ['confirmed', 'in_progress'].includes(b.booking_status) && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link_drop)}>Copy drop map</button>}
+                          {b.passenger_phone && ['confirmed', 'in_progress'].includes(b.booking_status) && (
                             <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendWhatsAppToCustomer(b)} disabled={sendWhatsAppToCustomerId === b.id}>
                               {sendWhatsAppToCustomerId === b.id ? '…' : 'WhatsApp (customer)'}
                             </button>
                           )}
-                          {(b.driver_phone || b.driver_name) && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendWhatsApp(b)}>Chat driver</button>}
+                          {(b.driver_phone || b.driver_name) && ['confirmed', 'in_progress'].includes(b.booking_status) && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendWhatsApp(b)}>Chat driver</button>}
                         </div>
                       </div>
                     ))}
@@ -2194,11 +2324,11 @@ const AdminDashboard = () => {
             </div>
           )}
 
-          {activeTab === TABS.enquiries && renderBookingsTable(filteredEnquiriesBookings, 'Enquiries', 'All received bookings, latest to oldest. View and assign driver & cab.')}
+          {activeTab === TABS.enquiries && renderBookingsTable(filteredEnquiriesBookings, 'Enquiries', 'Pending bookings only. View and confirm.', 'enquiries')}
           {activeTab === TABS.confirmedBookings && renderBookingsTable(filteredConfirmedBookingsList, 'Confirmed Bookings', 'View and assign driver & cab.')}
           {activeTab === TABS.driverAssigned && renderBookingsTable(filteredDriverAssignedBookings, 'Driver Assigned', 'With driver info. View, copy map, WhatsApp.')}
-          {activeTab === TABS.tripEnd && renderBookingsTable(filteredTripEndBookings, 'Trip End', 'Completed trips.')}
-          {activeTab === TABS.cancelledBookings && renderBookingsTable(filteredCancelledBookingsList, 'Cancelled Bookings', 'Cancelled only.')}
+          {activeTab === TABS.tripEnd && renderBookingsTable(filteredTripEndBookings, 'Trip End', 'Completed trips.', 'tripEnd')}
+          {activeTab === TABS.cancelledBookings && renderBookingsTable(filteredCancelledBookingsList, 'Cancelled Bookings', 'Cancelled only.', 'cancelled')}
 
           {activeTab === TABS.bookingForm && (
             <div className="admin-tab-section">
@@ -2237,7 +2367,11 @@ const AdminDashboard = () => {
                       <label>Outstation trip type</label>
                       <select
                         value={createForm.outstation_trip_type}
-                        onChange={(e) => setCreateForm((f) => ({ ...f, outstation_trip_type: e.target.value, extra_stops: [] }))}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setCreateForm((f) => ({ ...f, outstation_trip_type: v, extra_stops: [], to_location: '' }));
+                          if (v === 'multiple_stops') setToLocation(null);
+                        }}
                       >
                         <option value="one_way">One Way</option>
                         <option value="round_trip">Round Trip</option>
@@ -2262,7 +2396,7 @@ const AdminDashboard = () => {
                       <div className="admin-form-group full-width">
                         <label>From (A) *</label>
                         <LocationInput
-                          placeholder="First stop"
+                          placeholder="Pickup location"
                           value={fromLocation}
                           onSelect={(loc) => {
                             setFromLocation(loc);
@@ -2271,32 +2405,32 @@ const AdminDashboard = () => {
                         />
                       </div>
                       <div className="admin-form-group full-width">
-                        <label>Stop 2 (B) – optional</label>
+                        <label>Destination (B) *</label>
                         <LocationInput
-                          placeholder="Second stop"
-                          value={createForm.extra_stops?.[0] ?? ''}
-                          onSelect={(loc) => setCreateForm((f) => ({
-                            ...f,
-                            extra_stops: [loc.address, ...(f.extra_stops || []).slice(1)],
-                          }))}
+                          placeholder="Final destination"
+                          value={toLocation}
+                          onSelect={(loc) => {
+                            setToLocation(loc);
+                            setCreateForm((f) => ({ ...f, to_location: loc.address }));
+                          }}
                         />
                       </div>
-                      {(createForm.extra_stops || []).slice(1).map((stop, idx) => (
+                      {(createForm.extra_stops || []).map((stop, idx) => (
                         <div key={idx} className="admin-form-group full-width" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                           <div style={{ flex: 1 }}>
                             <LocationInput
-                              placeholder={`Stop ${idx + 3}`}
+                              placeholder={`Intermediate stop ${idx + 1} (optional)`}
                               value={typeof stop === 'string' ? stop : (stop?.address ?? '')}
                               onSelect={(loc) => setCreateForm((f) => ({
                                 ...f,
-                                extra_stops: (f.extra_stops || []).map((s, i) => (i === idx + 1 ? loc.address : s)),
+                                extra_stops: (f.extra_stops || []).map((s, i) => (i === idx ? loc.address : s)),
                               }))}
                             />
                           </div>
                           <button
                             type="button"
                             className="admin-btn admin-btn-secondary admin-btn-sm"
-                            onClick={() => setCreateForm((f) => ({ ...f, extra_stops: (f.extra_stops || []).filter((_, i) => i !== idx + 1) }))}
+                            onClick={() => setCreateForm((f) => ({ ...f, extra_stops: (f.extra_stops || []).filter((_, i) => i !== idx) }))}
                           >
                             Remove
                           </button>
@@ -2308,7 +2442,7 @@ const AdminDashboard = () => {
                           className="admin-btn admin-btn-secondary"
                           onClick={() => setCreateForm((f) => ({ ...f, extra_stops: [...(f.extra_stops || []), ''] }))}
                         >
-                          + Add stop
+                          + Add intermediate stop
                         </button>
                       </div>
                     </>
@@ -3097,188 +3231,413 @@ const AdminDashboard = () => {
             <div className="admin-tab-section">
               <h2>Create Invoice</h2>
               <p className="admin-bookings-desc">Generate an invoice directly. A booking record is created and the PDF is downloaded. Service type affects how the invoice is labelled (Local / Airport / Outstation).</p>
-              <form onSubmit={handleCreateInvoiceSubmit} className="admin-dashboard-box" style={{ maxWidth: 640, marginTop: 16 }}>
-                <div className="admin-form-grid">
-                  {
-}
-                  {invoiceForm.service_type === 'outstation' && invoiceForm.outstation_trip_type === 'round_trip' ? (
-                    <div className="admin-form-group full-width">
-                      <label>Location (from & to) *</label>
-                      <LocationInput
-                        placeholder="Round trip start and end"
-                        value={invoiceFromLocation}
-                        onSelect={(loc) => {
-                          setInvoiceFromLocation(loc);
-                          setInvoiceForm((f) => ({ ...f, from_location: loc.address }));
-                        }}
-                      />
+              <form onSubmit={handleCreateInvoiceSubmit} className="admin-dashboard-box admin-invoice-builder-wrap" style={{ maxWidth: 1100, marginTop: 16 }}>
+                <div className="admin-invoice-builder-grid">
+                  <div className="admin-invoice-section">
+                    <h3 className="admin-invoice-section-title">Bill To</h3>
+                    <div className="admin-form-grid">
+                      <div className="admin-form-group">
+                        <label>Customer name *</label>
+                        <input
+                          type="text"
+                          value={invoiceBuilder.bill_to_name}
+                          onChange={(e) => setInvoiceBuilder((b) => ({ ...b, bill_to_name: e.target.value }))}
+                          required
+                        />
+                      </div>
+                      <div className="admin-form-group">
+                        <label>Mobile no *</label>
+                        <input
+                          type="tel"
+                          value={invoiceBuilder.bill_to_phone}
+                          onChange={(e) => setInvoiceBuilder((b) => ({ ...b, bill_to_phone: e.target.value }))}
+                          required
+                        />
+                      </div>
+                      <div className="admin-form-group full-width">
+                        <label>Email (optional)</label>
+                        <input
+                          type="email"
+                          value={invoiceBuilder.bill_to_email}
+                          onChange={(e) => setInvoiceBuilder((b) => ({ ...b, bill_to_email: e.target.value }))}
+                          placeholder="For invoice copy"
+                        />
+                      </div>
+                      <div className="admin-form-group full-width">
+                        <label>Address (optional)</label>
+                        <textarea
+                          rows={3}
+                          value={invoiceBuilder.bill_to_address}
+                          onChange={(e) => setInvoiceBuilder((b) => ({ ...b, bill_to_address: e.target.value }))}
+                          placeholder="Billing address"
+                        />
+                      </div>
+                      <div className="admin-form-group">
+                        <label>GSTIN (optional)</label>
+                        <input
+                          type="text"
+                          value={invoiceBuilder.bill_to_gstin}
+                          onChange={(e) => setInvoiceBuilder((b) => ({ ...b, bill_to_gstin: e.target.value }))}
+                          placeholder="29XXXXXXXXXXXXXX"
+                        />
+                      </div>
                     </div>
-                  ) : invoiceForm.service_type === 'outstation' && invoiceForm.outstation_trip_type === 'multiple_stops' ? (
-                    <>
-                      <div className="admin-form-group full-width">
-                        <label>From (A) *</label>
-                        <LocationInput
-                          placeholder="First stop"
-                          value={invoiceFromLocation}
-                          onSelect={(loc) => {
-                            setInvoiceFromLocation(loc);
-                            setInvoiceForm((f) => ({ ...f, from_location: loc.address }));
-                          }}
+                  </div>
+
+                  <div className="admin-invoice-section">
+                    <h3 className="admin-invoice-section-title">Invoice Details</h3>
+                    <div className="admin-form-grid">
+                      <div className="admin-form-group">
+                        <label>Invoice no (optional)</label>
+                        <input
+                          type="text"
+                          value={invoiceBuilder.invoice_number}
+                          onChange={(e) => setInvoiceBuilder((b) => ({ ...b, invoice_number: e.target.value }))}
+                          placeholder="Leave blank to auto-generate"
                         />
                       </div>
-                      <div className="admin-form-group full-width">
-                        <label>Stop 2 (B) – optional</label>
-                        <LocationInput
-                          placeholder="Second stop"
-                          value={invoiceForm.extra_stops?.[0] ?? ''}
-                          onSelect={(loc) => setInvoiceForm((f) => ({
-                            ...f,
-                            extra_stops: [loc.address, ...(f.extra_stops || []).slice(1)],
-                          }))}
+                      <div className="admin-form-group">
+                        <label>Invoice date</label>
+                        <input
+                          type="date"
+                          value={invoiceBuilder.invoice_date}
+                          onChange={(e) => setInvoiceBuilder((b) => ({ ...b, invoice_date: e.target.value }))}
                         />
                       </div>
-                      {(invoiceForm.extra_stops || []).slice(1).map((stop, idx) => (
-                        <div key={idx} className="admin-form-group full-width" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                          <div style={{ flex: 1 }}>
-                            <LocationInput
-                              placeholder={`Stop ${idx + 3}`}
-                              value={typeof stop === 'string' ? stop : (stop?.address ?? '')}
-                              onSelect={(loc) => setInvoiceForm((f) => ({
-                                ...f,
-                                extra_stops: (f.extra_stops || []).map((s, i) => (i === idx + 1 ? loc.address : s)),
-                              }))}
-                            />
-                          </div>
-                          <button
-                            type="button"
-                            className="admin-btn admin-btn-secondary admin-btn-sm"
-                            onClick={() => setInvoiceForm((f) => ({ ...f, extra_stops: (f.extra_stops || []).filter((_, i) => i !== idx + 1) }))}
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      ))}
-                      <div className="admin-form-group full-width">
-                        <button
-                          type="button"
-                          className="admin-btn admin-btn-secondary"
-                          onClick={() => setInvoiceForm((f) => ({ ...f, extra_stops: [...(f.extra_stops || []), ''] }))}
+                      <div className="admin-form-group">
+                        <label>Due date (optional)</label>
+                        <input
+                          type="date"
+                          value={invoiceBuilder.due_date}
+                          onChange={(e) => setInvoiceBuilder((b) => ({ ...b, due_date: e.target.value }))}
+                        />
+                      </div>
+                      <div className="admin-form-group">
+                        <label>Currency</label>
+                        <select
+                          value={invoiceBuilder.currency}
+                          onChange={(e) => setInvoiceBuilder((b) => ({ ...b, currency: e.target.value }))}
                         >
-                          + Add stop
-                        </button>
+                          <option value="INR">INR (₹)</option>
+                        </select>
                       </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="admin-form-group full-width">
-                        <label>From location *</label>
-                        <LocationInput
-                          placeholder="Pickup address"
-                          value={invoiceFromLocation}
-                          onSelect={(loc) => {
-                            setInvoiceFromLocation(loc);
-                            setInvoiceForm((f) => ({ ...f, from_location: loc.address }));
-                          }}
+                      <div className="admin-form-group" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <input
+                          type="checkbox"
+                          id="invoice-with-gst"
+                          checked={invoiceForm.with_gst}
+                          onChange={(e) => setInvoiceForm((f) => ({ ...f, with_gst: e.target.checked }))}
                         />
+                        <label htmlFor="invoice-with-gst" style={{ marginBottom: 0 }}>Invoice with GST (5%)</label>
                       </div>
-                      <div className="admin-form-group full-width">
-                        <label>To location *</label>
-                        <LocationInput
-                          placeholder="Drop address"
-                          value={invoiceToLocation}
-                          onSelect={(loc) => {
-                            setInvoiceToLocation(loc);
-                            setInvoiceForm((f) => ({ ...f, to_location: loc.address }));
-                          }}
-                        />
-                      </div>
-                    </>
-                  )}
-                  <div className="admin-form-group">
-                    <label>Passenger name *</label>
-                    <input
-                      type="text"
-                      value={invoiceForm.passenger_name}
-                      onChange={(e) => setInvoiceForm((f) => ({ ...f, passenger_name: e.target.value }))}
-                      required
-                    />
-                  </div>
-                  <div className="admin-form-group">
-                    <label>Passenger phone *</label>
-                    <input
-                      type="tel"
-                      value={invoiceForm.passenger_phone}
-                      onChange={(e) => setInvoiceForm((f) => ({ ...f, passenger_phone: e.target.value }))}
-                      required
-                    />
-                  </div>
-                  <div className="admin-form-group full-width">
-                    <label>Passenger email (optional)</label>
-                    <input
-                      type="email"
-                      value={invoiceForm.passenger_email}
-                      onChange={(e) => setInvoiceForm((f) => ({ ...f, passenger_email: e.target.value }))}
-                      placeholder="For invoice copy"
-                    />
-                  </div>
-                  <div className="admin-form-group">
-                    <label>Fare amount (₹) *</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={invoiceForm.fare_amount}
-                      onChange={(e) => setInvoiceForm((f) => ({ ...f, fare_amount: e.target.value }))}
-                      required
-                    />
-                  </div>
-                  <div className="admin-form-group">
-                    <label>Service type</label>
-                    <select
-                      value={invoiceForm.service_type}
-                      onChange={(e) => setInvoiceForm((f) => ({ ...f, service_type: e.target.value }))}
-                    >
-                      <option value="local">Local</option>
-                      <option value="airport">Airport</option>
-                      <option value="outstation">Outstation</option>
-                    </select>
-                  </div>
-                  {invoiceForm.service_type === 'outstation' && (
-                    <div className="admin-form-group">
-                      <label>Outstation trip type</label>
-                      <select
-                        value={invoiceForm.outstation_trip_type}
-                        onChange={(e) => setInvoiceForm((f) => ({ ...f, outstation_trip_type: e.target.value }))}
-                      >
-                        <option value="one_way">One Way</option>
-                        <option value="round_trip">Round Trip</option>
-                        <option value="multiple_stops">Multiple Stops</option>
-                      </select>
                     </div>
-                  )}
-                  {invoiceForm.service_type === 'local' && (
-                    <div className="admin-form-group">
-                      <label>Hours (optional)</label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={invoiceForm.number_of_hours}
-                        onChange={(e) => setInvoiceForm((f) => ({ ...f, number_of_hours: e.target.value }))}
-                        placeholder="e.g. 4"
-                      />
-                    </div>
-                  )}
-                  <div className="admin-form-group" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <input
-                      type="checkbox"
-                      id="invoice-with-gst"
-                      checked={invoiceForm.with_gst}
-                      onChange={(e) => setInvoiceForm((f) => ({ ...f, with_gst: e.target.checked }))}
-                    />
-                    <label htmlFor="invoice-with-gst" style={{ marginBottom: 0 }}>Invoice with GST</label>
                   </div>
                 </div>
-                <div className="admin-modal-actions" style={{ marginTop: 16 }}>
+
+                <div className="admin-invoice-section">
+                  <h3 className="admin-invoice-section-title">Trip Details</h3>
+                  <div className="admin-form-grid">
+                    <div className="admin-form-group">
+                      <label>Service type</label>
+                      <select
+                        value={invoiceForm.service_type}
+                        onChange={(e) => setInvoiceForm((f) => ({ ...f, service_type: e.target.value }))}
+                      >
+                        <option value="local">Local</option>
+                        <option value="airport">Airport</option>
+                        <option value="outstation">Outstation</option>
+                      </select>
+                    </div>
+                    {invoiceForm.service_type === 'outstation' && (
+                      <div className="admin-form-group">
+                        <label>Outstation trip type</label>
+                        <select
+                          value={invoiceForm.outstation_trip_type}
+                          onChange={(e) => setInvoiceForm((f) => ({ ...f, outstation_trip_type: e.target.value }))}
+                        >
+                          <option value="one_way">One Way</option>
+                          <option value="round_trip">Round Trip</option>
+                          <option value="multiple_stops">Multiple Stops</option>
+                        </select>
+                      </div>
+                    )}
+                    {invoiceForm.service_type === 'local' && (
+                      <div className="admin-form-group">
+                        <label>Hours (optional)</label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={invoiceForm.number_of_hours}
+                          onChange={(e) => setInvoiceForm((f) => ({ ...f, number_of_hours: e.target.value }))}
+                          placeholder="e.g. 4"
+                        />
+                      </div>
+                    )}
+
+                    {invoiceForm.service_type === 'outstation' && invoiceForm.outstation_trip_type === 'round_trip' ? (
+                      <div className="admin-form-group full-width">
+                        <label>Location (from & to) *</label>
+                        <LocationInput
+                          placeholder="Round trip start and end"
+                          value={invoiceFromLocation}
+                          onSelect={(loc) => {
+                            setInvoiceFromLocation(loc);
+                            setInvoiceForm((f) => ({ ...f, from_location: loc.address }));
+                          }}
+                        />
+                      </div>
+                    ) : invoiceForm.service_type === 'outstation' && invoiceForm.outstation_trip_type === 'multiple_stops' ? (
+                      <>
+                        <div className="admin-form-group full-width">
+                          <label>From (A) *</label>
+                          <LocationInput
+                            placeholder="First stop"
+                            value={invoiceFromLocation}
+                            onSelect={(loc) => {
+                              setInvoiceFromLocation(loc);
+                              setInvoiceForm((f) => ({ ...f, from_location: loc.address }));
+                            }}
+                          />
+                        </div>
+                        <div className="admin-form-group full-width">
+                          <label>Stop 2 (B) – optional</label>
+                          <LocationInput
+                            placeholder="Second stop"
+                            value={invoiceForm.extra_stops?.[0] ?? ''}
+                            onSelect={(loc) => setInvoiceForm((f) => ({
+                              ...f,
+                              extra_stops: [loc.address, ...(f.extra_stops || []).slice(1)],
+                            }))}
+                          />
+                        </div>
+                        {(invoiceForm.extra_stops || []).slice(1).map((stop, idx) => (
+                          <div key={idx} className="admin-form-group full-width" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                            <div style={{ flex: 1 }}>
+                              <LocationInput
+                                placeholder={`Stop ${idx + 3}`}
+                                value={typeof stop === 'string' ? stop : (stop?.address ?? '')}
+                                onSelect={(loc) => setInvoiceForm((f) => ({
+                                  ...f,
+                                  extra_stops: (f.extra_stops || []).map((s, i) => (i === idx + 1 ? loc.address : s)),
+                                }))}
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              className="admin-btn admin-btn-secondary admin-btn-sm"
+                              onClick={() => setInvoiceForm((f) => ({ ...f, extra_stops: (f.extra_stops || []).filter((_, i) => i !== idx + 1) }))}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                        <div className="admin-form-group full-width">
+                          <button
+                            type="button"
+                            className="admin-btn admin-btn-secondary"
+                            onClick={() => setInvoiceForm((f) => ({ ...f, extra_stops: [...(f.extra_stops || []), ''] }))}
+                          >
+                            + Add stop
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="admin-form-group full-width">
+                          <label>From location *</label>
+                          <LocationInput
+                            placeholder="Pickup address"
+                            value={invoiceFromLocation}
+                            onSelect={(loc) => {
+                              setInvoiceFromLocation(loc);
+                              setInvoiceForm((f) => ({ ...f, from_location: loc.address }));
+                            }}
+                          />
+                        </div>
+                        <div className="admin-form-group full-width">
+                          <label>To location *</label>
+                          <LocationInput
+                            placeholder="Drop address"
+                            value={invoiceToLocation}
+                            onSelect={(loc) => {
+                              setInvoiceToLocation(loc);
+                              setInvoiceForm((f) => ({ ...f, to_location: loc.address }));
+                            }}
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div className="admin-invoice-section">
+                  <h3 className="admin-invoice-section-title">Invoice Items</h3>
+                  <div className="admin-invoice-items-table-wrap">
+                    <table className="admin-invoice-items-table">
+                      <thead>
+                        <tr>
+                          <th style={{ width: '52%' }}>Description</th>
+                          <th style={{ width: 90 }}>Qty</th>
+                          <th style={{ width: 140 }}>Rate</th>
+                          <th style={{ width: 140, textAlign: 'right' }}>Amount</th>
+                          <th style={{ width: 60 }} />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(invoiceBuilder.items || []).map((item, idx) => {
+                          const qty = Number(item?.quantity) || 0;
+                          const rate = Number(item?.rate) || 0;
+                          const amount = qty > 0 && rate >= 0 ? (qty * rate) : 0;
+                          return (
+                            <tr key={idx}>
+                              <td>
+                                <input
+                                  type="text"
+                                  value={item.description}
+                                  onChange={(e) => setInvoiceBuilder((b) => ({
+                                    ...b,
+                                    items: (b.items || []).map((it, i) => (i === idx ? { ...it, description: e.target.value } : it)),
+                                  }))}
+                                  placeholder="Item description"
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={item.quantity}
+                                  onChange={(e) => setInvoiceBuilder((b) => ({
+                                    ...b,
+                                    items: (b.items || []).map((it, i) => (i === idx ? { ...it, quantity: e.target.value === '' ? '' : Number(e.target.value) } : it)),
+                                  }))}
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={item.rate}
+                                  onChange={(e) => setInvoiceBuilder((b) => ({
+                                    ...b,
+                                    items: (b.items || []).map((it, i) => (i === idx ? { ...it, rate: e.target.value } : it)),
+                                  }))}
+                                  placeholder="0.00"
+                                />
+                              </td>
+                              <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                                ₹{amount.toFixed(2)}
+                              </td>
+                              <td style={{ textAlign: 'right' }}>
+                                <button
+                                  type="button"
+                                  className="admin-btn admin-btn-danger admin-btn-sm"
+                                  disabled={(invoiceBuilder.items || []).length <= 1}
+                                  onClick={() => setInvoiceBuilder((b) => ({
+                                    ...b,
+                                    items: (b.items || []).filter((_, i) => i !== idx),
+                                  }))}
+                                  title="Remove item"
+                                >
+                                  ×
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    <div className="admin-modal-actions" style={{ marginTop: 12 }}>
+                      <button
+                        type="button"
+                        className="admin-btn admin-btn-secondary"
+                        onClick={() => setInvoiceBuilder((b) => ({ ...b, items: [...(b.items || []), { description: '', quantity: 1, rate: '' }] }))}
+                      >
+                        + Add item
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="admin-invoice-builder-bottom">
+                  <div className="admin-invoice-section">
+                    <h3 className="admin-invoice-section-title">Payment Details (optional)</h3>
+                    <div className="admin-form-grid">
+                      <div className="admin-form-group">
+                        <label>Bank name</label>
+                        <input
+                          type="text"
+                          value={invoiceBuilder.payment_bank_name}
+                          onChange={(e) => setInvoiceBuilder((b) => ({ ...b, payment_bank_name: e.target.value }))}
+                        />
+                      </div>
+                      <div className="admin-form-group">
+                        <label>Account no</label>
+                        <input
+                          type="text"
+                          value={invoiceBuilder.payment_account_number}
+                          onChange={(e) => setInvoiceBuilder((b) => ({ ...b, payment_account_number: e.target.value }))}
+                        />
+                      </div>
+                      <div className="admin-form-group">
+                        <label>IFSC</label>
+                        <input
+                          type="text"
+                          value={invoiceBuilder.payment_ifsc}
+                          onChange={(e) => setInvoiceBuilder((b) => ({ ...b, payment_ifsc: e.target.value }))}
+                        />
+                      </div>
+                      <div className="admin-form-group">
+                        <label>UPI ID</label>
+                        <input
+                          type="text"
+                          value={invoiceBuilder.payment_upi_id}
+                          onChange={(e) => setInvoiceBuilder((b) => ({ ...b, payment_upi_id: e.target.value }))}
+                          placeholder="name@upi"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="admin-form-grid" style={{ marginTop: 12 }}>
+                      <div className="admin-form-group full-width">
+                        <label>Notes (optional)</label>
+                        <textarea
+                          rows={4}
+                          value={invoiceBuilder.notes}
+                          onChange={(e) => setInvoiceBuilder((b) => ({ ...b, notes: e.target.value }))}
+                          placeholder="Notes shown on invoice"
+                        />
+                      </div>
+                      <div className="admin-form-group full-width">
+                        <label>Terms & Conditions (optional)</label>
+                        <textarea
+                          rows={5}
+                          value={invoiceBuilder.terms}
+                          onChange={(e) => setInvoiceBuilder((b) => ({ ...b, terms: e.target.value }))}
+                          placeholder="Terms shown on invoice"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="admin-invoice-summary-card">
+                    <div className="admin-invoice-summary-row">
+                      <span className="label">Sub total</span>
+                      <span className="value">₹{invoiceItemsSubtotal.toFixed(2)}</span>
+                    </div>
+                    <div className="admin-invoice-summary-row">
+                      <span className="label">GST</span>
+                      <span className="value">{invoiceForm.with_gst ? `₹${invoiceGstAmount.toFixed(2)} (5%)` : '₹0.00'}</span>
+                    </div>
+                    <div className="admin-invoice-summary-row total">
+                      <span className="label">Total</span>
+                      <span className="value">₹{invoiceGrandTotal.toFixed(2)}</span>
+                    </div>
+                    <p className="admin-invoice-summary-hint">Totals here are for reference; the downloaded PDF uses the same 5% GST logic when enabled.</p>
+                  </div>
+                </div>
+
+                <div className="admin-modal-actions" style={{ marginTop: 18 }}>
                   <button type="submit" className="admin-btn admin-btn-primary" disabled={invoiceSubmitting}>
                     {invoiceSubmitting ? 'Creating…' : 'Create invoice & download PDF'}
                   </button>
@@ -3552,7 +3911,7 @@ const AdminDashboard = () => {
                   </div>
                   <div className="admin-form-group">
                     <label>Travel date (optional)</label>
-                    <input type="date" value={corporateInvoiceForm.travel_date} onChange={(e) => setCorporateInvoiceForm((f) => ({ ...f, travel_date: e.target.value }))} />
+                    <input type="date" value={corporateInvoiceForm.travel_date} min={getTodayLocalDate()} onChange={(e) => setCorporateInvoiceForm((f) => ({ ...f, travel_date: e.target.value }))} />
                   </div>
                   <div className="admin-form-group">
                     <label>Travel time (optional)</label>
@@ -3723,6 +4082,9 @@ const AdminDashboard = () => {
               {detailBooking.service_type === 'local' && detailBooking.number_of_hours != null && (
                 <div className="admin-detail-row"><span className="key">Hour package</span><span className="value">{detailBooking.number_of_hours} {Number(detailBooking.number_of_hours) === 1 ? 'hour' : 'hours'}</span></div>
               )}
+              {detailBooking.travel_date && (
+                <div className="admin-detail-row"><span className="key">Pickup date</span><span className="value">{new Date(detailBooking.travel_date).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</span></div>
+              )}
               {detailBooking.service_type === 'outstation' && detailBooking.trip_type && (
                 <div className="admin-detail-row"><span className="key">Trip type</span><span className="value">{detailBooking.trip_type === 'one_way' ? 'One Way' : detailBooking.trip_type === 'round_trip' ? 'Round Trip' : detailBooking.trip_type === 'multiple_stops' ? 'Multiple Stops' : detailBooking.trip_type}</span></div>
               )}
@@ -3731,6 +4093,12 @@ const AdminDashboard = () => {
               )}
               {(detailBooking.cab_type_name || detailBooking.cab_type_id) && (
                 <div className="admin-detail-row"><span className="key">Cab type</span><span className="value">{detailBooking.cab_type_name || '—'}</span></div>
+              )}
+              {(/crysta/i.test(detailBooking.cab_type_name || '') && detailBooking.notes && String(detailBooking.notes).toLowerCase().includes('crysta seater')) && (
+                <div className="admin-detail-row">
+                  <span className="key">Seater</span>
+                  <span className="value">{String(detailBooking.notes).replace(/.*crysta seater\s*:\s*/i, '').trim() || '—'}</span>
+                </div>
               )}
               {detailBooking.booking_date && (
                 <div className="admin-detail-row"><span className="key">Booking date</span><span className="value">{new Date(detailBooking.booking_date).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</span></div>
@@ -3754,7 +4122,15 @@ const AdminDashboard = () => {
                 <span className="key" style={{ width: '100%', marginBottom: 4 }}>Update status</span>
                 <span className="value" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
                   {detailBooking.booking_status === 'pending' && (
-                    <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => handleUpdateBookingStatus(detailBooking.id, 'confirmed')} disabled={statusUpdatingId === detailBooking.id}>
+                    <button
+                      type="button"
+                      className="admin-btn admin-btn-primary admin-btn-sm"
+                      onClick={async () => {
+                        const ok = await handleUpdateBookingStatus(detailBooking.id, 'confirmed');
+                        if (ok) setDetailBooking(null);
+                      }}
+                      disabled={statusUpdatingId === detailBooking.id}
+                    >
                       {statusUpdatingId === detailBooking.id ? 'Updating…' : 'Confirm'}
                     </button>
                   )}
@@ -3822,7 +4198,7 @@ const AdminDashboard = () => {
                 </div>
                 <div className="admin-form-group">
                   <label>Travel date</label>
-                  <input type="date" name="travel_date" value={corporateEditForm.travel_date} onChange={handleCorporateEditFormChange} />
+                  <input type="date" name="travel_date" value={corporateEditForm.travel_date} min={getTodayLocalDate()} onChange={handleCorporateEditFormChange} />
                 </div>
                 <div className="admin-form-group">
                   <label>Travel time</label>
