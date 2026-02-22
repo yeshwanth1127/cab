@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import MainNavbar from '../components/MainNavbar';
 import AnimatedMapBackground from '../components/AnimatedMapBackground';
 import Icon from '../components/Icon';
@@ -8,6 +8,22 @@ import './LegalPage.css';
 
 const TermsOfServicePage = () => {
   const lastUpdated = 'February 2025';
+  const navigate = useNavigate();
+  const location = useLocation();
+  const from = location.state?.from;
+  const fromState = location.state?.fromState;
+
+  const handleBack = () => {
+    if (from) {
+      navigate(from, { state: fromState });
+      return;
+    }
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate('/');
+  };
 
   return (
     <div className="booking-page legal-page">
@@ -18,6 +34,11 @@ const TermsOfServicePage = () => {
 
       <section className="home-section legal-section">
         <div className="home-section-inner legal-inner">
+          <div className="legal-top-actions">
+            <button type="button" className="legal-back-btn" onClick={handleBack}>
+              ← Back to booking
+            </button>
+          </div>
           <h1 className="legal-title">
             <Icon name="document" size={32} className="legal-title-icon" />
             Terms of Service

@@ -44,6 +44,163 @@
   line-height: 1.5;
 }
 
+.home-booking-widget {
+  max-width: 980px;
+  margin: 0 auto;
+  background: #fff;
+  border-radius: 16px;
+  /* Allow popovers (DateTimePicker dropdown) to render outside the card without being clipped */
+  overflow: visible;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  text-align: left;
+  position: relative;
+  z-index: 2;
+}
+
+.home-booking-bar {
+  background: #16a34a;
+  color: #fff;
+  font-weight: 900;
+  text-align: center;
+  letter-spacing: 0.12em;
+  padding: 14px 16px;
+  font-size: 18px;
+}
+
+.home-booking-tabs {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  padding: 18px 16px;
+  background: #fff;
+}
+
+.home-booking-tab {
+  appearance: none;
+  border: 1px solid #e5e7eb;
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 900;
+  padding: 10px 18px;
+  border-radius: 10px;
+  cursor: pointer;
+  font: inherit;
+  min-width: 120px;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+
+.home-booking-tab:hover {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  color: #1d4ed8;
+}
+
+.home-booking-tab.active {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+
+.home-booking-body {
+  padding: 16px 18px 20px;
+}
+
+.home-booking-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.home-booking-reset {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font: inherit;
+}
+
+.home-booking-reset:hover {
+  background: rgba(148, 163, 184, 0.15);
+  color: #334155;
+}
+
+.home-booking-form {
+  max-width: none;
+  margin: 0;
+}
+
+.home-booking-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px 22px;
+  align-items: start;
+}
+
+.home-booking-field .location-input-container {
+  margin-bottom: 0;
+  animation: none;
+}
+
+.home-booking-field .location-input:focus {
+  transform: none;
+}
+
+.home-booking-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 800;
+  color: #111827;
+  margin-bottom: 8px;
+}
+
+.home-booking-required {
+  color: #ef4444;
+}
+
+.home-booking-static-input {
+  width: 100%;
+  padding: 14px 16px;
+  border: 2px solid #e0e0e0;
+  border-radius: 12px;
+  font-size: 16px;
+  background: #f8fafc;
+  color: #111827;
+  font-family: inherit;
+}
+
+.home-booking-widget .home-form-error {
+  color: #dc2626;
+}
+
+.home-booking-widget .home-outstation-select,
+.home-booking-widget .home-outstation-days-input {
+  color: #111827;
+  background: #fff;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+}
+
+.home-booking-widget .home-outstation-select:focus,
+.home-booking-widget .home-outstation-days-input:focus {
+  border-color: #16a34a;
+}
+
+@media (max-width: 768px) {
+  .home-booking-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .home-booking-tab {
+    min-width: 0;
+    padding: 10px 14px;
+  }
+}
+
 
 .home-service-options {
   display: flex;

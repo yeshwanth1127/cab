@@ -17,6 +17,44 @@
   z-index: 1;
 }
 
+.car-options-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  margin-bottom: 8px;
+}
+
+.car-options-back-btn {
+  appearance: none;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  background: rgba(255, 255, 255, 0.9);
+  color: #111827;
+  font-weight: 700;
+  font-size: 14px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+}
+
+.car-options-back-btn:hover {
+  background: rgba(22, 163, 74, 0.08);
+  border-color: rgba(22, 163, 74, 0.4);
+  transform: translateY(-1px);
+}
+
+.car-options-back-btn:active {
+  transform: translateY(0);
+}
+
+.car-options-back-btn:focus-visible {
+  outline: 2px solid rgba(22, 163, 74, 0.6);
+  outline-offset: 2px;
+}
+
 .car-options-card h2 {
   margin-bottom: 12px;
   color: #1f2933;

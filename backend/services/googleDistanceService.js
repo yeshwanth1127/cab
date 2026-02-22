@@ -8,10 +8,11 @@ async function getDistanceAndTime(from, to) {
     throw new Error('Invalid coordinates: from and to must have lat and lng');
   }
 
-  const apiKey = process.env.GOOGLE__MAPS_BACKEND_KEY_NEW;
+  // Support both env var names (the single-underscore version is the intended one).
+  const apiKey = process.env.GOOGLE_MAPS_BACKEND_KEY_NEW || process.env.GOOGLE__MAPS_BACKEND_KEY_NEW;
   if (!apiKey) {
-    console.error('[GOOGLE API] GOOGLE__MAPS_BACKEND_KEY_NEW environment variable is not set');
-    throw new Error('GOOGLE__MAPS_BACKEND_KEY_NEW environment variable is not set');
+    console.error('[GOOGLE API] GOOGLE_MAPS_BACKEND_KEY_NEW environment variable is not set');
+    throw new Error('GOOGLE_MAPS_BACKEND_KEY_NEW environment variable is not set');
   }
 
   console.log('[GOOGLE API] Calling Distance Matrix API...');

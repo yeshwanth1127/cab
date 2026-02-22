@@ -1,5 +1,6 @@
 const express = require('express');
 const db = require('../db/database');
+const { getDistanceAndTime } = require('../services/googleDistanceService');
 
 const router = express.Router();
 
@@ -18,6 +19,11 @@ async function ensureCabTypesColumns() {
     }
     try {
       await db.runAsync('ALTER TABLE cab_types ADD COLUMN image_url TEXT');
+    } catch (e) {
+      // column may already exist
+    }
+    try {
+      await db.runAsync('ALTER TABLE cab_types ADD COLUMN per_km_rate REAL DEFAULT 0');
     } catch (e) {
       // column may already exist
     }
@@ -140,7 +146,7 @@ router.get('/local-offers', async (req, res) => {
   try {
     await ensureCabTypesColumns();
     const cabTypes = await db.allAsync(
-      "SELECT id, name, description, base_fare, capacity, image_url FROM cab_types WHERE service_type = 'local' AND is_active = 1 ORDER BY name"
+      "SELECT id, name, description, base_fare, per_km_rate, capacity, image_url FROM cab_types WHERE service_type = 'local' AND is_active = 1 ORDER BY name"
     );
     const result = [];
     for (const ct of cabTypes || []) {
@@ -194,6 +200,7 @@ router.get('/local-offers', async (req, res) => {
       });
 
       const baseFare = ct.base_fare != null ? Number(ct.base_fare) : 0;
+      const extraPerKm = ct.per_km_rate != null ? Number(ct.per_km_rate) : null;
       const capacity = ct.capacity != null ? Number(ct.capacity) : 4;
       result.push({
         id: ct.id,
@@ -206,7 +213,7 @@ router.get('/local-offers', async (req, res) => {
         luggageCapacity: ct.luggage_capacity != null ? Number(ct.luggage_capacity) : null,
         hasAc: ct.has_ac != null ? !!ct.has_ac : null,
         includedKm: null,
-        extraPerKm: null,
+        extraPerKm,
         gstIncluded: ct.gst_included != null ? !!ct.gst_included : true,
         cabs,
       });
@@ -288,7 +295,29 @@ router.get('/airport-fare-estimate', async (req, res) => {
     if (Number.isNaN(fromLat) || Number.isNaN(fromLng) || Number.isNaN(toLat) || Number.isNaN(toLng)) {
       return res.status(400).json({ error: 'from_lat, from_lng, to_lat, to_lng are required' });
     }
-    const distance_km = haversineDistanceKm(fromLat, fromLng, toLat, toLng);
+    // Prefer driving distance (Google Distance Matrix) so frontend matches Google Maps.
+    // Fallback to haversine if Google API is unavailable/misconfigured.
+    let distance_km = null;
+    let distance_source = 'haversine';
+    try {
+      const dist = await getDistanceAndTime(
+        { lat: fromLat, lng: fromLng },
+        { lat: toLat, lng: toLng }
+      );
+      if (dist?.distance_km != null && Number.isFinite(Number(dist.distance_km))) {
+        distance_km = Number(dist.distance_km);
+        distance_source = 'google_distance_matrix';
+      }
+    } catch (_) {
+      // best-effort fallback
+      distance_km = null;
+    }
+    if (distance_km == null) {
+      distance_km = haversineDistanceKm(fromLat, fromLng, toLat, toLng);
+      distance_source = 'haversine';
+    }
+    // Airport pricing: charge for return distance as well (driver returns), so fare is calculated on 2x the one-way distance.
+    const chargeable_km = distance_km * 2;
     const cabTypes = excludeInnovaCabTypes(await db.allAsync(
       "SELECT id, name FROM cab_types WHERE service_type = 'airport' AND is_active = 1 ORDER BY name"
     ));
@@ -306,10 +335,10 @@ router.get('/airport-fare-estimate', async (req, res) => {
       const perKm = rateRow ? Number(rateRow.per_km_rate) || 0 : 0;
       const driverCharges = rateRow ? Number(rateRow.driver_charges) || 0 : 0;
       const nightCharges = rateRow ? Number(rateRow.night_charges) || 0 : 0;
-      const fare_amount = Math.round(baseFare + distance_km * perKm + driverCharges + nightCharges);
+      const fare_amount = Math.round(baseFare + chargeable_km * perKm + driverCharges + nightCharges);
       fares.push({ cab_type_id: ct.id, cab_type_name: ct.name, fare_amount });
     }
-    res.json({ distance_km, fares });
+    res.json({ distance_km, chargeable_km, distance_source, fares });
   } catch (error) {
     console.error('Error airport fare estimate:', error);
     res.status(500).json({ error: 'Server error' });
@@ -437,7 +466,28 @@ router.get('/outstation-fare-estimate', async (req, res) => {
       const toLat = parseFloat(req.query.to_lat);
       const toLng = parseFloat(req.query.to_lng);
       const hasCoords = !Number.isNaN(fromLat) && !Number.isNaN(fromLng) && !Number.isNaN(toLat) && !Number.isNaN(toLng);
-      const distance_km = hasCoords ? haversineDistanceKm(fromLat, fromLng, toLat, toLng) : 0;
+      // Prefer driving distance (Google Distance Matrix) so it matches Google Maps.
+      // Fallback to haversine if Google API is unavailable/misconfigured.
+      let distance_km = null;
+      let distance_source = 'haversine';
+      if (hasCoords) {
+        try {
+          const dist = await getDistanceAndTime(
+            { lat: fromLat, lng: fromLng },
+            { lat: toLat, lng: toLng }
+          );
+          if (dist?.distance_km != null && Number.isFinite(Number(dist.distance_km))) {
+            distance_km = Number(dist.distance_km);
+            distance_source = 'google_distance_matrix';
+          }
+        } catch (_) {
+          distance_km = null;
+        }
+      }
+      if (distance_km == null) {
+        distance_km = hasCoords ? haversineDistanceKm(fromLat, fromLng, toLat, toLng) : 0;
+        distance_source = 'haversine';
+      }
 
       for (const ct of offers || []) {
         const row = await db.getAsync(
@@ -453,11 +503,21 @@ router.get('/outstation-fare-estimate', async (req, res) => {
         const extraKmRate = getNum(row, 'extra_km_rate');
         const driverCharges = getNum(row, 'driver_charges');
         const nightCharges = getNum(row, 'night_charges');
-        const extraKm = Math.max(0, distance_km - minKm);
+        // If computed distance is below minimum km, bill at minimum km.
+        const chargeable_km = Math.max(Number(distance_km) || 0, Number(minKm) || 0);
+        const extraKm = Math.max(0, chargeable_km - minKm);
         const fare_amount = Math.round(baseFare + extraKm * extraKmRate + driverCharges + nightCharges);
-        fares.push({ cab_type_id: ct.id, cab_type_name: ct.name, fare_amount });
+        fares.push({
+          cab_type_id: ct.id,
+          cab_type_name: ct.name,
+          fare_amount,
+          distance_km: Number(distance_km.toFixed(2)),
+          min_km: minKm,
+          chargeable_km: Number(chargeable_km.toFixed(2)),
+          extra_km: Number(extraKm.toFixed(2)),
+        });
       }
-      return res.json({ distance_km, fares });
+      return res.json({ distance_km, distance_source, fares });
     }
 
     if (tripType === 'round_trip') {
@@ -469,7 +529,28 @@ router.get('/outstation-fare-estimate', async (req, res) => {
       const toLat = parseFloat(req.query.to_lat);
       const toLng = parseFloat(req.query.to_lng);
       const hasCoords = !Number.isNaN(fromLat) && !Number.isNaN(fromLng) && !Number.isNaN(toLat) && !Number.isNaN(toLng);
-      const computedTotalKm = hasCoords ? haversineDistanceKm(fromLat, fromLng, toLat, toLng) * 2 : null;
+      // Prefer driving distance (Google Distance Matrix) when coords exist.
+      // Fallback to haversine if Google API is unavailable/misconfigured.
+      let computedTotalKm = null;
+      let distance_source = 'haversine';
+      if (hasCoords) {
+        try {
+          const dist = await getDistanceAndTime(
+            { lat: fromLat, lng: fromLng },
+            { lat: toLat, lng: toLng }
+          );
+          if (dist?.distance_km != null && Number.isFinite(Number(dist.distance_km))) {
+            computedTotalKm = Number(dist.distance_km) * 2;
+            distance_source = 'google_distance_matrix';
+          }
+        } catch (_) {
+          computedTotalKm = null;
+        }
+      }
+      if (computedTotalKm == null && hasCoords) {
+        computedTotalKm = haversineDistanceKm(fromLat, fromLng, toLat, toLng) * 2;
+        distance_source = 'haversine';
+      }
 
       for (const ct of offers || []) {
         const row = await db.getAsync(
@@ -486,12 +567,22 @@ router.get('/outstation-fare-estimate', async (req, res) => {
         const driverCharges = getNum(row, 'driver_charges');
         const nightCharges = getNum(row, 'night_charges');
         const includedKm = baseKmPerDay * days;
-        const totalKm = (hasDistanceParam ? distanceParam : computedTotalKm) ?? includedKm;
-        const extraKm = Math.max(0, totalKm - includedKm);
+        const totalKmRaw = (hasDistanceParam ? distanceParam : computedTotalKm);
+        // If computed distance is below included km, bill at included km.
+        const chargeable_km = Math.max((totalKmRaw != null ? Number(totalKmRaw) : 0) || 0, includedKm);
+        const extraKm = Math.max(0, chargeable_km - includedKm);
         const fare_amount = Math.round(includedKm * perKmRate + extraKm * extraKmRate + (driverCharges + nightCharges) * days);
-        fares.push({ cab_type_id: ct.id, cab_type_name: ct.name, fare_amount, total_km: Number(totalKm.toFixed(2)), included_km: includedKm, extra_km: Number(extraKm.toFixed(2)) });
+        fares.push({
+          cab_type_id: ct.id,
+          cab_type_name: ct.name,
+          fare_amount,
+          total_km: Number(((totalKmRaw ?? includedKm) || 0).toFixed(2)),
+          included_km: includedKm,
+          chargeable_km: Number(chargeable_km.toFixed(2)),
+          extra_km: Number(extraKm.toFixed(2)),
+        });
       }
-      return res.json({ number_of_days: days, fares });
+      return res.json({ number_of_days: days, distance_source, fares });
     }
 
     if (tripType === 'multiple_stops') {
