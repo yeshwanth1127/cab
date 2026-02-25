@@ -491,7 +491,7 @@ const HomePage = () => {
                   <button
                     type="button"
                     className="home-continue-btn"
-                    disabled={!airportLocationAddress.trim() || isPickupInPast}
+                    disabled={!airportLocationAddress.trim() || !travelDatetime || isPickupInPast}
                     onClick={handleContinueToAirportCabSelection}
                   >
                     SEARCH CABS

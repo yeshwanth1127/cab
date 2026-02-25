@@ -4,7 +4,7 @@ const db = require('../db/database');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
 const { generateInvoicePDF } = require('../services/invoiceService');
 const { generateGoogleMapsLink } = require('../utils/mapsLink');
-const { triggerDriverInfo, triggerInvoiceGenerated } = require('../services/n8nWebhooks');
+const { triggerDriverInfo, triggerInvoiceGenerated, triggerBookingCancellation, triggerTripCompleted } = require('../services/n8nWebhooks');
 const { sendDriverInfoToCustomerWhatsApp, sendBookingConfirmation } = require('../services/whatsappService');
 
 const router = express.Router();
@@ -200,7 +200,7 @@ router.post('/bookings', [
 router.put('/bookings/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { booking_status, cab_id, driver_id, invoice_number, passenger_email } = req.body;
+    const { booking_status, cab_id, driver_id, invoice_number, passenger_email, cancellation_reason } = req.body;
 
     const existing = await db.getAsync('SELECT * FROM bookings WHERE id = ?', [id]);
     if (!existing) {
@@ -255,6 +255,12 @@ router.put('/bookings/:id', async (req, res) => {
       }
       updates.push('booking_status = ?');
       values.push(booking_status);
+      
+      // If cancelling, store the cancellation reason
+      if (booking_status === 'cancelled' && cancellation_reason !== undefined) {
+        updates.push('cancellation_reason = ?');
+        values.push(cancellation_reason ? String(cancellation_reason).trim() : null);
+      }
     }
     if (cab_id !== undefined) {
       updates.push('cab_id = ?');
@@ -402,6 +408,83 @@ router.put('/bookings/:id', async (req, res) => {
       }
       if (!customerEmailVal) n8nWarnings.push('Customer email is missing — customer will not receive driver info email.');
       if (!cabNumber) n8nWarnings.push('Cab number is missing.');
+    }
+    
+    // Trigger cancellation email webhook if booking is being cancelled
+    if (booking_status === 'cancelled' && updated) {
+      const pick = (row, ...preferredKeys) => {
+        if (!row || typeof row !== 'object') return '';
+        for (const k of preferredKeys) {
+          const v = row[k];
+          if (v != null && String(v).trim() !== '') return String(v).trim();
+        }
+        const target = preferredKeys[0].toLowerCase();
+        for (const key of Object.keys(row)) {
+          if (key.toLowerCase() === target) {
+            const v = row[key];
+            if (v != null && String(v).trim() !== '') return String(v).trim();
+            break;
+          }
+        }
+        return '';
+      };
+      const customerEmailVal = pick(updated, 'passenger_email', 'PASSENGER_EMAIL');
+      const customerName = pick(updated, 'passenger_name', 'PASSENGER_NAME');
+      const pickup = pick(updated, 'from_location', 'FROM_LOCATION');
+      const drop = pick(updated, 'to_location', 'TO_LOCATION');
+      
+      if (customerEmailVal) {
+        triggerBookingCancellation({
+          bookingId: 'NC' + id,
+          customerEmail: customerEmailVal,
+          email: customerEmailVal,
+          customerName,
+          cancellationReason: cancellation_reason || 'No reason provided',
+          pickup,
+          drop,
+        });
+      }
+    }
+    
+    // Trigger trip completed email webhook if booking status is marked as completed
+    if (booking_status === 'completed' && updated) {
+      const pick = (row, ...preferredKeys) => {
+        if (!row || typeof row !== 'object') return '';
+        for (const k of preferredKeys) {
+          const v = row[k];
+          if (v != null && String(v).trim() !== '') return String(v).trim();
+        }
+        const target = preferredKeys[0].toLowerCase();
+        for (const key of Object.keys(row)) {
+          if (key.toLowerCase() === target) {
+            const v = row[key];
+            if (v != null && String(v).trim() !== '') return String(v).trim();
+            break;
+          }
+        }
+        return '';
+      };
+      const customerEmailVal = pick(updated, 'passenger_email', 'PASSENGER_EMAIL');
+      const customerName = pick(updated, 'passenger_name', 'PASSENGER_NAME');
+      const driverName = pick(updated, 'driver_name', 'DRIVER_NAME');
+      const pickup = pick(updated, 'from_location', 'FROM_LOCATION');
+      const drop = pick(updated, 'to_location', 'TO_LOCATION');
+      const fareAmount = pick(updated, 'fare_amount', 'FARE_AMOUNT');
+      const invoiceNumber = pick(updated, 'invoice_number', 'INVOICE_NUMBER');
+      
+      if (customerEmailVal) {
+        triggerTripCompleted({
+          bookingId: 'NC' + id,
+          customerEmail: customerEmailVal,
+          email: customerEmailVal,
+          customerName,
+          driverName,
+          pickup,
+          drop,
+          fareAmount,
+          invoiceNumber,
+        });
+      }
     }
     res.json({ ...withCab, n8nWarnings: n8nWarnings.length ? n8nWarnings : undefined });
   } catch (error) {

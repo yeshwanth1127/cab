@@ -49,8 +49,18 @@ function triggerInvoiceGenerated(payload) {
   post('N8N_WEBHOOK_INVOICE_GENERATED_URL', 'invoice-generated', payload);
 }
 
+function triggerBookingCancellation(payload) {
+  post('N8N_WEBHOOK_BOOKING_CANCELLATION_URL', 'booking-cancellation', payload);
+}
+
+function triggerTripCompleted(payload) {
+  post('N8N_WEBHOOK_TRIP_COMPLETED_URL', 'trip-completed', payload);
+}
+
 module.exports = {
   triggerBookingSuccess,
   triggerDriverInfo,
   triggerInvoiceGenerated,
+  triggerBookingCancellation,
+  triggerTripCompleted,
 };

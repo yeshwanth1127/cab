@@ -232,6 +232,7 @@ const CarOptions = () => {
       nightCharges,
       nightChargesLabel,
       extraNotes,
+      seatingLabel,
     } = opts;
     const imageUrl = (cab?.image_url ? getImageUrl(cab.image_url) : null) || (ct.image_url ? getImageUrl(ct.image_url) : null) || (ct.cabs?.[0]?.image_url ? getImageUrl(ct.cabs[0].image_url) : null);
     const gstText = ct.gstIncluded === true ? 'Includes GST' : ct.gstIncluded === false ? 'Excludes GST' : 'Includes GST';
@@ -271,6 +272,12 @@ const CarOptions = () => {
           <p className="unified-cab-card-service-label">{ct.name}</p>
         </div>
         <div className="unified-cab-card-breakdown">
+          {seatingLabel && (
+            <div className="unified-cab-card-breakdown-row">
+              <span className="unified-cab-card-breakdown-label">Seats</span>
+              <span className="unified-cab-card-breakdown-value">{seatingLabel}</span>
+            </div>
+          )}
           <div className="unified-cab-card-breakdown-row">
             <span className="unified-cab-card-breakdown-label">{includedKmLabel || 'Included Km'}</span>
             <span className="unified-cab-card-breakdown-value">{includedKmText}</span>
@@ -698,6 +705,10 @@ const CarOptions = () => {
                     : (tripType === 'round_trip' ? meta.total_km : meta.distance_km);
                 const billableKm = meta.chargeable_km;
                 const shouldShowBillable = billableKm != null && actualKm != null && Number(billableKm) !== Number(actualKm);
+                const seatLabel = getSeatLabel({
+                  cabTypeName: ct.name,
+                  seatingCapacity: ct.seatingCapacity,
+                });
                 return renderUnifiedCabCard(cab, ct, {
                   totalDistanceKm: actualKm ?? null,
                   totalDistanceLabel: 'Total distance',
@@ -711,6 +722,7 @@ const CarOptions = () => {
                   // (do not display the admin-configured numeric value here).
                   driverCharges: null,
                   nightCharges: ct.nightCharges ?? 0,
+                  seatingLabel: seatLabel,
                 });
               }));
               return outstationCards.length > 0 ? (

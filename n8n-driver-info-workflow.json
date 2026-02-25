@@ -1,5 +1,5 @@
 {
-  "name": "Driver Info – Customer & Driver Emails",
+  "name": "Driver Info, Trip Completion & Booking Cancellation – Customer & Driver Emails",
   "nodes": [
     {
       "parameters": {
@@ -17,6 +17,34 @@
     },
     {
       "parameters": {
+        "httpMethod": "POST",
+        "path": "booking-cancellation",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "booking-cancellation-webhook",
+      "name": "booking cancellation",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [-1200, 100],
+      "webhookId": "booking-cancellation-webhook-id"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "trip-completed",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "trip-completed-webhook",
+      "name": "trip completed",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [-1200, 440],
+      "webhookId": "trip-completed-webhook-id"
+    },
+    {
+      "parameters": {
         "jsCode": "const item = $input.first();\nif (!item || !item.json) return [{ json: {} }];\nconst input = item.json;\nlet body = input.body ?? input;\nif (typeof body === 'string') { try { body = JSON.parse(body); } catch (_) { body = {}; } }\nif (!body || typeof body !== 'object') body = {};\nreturn [{ json: body }];"
       },
       "id": "extract-body-node",
@@ -24,6 +52,26 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [-1000, -240]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nif (!item || !item.json) return [{ json: {} }];\nconst input = item.json;\nlet body = input.body ?? input;\nif (typeof body === 'string') { try { body = JSON.parse(body); } catch (_) { body = {}; } }\nif (!body || typeof body !== 'object') body = {};\nreturn [{ json: body }];"
+      },
+      "id": "extract-body-cancellation",
+      "name": "Extract Body Cancellation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1000, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nif (!item || !item.json) return [{ json: {} }];\nconst input = item.json;\nlet body = input.body ?? input;\nif (typeof body === 'string') { try { body = JSON.parse(body); } catch (_) { body = {}; } }\nif (!body || typeof body !== 'object') body = {};\nreturn [{ json: body }];"
+      },
+      "id": "extract-body-trip-completed",
+      "name": "Extract Body Trip Completed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1000, 440]
     },
     {
       "parameters": {
@@ -103,6 +151,64 @@
     },
     {
       "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-cancellation-email",
+              "leftValue": "={{ $json.customerEmail }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-send-cancellation-email",
+      "name": "IF Send Cancellation Email",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-700, 100]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-trip-completed-email",
+              "leftValue": "={{ $json.customerEmail }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-send-trip-completed-email",
+      "name": "IF Send Trip Completed Email",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-700, 440]
+    },
+    {
+      "parameters": {
         "fromEmail": "Namma Cabs <info@namma-cabs.com>",
         "toEmail": "={{ $json.customerEmail }}",
         "subject": "={{ 'Driver Details – ' + $json.bookingId }}",
@@ -140,6 +246,46 @@
           "name": "info"
         }
       }
+    },
+    {
+      "parameters": {
+        "fromEmail": "Namma Cabs <info@namma-cabs.com>",
+        "toEmail": "={{ $json.customerEmail }}",
+        "subject": "={{ 'Booking Cancelled – ' + $json.bookingId }}",
+        "html": "={{ '<h2 style=\"color: #dc2626;\">Your Booking Has Been Cancelled</h2><p>Dear ' + ($json.customerName || 'Customer') + ',</p><p>We regret to inform you that your booking <b>' + $json.bookingId + '</b> has been cancelled.</p><p><b>Reason for Cancellation:</b></p><p>' + ($json.cancellationReason || 'No reason provided') + '</p><p><b>Booking Details:</b></p><ul><li>Pickup: ' + ($json.pickup || '—') + '</li><li>Drop: ' + ($json.drop || '—') + '</li></ul><p>If you have any questions or would like to make a new booking, please feel free to contact us.</p><p>Thank you for choosing Namma Cabs.</p><p>Best regards,<br><b>Namma Cabs Team</b></p>' }}",
+        "options": {}
+      },
+      "id": "booking-cancellation-email",
+      "name": "Send Cancellation Email to Customer",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [-440, 100],
+      "credentials": {
+        "smtp": {
+          "id": "GQ63PHi6e1cQ465I",
+          "name": "info"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "Namma Cabs <info@namma-cabs.com>",
+        "toEmail": "={{ $json.customerEmail }}",
+        "subject": "={{ 'Your Trip Is Complete – ' + $json.bookingId }}",
+        "html": "={{ '<h2 style=\"color: #16a34a;\">✅ Your Trip Is Complete</h2><p>Dear ' + ($json.customerName || 'Customer') + ',</p><p>Thank you for choosing Namma Cabs! Your trip has been successfully completed.</p><p><b>Trip Summary:</b></p><ul><li>Booking ID: <b>' + $json.bookingId + '</b></li><li>Pickup: ' + ($json.pickup || '—') + '</li><li>Destination: ' + ($json.drop || '—') + '</li>' + ($json.driverName ? '<li>Driver: ' + $json.driverName + '</li>' : '') + ($json.fareAmount ? '<li>Amount: ₹' + $json.fareAmount + '</li>' : '') + ($json.invoiceNumber ? '<li>Invoice: ' + $json.invoiceNumber + '</li>' : '') + '</ul><p>We hope you had a pleasant journey with us. Your feedback helps us improve our service.</p><p style=\"margin-top: 20px;\">Thank you for riding with Namma Cabs!</p><p>Best regards,<br><b>Namma Cabs Team</b></p>' }}",
+        "options": {}
+      },
+      "id": "trip-completed-email",
+      "name": "Send Trip Completed Email to Customer",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [-440, 440],
+      "credentials": {
+        "smtp": {
+          "id": "GQ63PHi6e1cQ465I",
+          "name": "info"
+        }
+      }
     }
   ],
   "connections": {
@@ -148,6 +294,28 @@
         [
           {
             "node": "Extract Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "booking cancellation": {
+      "main": [
+        [
+          {
+            "node": "Extract Body Cancellation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "trip completed": {
+      "main": [
+        [
+          {
+            "node": "Extract Body Trip Completed",
             "type": "main",
             "index": 0
           }
@@ -164,6 +332,28 @@
           },
           {
             "node": "IF Send to Driver",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Body Cancellation": {
+      "main": [
+        [
+          {
+            "node": "IF Send Cancellation Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Body Trip Completed": {
+      "main": [
+        [
+          {
+            "node": "IF Send Trip Completed Email",
             "type": "main",
             "index": 0
           }
@@ -187,6 +377,30 @@
         [
           {
             "node": "Send Trip Info to Driver",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "IF Send Cancellation Email": {
+      "main": [
+        [
+          {
+            "node": "Send Cancellation Email to Customer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "IF Send Trip Completed Email": {
+      "main": [
+        [
+          {
+            "node": "Send Trip Completed Email to Customer",
             "type": "main",
             "index": 0
           }

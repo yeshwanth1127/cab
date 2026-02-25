@@ -87,6 +87,9 @@ const AdminDashboard = () => {
   const [driverModal, setDriverModal] = useState(null);
   const [driverForm, setDriverForm] = useState({ name: '', phone: '', email: '', license_number: '', emergency_contact_name: '', emergency_contact_phone: '' });
   const [driverSubmitting, setDriverSubmitting] = useState(false);
+  const [cancelBookingModal, setCancelBookingModal] = useState({ open: false, booking: null });
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelSubmitting, setCancelSubmitting] = useState(false);
 
   const [createForm, setCreateForm] = useState({
     from_location: '',
@@ -696,10 +699,14 @@ const AdminDashboard = () => {
   };
 
   const [statusUpdatingId, setStatusUpdatingId] = useState(null);
-  const handleUpdateBookingStatus = async (bookingId, newStatus) => {
+  const handleUpdateBookingStatus = async (bookingId, newStatus, cancellationReason = null) => {
     setStatusUpdatingId(bookingId);
     try {
-      await api.put(`/admin/bookings/${bookingId}`, { booking_status: newStatus });
+      const payload = { booking_status: newStatus };
+      if (newStatus === 'cancelled' && cancellationReason !== null) {
+        payload.cancellation_reason = cancellationReason;
+      }
+      await api.put(`/admin/bookings/${bookingId}`, payload);
       showToast(newStatus === 'confirmed' ? 'Booking confirmed.' : newStatus === 'completed' ? 'Trip marked completed.' : 'Booking cancelled.');
       fetchBookings();
       if (newStatus === 'completed') {
@@ -714,6 +721,23 @@ const AdminDashboard = () => {
       return false;
     } finally {
       setStatusUpdatingId(null);
+    }
+  };
+
+  const handleCancelBookingClick = (booking) => {
+    setCancelBookingModal({ open: true, booking });
+    setCancelReason('');
+  };
+
+  const handleSubmitCancellation = async () => {
+    if (!cancelBookingModal.booking) return;
+    setCancelSubmitting(true);
+    try {
+      await handleUpdateBookingStatus(cancelBookingModal.booking.id, 'cancelled', cancelReason);
+      setCancelBookingModal({ open: false, booking: null });
+      setCancelReason('');
+    } finally {
+      setCancelSubmitting(false);
     }
   };
 
@@ -1810,14 +1834,19 @@ const AdminDashboard = () => {
                 <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setDetailBooking(b)}>View</button>
                 {actionsVariant === 'enquiries' ? (
                   b.booking_status === 'pending' ? (
-                    <button
-                      type="button"
-                      className="admin-btn admin-btn-primary admin-btn-sm"
-                      onClick={() => handleUpdateBookingStatus(b.id, 'confirmed')}
-                      disabled={statusUpdatingId === b.id}
-                    >
-                      {statusUpdatingId === b.id ? '…' : 'Confirm'}
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        className="admin-btn admin-btn-primary admin-btn-sm"
+                        onClick={() => handleUpdateBookingStatus(b.id, 'confirmed')}
+                        disabled={statusUpdatingId === b.id}
+                      >
+                        {statusUpdatingId === b.id ? '…' : 'Confirm'}
+                      </button>
+                      <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCancelBookingClick(b)} disabled={statusUpdatingId === b.id}>
+                        {statusUpdatingId === b.id ? '…' : 'Cancel'}
+                      </button>
+                    </>
                   ) : null
                 ) : actionsVariant === 'cancelled' ? (
                   <button
@@ -1853,14 +1882,9 @@ const AdminDashboard = () => {
                       </button>
                     )}
                     {b.booking_status === 'confirmed' && (
-                      <>
-                        <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => handleUpdateBookingStatus(b.id, 'completed')} disabled={statusUpdatingId === b.id}>
-                          {statusUpdatingId === b.id ? '…' : 'Trip completed'}
-                        </button>
-                        <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleUpdateBookingStatus(b.id, 'cancelled')} disabled={statusUpdatingId === b.id}>
-                          {statusUpdatingId === b.id ? '…' : 'Cancel'}
-                        </button>
-                      </>
+                      <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => handleUpdateBookingStatus(b.id, 'completed')} disabled={statusUpdatingId === b.id}>
+                        {statusUpdatingId === b.id ? '…' : 'Trip completed'}
+                      </button>
                     )}
                     {['confirmed', 'in_progress'].includes(b.booking_status) && (
                       <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => openAssignModal(b, false)}>{b.cab_id ? 'Reassign' : 'Assign'}</button>
@@ -1871,14 +1895,8 @@ const AdminDashboard = () => {
                         <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendCustomerEmail(b)} disabled={sendCustomerEmailId === b.id}>{sendCustomerEmailId === b.id ? '…' : 'Send email to customer'}</button>
                       </>
                     )}
-                    {b.maps_link && ['confirmed', 'in_progress'].includes(b.booking_status) && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link)}>Copy pickup map</button>}
                     {b.maps_link_drop && ['confirmed', 'in_progress'].includes(b.booking_status) && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCopyMapLink(b.maps_link_drop)}>Copy drop map</button>}
-                    {b.passenger_phone && ['confirmed', 'in_progress'].includes(b.booking_status) && (
-                      <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendWhatsAppToCustomer(b)} disabled={sendWhatsAppToCustomerId === b.id}>
-                        {sendWhatsAppToCustomerId === b.id ? '…' : 'WhatsApp (customer)'}
-                      </button>
-                    )}
-                    {(b.driver_phone || b.driver_name) && ['confirmed', 'in_progress'].includes(b.booking_status) && <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleSendWhatsApp(b)}>Chat driver</button>}
+
                   </>
                 )}
               </div>
@@ -2293,7 +2311,7 @@ const AdminDashboard = () => {
                               <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => handleUpdateBookingStatus(b.id, 'completed')} disabled={statusUpdatingId === b.id}>
                                 {statusUpdatingId === b.id ? '…' : 'Trip completed'}
                               </button>
-                              <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleUpdateBookingStatus(b.id, 'cancelled')} disabled={statusUpdatingId === b.id}>
+                              <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCancelBookingClick(b)} disabled={statusUpdatingId === b.id}>
                                 {statusUpdatingId === b.id ? '…' : 'Cancel'}
                               </button>
                             </>
@@ -3212,7 +3230,7 @@ const AdminDashboard = () => {
                             <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => handleUpdateBookingStatus(b.id, 'completed')} disabled={statusUpdatingId === b.id}>
                               {statusUpdatingId === b.id ? '…' : 'Trip completed'}
                             </button>
-                            <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleUpdateBookingStatus(b.id, 'cancelled')} disabled={statusUpdatingId === b.id}>
+                            <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCancelBookingClick(b)} disabled={statusUpdatingId === b.id}>
                               {statusUpdatingId === b.id ? '…' : 'Cancel'}
                             </button>
                           </>
@@ -4122,27 +4140,27 @@ const AdminDashboard = () => {
                 <span className="key" style={{ width: '100%', marginBottom: 4 }}>Update status</span>
                 <span className="value" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
                   {detailBooking.booking_status === 'pending' && (
-                    <button
-                      type="button"
-                      className="admin-btn admin-btn-primary admin-btn-sm"
-                      onClick={async () => {
-                        const ok = await handleUpdateBookingStatus(detailBooking.id, 'confirmed');
-                        if (ok) setDetailBooking(null);
-                      }}
-                      disabled={statusUpdatingId === detailBooking.id}
-                    >
-                      {statusUpdatingId === detailBooking.id ? 'Updating…' : 'Confirm'}
-                    </button>
-                  )}
-                  {detailBooking.booking_status === 'confirmed' && (
                     <>
-                      <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => handleUpdateBookingStatus(detailBooking.id, 'completed')} disabled={statusUpdatingId === detailBooking.id}>
-                        {statusUpdatingId === detailBooking.id ? 'Updating…' : 'Trip completed'}
+                      <button
+                        type="button"
+                        className="admin-btn admin-btn-primary admin-btn-sm"
+                        onClick={async () => {
+                          const ok = await handleUpdateBookingStatus(detailBooking.id, 'confirmed');
+                          if (ok) setDetailBooking(null);
+                        }}
+                        disabled={statusUpdatingId === detailBooking.id}
+                      >
+                        {statusUpdatingId === detailBooking.id ? 'Updating…' : 'Confirm'}
                       </button>
-                      <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleUpdateBookingStatus(detailBooking.id, 'cancelled')} disabled={statusUpdatingId === detailBooking.id}>
+                      <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleCancelBookingClick(detailBooking)} disabled={statusUpdatingId === detailBooking.id}>
                         Cancel
                       </button>
                     </>
+                  )}
+                  {detailBooking.booking_status === 'confirmed' && (
+                    <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => handleUpdateBookingStatus(detailBooking.id, 'completed')} disabled={statusUpdatingId === detailBooking.id}>
+                      {statusUpdatingId === detailBooking.id ? 'Updating…' : 'Trip completed'}
+                    </button>
                   )}
                   {detailBooking.booking_status === 'in_progress' && (
                     <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => handleUpdateBookingStatus(detailBooking.id, 'completed')} disabled={statusUpdatingId === detailBooking.id}>
@@ -4354,6 +4372,57 @@ const AdminDashboard = () => {
                 <button type="submit" className="admin-btn admin-btn-primary" disabled={driverSubmitting}>{driverSubmitting ? 'Saving…' : 'Save'}</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {cancelBookingModal.open && cancelBookingModal.booking && (
+        <div className="admin-modal-overlay" onClick={() => setCancelBookingModal({ open: false, booking: null })}>
+          <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="admin-modal-header">
+              <h3>Cancel Booking</h3>
+              <button type="button" className="admin-modal-close" onClick={() => setCancelBookingModal({ open: false, booking: null })} aria-label="Close">×</button>
+            </div>
+            <div className="admin-modal-body">
+              <div className="admin-form-group">
+                <label>Booking ID</label>
+                <p style={{ margin: '8px 0', fontWeight: 'bold' }}>NC{cancelBookingModal.booking.id}</p>
+              </div>
+              <div className="admin-form-group">
+                <label>Customer Name</label>
+                <p style={{ margin: '8px 0' }}>{cancelBookingModal.booking.passenger_name}</p>
+              </div>
+              <div className="admin-form-group">
+                <label>From - To</label>
+                <p style={{ margin: '8px 0' }}>{cancelBookingModal.booking.from_location} → {cancelBookingModal.booking.to_location}</p>
+              </div>
+              <div className="admin-form-group">
+                <label htmlFor="cancel-reason">Reason for Cancellation <span style={{ color: '#dc2626' }}>*</span></label>
+                <textarea 
+                  id="cancel-reason"
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  placeholder="Please provide a reason for cancelling this booking..."
+                  style={{ 
+                    minHeight: '100px',
+                    padding: '8px',
+                    fontFamily: 'inherit',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '4px',
+                    resize: 'vertical'
+                  }}
+                  required
+                />
+              </div>
+            </div>
+            <div className="admin-modal-actions">
+              <button type="button" className="admin-btn admin-btn-secondary" onClick={() => setCancelBookingModal({ open: false, booking: null })} disabled={cancelSubmitting}>
+                Back
+              </button>
+              <button type="button" className="admin-btn admin-btn-danger" onClick={handleSubmitCancellation} disabled={cancelSubmitting || !cancelReason.trim()}>
+                {cancelSubmitting ? 'Cancelling…' : 'Confirm Cancel'}
+              </button>
+            </div>
           </div>
         </div>
       )}
