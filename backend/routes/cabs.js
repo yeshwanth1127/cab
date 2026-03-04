@@ -466,6 +466,7 @@ router.get('/outstation-fare-estimate', async (req, res) => {
       const toLat = parseFloat(req.query.to_lat);
       const toLng = parseFloat(req.query.to_lng);
       const hasCoords = !Number.isNaN(fromLat) && !Number.isNaN(fromLng) && !Number.isNaN(toLat) && !Number.isNaN(toLng);
+       const days = Math.max(1, parseInt(req.query.number_of_days, 10) || 1);
       // Prefer driving distance (Google Distance Matrix) so it matches Google Maps.
       // Fallback to haversine if Google API is unavailable/misconfigured.
       let distance_km = null;
@@ -503,18 +504,28 @@ router.get('/outstation-fare-estimate', async (req, res) => {
         const extraKmRate = getNum(row, 'extra_km_rate');
         const driverCharges = getNum(row, 'driver_charges');
         const nightCharges = getNum(row, 'night_charges');
-        // If computed distance is below minimum km, bill at minimum km.
-        const chargeable_km = Math.max(Number(distance_km) || 0, Number(minKm) || 0);
-        const extraKm = Math.max(0, chargeable_km - minKm);
-        const fare_amount = Math.round(baseFare + extraKm * extraKmRate + driverCharges + nightCharges);
+        
+        // One-way fare calculation logic:
+        // If distance < minimum km: charge (distance * per_km_rate) + base fare
+        // If distance >= minimum km: charge (distance * per_km_rate) + driver charges (no base fare)
+        let fare_amount;
+        const actualDistance = Number(distance_km) || 0;
+        
+        if (actualDistance < minKm) {
+          // Below minimum km: actual distance * rate + base fare
+          fare_amount = Math.round(actualDistance * extraKmRate + baseFare);
+        } else {
+          // At or above minimum km: actual distance * rate + driver charges (no base fare)
+          fare_amount = Math.round(actualDistance * extraKmRate + driverCharges * days);
+        }
+        
         fares.push({
           cab_type_id: ct.id,
           cab_type_name: ct.name,
           fare_amount,
           distance_km: Number(distance_km.toFixed(2)),
           min_km: minKm,
-          chargeable_km: Number(chargeable_km.toFixed(2)),
-          extra_km: Number(extraKm.toFixed(2)),
+          chargeable_km: Number(actualDistance.toFixed(2)),
         });
       }
       return res.json({ distance_km, distance_source, fares });

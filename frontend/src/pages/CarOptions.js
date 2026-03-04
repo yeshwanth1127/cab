@@ -104,6 +104,7 @@ const CarOptions = () => {
             estimateParams.from_lng = bookingState.from_lng;
             estimateParams.to_lat = bookingState.to_lat;
             estimateParams.to_lng = bookingState.to_lng;
+             if (bookingState.number_of_days) estimateParams.number_of_days = bookingState.number_of_days;
           } else if (tripType === 'round_trip' && bookingState.number_of_days) {
             estimateParams.number_of_days = bookingState.number_of_days;
           } else if (tripType === 'multiple_stops') {
@@ -235,7 +236,6 @@ const CarOptions = () => {
       seatingLabel,
     } = opts;
     const imageUrl = (cab?.image_url ? getImageUrl(cab.image_url) : null) || (ct.image_url ? getImageUrl(ct.image_url) : null) || (ct.cabs?.[0]?.image_url ? getImageUrl(ct.cabs[0].image_url) : null);
-    const gstText = ct.gstIncluded === true ? 'Includes GST' : ct.gstIncluded === false ? 'Excludes GST' : 'Includes GST';
     const driverText = driverCharges == null || Number(driverCharges) === 0 ? 'Included' : `₹${driverCharges}`;
     const nightText = nightCharges == null || Number(nightCharges) === 0 ? 'Included' : `₹${nightCharges}`;
     const extraKmText = extraPerKm != null && Number(extraPerKm) >= 0 ? `₹${extraPerKm}/KM` : '—';
@@ -268,7 +268,6 @@ const CarOptions = () => {
         </div>
         <div className="unified-cab-card-fare">
           <span className="unified-cab-card-fare-amount">₹{displayFare != null ? displayFare : '—'}/-</span>
-          <p className="unified-cab-card-gst">{gstText}</p>
           <p className="unified-cab-card-service-label">{ct.name}</p>
         </div>
         <div className="unified-cab-card-breakdown">
@@ -703,8 +702,6 @@ const CarOptions = () => {
                   tripType === 'one_way'
                     ? meta.distance_km
                     : (tripType === 'round_trip' ? meta.total_km : meta.distance_km);
-                const billableKm = meta.chargeable_km;
-                const shouldShowBillable = billableKm != null && actualKm != null && Number(billableKm) !== Number(actualKm);
                 const seatLabel = getSeatLabel({
                   cabTypeName: ct.name,
                   seatingCapacity: ct.seatingCapacity,
@@ -712,11 +709,11 @@ const CarOptions = () => {
                 return renderUnifiedCabCard(cab, ct, {
                   totalDistanceKm: actualKm ?? null,
                   totalDistanceLabel: 'Total distance',
-                  billableDistanceKm: shouldShowBillable ? billableKm : null,
-                  billableDistanceLabel: 'Billable distance (min applied)',
+                  billableDistanceKm: null,
                   displayFare: outstationFares[ct.id] ?? ct.baseFare ?? 0,
                   serviceLabel: `${ct.name} (${(bookingState.trip_type || 'one_way').replace('_', ' ')})`,
                   includedKm: ct.includedKm ?? null,
+                  includedKmLabel: 'Minimum Km',
                   extraPerKm: ct.extraPerKm ?? null,
                   // Customer booking flow requirement: always show Driver Charges as "Included" for outstation
                   // (do not display the admin-configured numeric value here).

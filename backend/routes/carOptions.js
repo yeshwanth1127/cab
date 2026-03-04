@@ -75,7 +75,14 @@ router.get('/', async (req, res) => {
       query += ` AND ct.is_active = 1`;
     }
     
-    query += ' ORDER BY ct.name, co.car_subtype, co.sort_order ASC, co.created_at DESC';
+    query += ` ORDER BY 
+                CASE 
+                  WHEN ct.name = 'Sedan' THEN 1
+                  WHEN ct.name = 'SUV' THEN 2
+                  WHEN ct.name LIKE '%Crysta%' THEN 3
+                  ELSE 4
+                END,
+                co.car_subtype, co.sort_order ASC, co.created_at DESC`;
     
     console.log('[Car Options API] Query:', query);
     console.log('[Car Options API] Params:', params);

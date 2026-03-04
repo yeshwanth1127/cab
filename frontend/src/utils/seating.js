@@ -20,12 +20,9 @@ export function getSeatLabel({ cabTypeName, seatingCapacity, crystaSeater }) {
   if (isCrysta) return crystaSeater || '7+1';
   if (isSuv) return '6+1';
 
-  // Do not force TT / MiniBus into the default 6+1 bucket.
-  if (isTempoTraveller || isMiniBus) {
-    const total = Number(seatingCapacity);
-    if (Number.isFinite(total) && total >= 2) return `${total - 1}+1`;
-    return parsePlusOneFromName();
-  }
+  // Use fixed seat counts for TT and MiniBus.
+  if (isTempoTraveller) return '11+1';
+  if (isMiniBus) return '9+1';
 
   // Default for other car types
   return '6+1';

@@ -21,6 +21,13 @@ const BLUE_HEADER = '#2563eb';
 const YELLOW_TEXT = '#ca8a04';
 const GREEN_TEXT = '#16a34a';
 
+const INVOICE_FONT = {
+  regular: 'Times-Roman',
+  bold: 'Times-Bold',
+  italic: 'Times-Italic',
+  boldItalic: 'Times-BoldItalic',
+};
+
 function numberToWords(n) {
   const num = Math.floor(Number(n) || 0);
   if (num === 0) return 'Zero Only';
@@ -87,12 +94,12 @@ function generateInvoicePDF(booking, withGST = true) {
     doc.text(`Email ID: ${COMPANY.email}`, rightColX, addrY + 14);
 
     doc.rect(0, blueBarTop, pageWidth, blueBarHeight).fill(BLUE_HEADER);
-    doc.fillColor('white').fontSize(18).font('Helvetica-Bold').text('INVOICE', 0, blueBarTop + 6, { width: pageWidth, align: 'center' });
-    doc.fillColor('black').font('Helvetica');
+    doc.fillColor('white').fontSize(18).font(INVOICE_FONT.bold).text('INVOICE', 0, blueBarTop + 6, { width: pageWidth, align: 'center' });
+    doc.fillColor('black').font(INVOICE_FONT.regular);
 
     let y = contentTop;
-    doc.fontSize(11).font('Helvetica-Bold').text(`M/s ${(booking.passenger_name || '—').toUpperCase()}`, margin, y);
-    doc.font('Helvetica').fontSize(9);
+    doc.fontSize(11).font(INVOICE_FONT.bold).text(`M/s ${(booking.passenger_name || '—').toUpperCase()}`, margin, y);
+    doc.font(INVOICE_FONT.regular).fontSize(9);
     y += 16;
     const custAddr = booking.from_location || '—';
     const addrStr = `Address: ${custAddr}`;
@@ -113,7 +120,9 @@ function generateInvoicePDF(booking, withGST = true) {
     doc.fontSize(9);
     doc.text(`Invoice No: ${booking.invoice_number || booking.id}`, rightColX, y);
     y += 12;
-    const invDate = booking.booking_date ? new Date(booking.booking_date) : new Date();
+    const invDateRaw = booking.invoice_date || booking.booking_date;
+    const invDateParsed = invDateRaw ? new Date(invDateRaw) : null;
+    const invDate = invDateParsed && !Number.isNaN(invDateParsed.getTime()) ? invDateParsed : new Date();
     const dateStr = invDate.toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
     doc.text(`Date: ${dateStr}`, rightColX, y);
     y += 12;
@@ -137,20 +146,20 @@ function generateInvoicePDF(booking, withGST = true) {
     const cellPad = 6;
 
     doc.rect(margin, tableTop, tableWidth, headerH).fill(BLUE_HEADER);
-    doc.fillColor('white').fontSize(9).font('Helvetica-Bold');
+    doc.fillColor('white').fontSize(9).font(INVOICE_FONT.bold);
     doc.text('SI No', colSl + cellPad, tableTop + 7, { width: colW.sl - cellPad });
     doc.text('Description', colDesc + cellPad, tableTop + 7, { width: colW.desc - cellPad });
     doc.text('Total Kms', colKms + cellPad, tableTop + 7, { width: colW.kms - cellPad });
     doc.text('No Of Days', colDays + cellPad, tableTop + 7, { width: colW.days - cellPad });
     doc.text('Rate Details', colRate + cellPad, tableTop + 7, { width: colW.rate - cellPad });
     doc.text('Amount(Rs)', colAmount + cellPad, tableTop + 7, { width: colW.amount - cellPad, align: 'right' });
-    doc.fillColor('black').font('Helvetica');
+    doc.fillColor('black').font(INVOICE_FONT.regular);
 
     const serviceLabel = booking.service_type === 'local' ? 'LOCAL' : booking.service_type === 'airport' ? 'AIRPORT TRANS' : 'OUTSTATION';
     const tripLabel = booking.service_type === 'outstation' && booking.trip_type
       ? (booking.trip_type === 'one_way' ? 'One Way' : booking.trip_type === 'round_trip' ? 'Round Trip' : 'Multiple Stops')
       : '';
-    const dateForDesc = booking.booking_date ? new Date(booking.booking_date).toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) : (new Date()).toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
+    const dateForDesc = invDate.toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
     const descLines = [
       serviceLabel + (tripLabel ? ` - ${tripLabel.toUpperCase()}` : ''),
       `DATE - ${dateForDesc}`,
@@ -162,9 +171,23 @@ function generateInvoicePDF(booking, withGST = true) {
     const noOfDays = booking.number_of_days != null ? Number(booking.number_of_days) : 1;
     const baseAmount = Number(booking.fare_amount) || 0;
     const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+    const numOr0 = (v) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    };
     const gstRate = 0.05;
-    const gstAmount = withGST ? round2(baseAmount * gstRate) : 0;
-    const grandTotal = round2(baseAmount + gstAmount);
+    const extraRows = [
+      { label: 'Toll tax', val: numOr0(booking.toll_tax) },
+      { label: 'State Tax', val: numOr0(booking.state_tax) },
+      { label: 'Driver Batta', val: numOr0(booking.driver_batta) },
+      { label: 'Parking Charges', val: numOr0(booking.parking_charges) },
+      { label: 'Placard Charges', val: numOr0(booking.placard_charges) },
+      { label: 'Extras', val: numOr0(booking.extras_amount) },
+    ];
+    const extrasSum = extraRows.reduce((sum, r) => sum + numOr0(r.val), 0);
+    const subTotal = round2(baseAmount + extrasSum);
+    const gstAmount = withGST ? round2(subTotal * gstRate) : 0;
+    const grandTotal = round2(subTotal + gstAmount);
     const formatMoney = (n) => round2(n).toFixed(2);
 
     let rowY = tableTop + headerH;
@@ -182,14 +205,6 @@ function generateInvoicePDF(booking, withGST = true) {
     doc.text('NA', colRate + cellPad, rowY + 4, { width: colW.rate - cellPad });
     doc.text(formatMoney(baseAmount), colAmount + cellPad, rowY + 4, { width: colW.amount - cellPad, align: 'right' });
 
-    const extraRows = [
-      { label: 'Toll tax', val: 0 },
-      { label: 'State Tax', val: 0 },
-      { label: 'Driver Batta', val: 0 },
-      { label: 'Parking Charges', val: 0 },
-      { label: 'Placard Charges', val: 0 },
-      { label: 'Extras', val: 0 },
-    ];
     rowY += firstRowH;
     extraRows.forEach((r) => {
       const h = rowH;
@@ -206,8 +221,8 @@ function generateInvoicePDF(booking, withGST = true) {
     [colDesc, colKms, colDays, colRate, colAmount].forEach((x) => {
       doc.moveTo(x, rowY).lineTo(x, rowY + rowH).stroke();
     });
-    doc.font('Helvetica-Bold').text('Sub Total', colDesc + cellPad, rowY + 5, { width: colW.desc - cellPad });
-    doc.text(formatMoney(baseAmount), colAmount + cellPad, rowY + 5, { width: colW.amount - cellPad, align: 'right' });
+    doc.font(INVOICE_FONT.bold).text('Sub Total', colDesc + cellPad, rowY + 5, { width: colW.desc - cellPad });
+    doc.text(formatMoney(subTotal), colAmount + cellPad, rowY + 5, { width: colW.amount - cellPad, align: 'right' });
     rowY += rowH;
 
     if (withGST) {
@@ -215,7 +230,7 @@ function generateInvoicePDF(booking, withGST = true) {
       [colDesc, colKms, colDays, colRate, colAmount].forEach((x) => {
         doc.moveTo(x, rowY).lineTo(x, rowY + rowH).stroke();
       });
-      doc.font('Helvetica-Bold').text('GST @ 5%', colDesc + cellPad, rowY + 5, { width: colW.desc - cellPad });
+      doc.font(INVOICE_FONT.bold).text('GST @ 5%', colDesc + cellPad, rowY + 5, { width: colW.desc - cellPad });
       doc.text(formatMoney(gstAmount), colAmount + cellPad, rowY + 5, { width: colW.amount - cellPad, align: 'right' });
       rowY += rowH;
     }
@@ -228,16 +243,16 @@ function generateInvoicePDF(booking, withGST = true) {
     doc.text(formatMoney(grandTotal), colAmount + cellPad, rowY + 5, { width: colW.amount - cellPad, align: 'right' });
     doc.moveTo(colAmount + cellPad, rowY + rowH - 4).lineTo(colAmount + colW.amount - cellPad, rowY + rowH - 4).stroke();
     doc.moveTo(colAmount + cellPad, rowY + rowH - 2).lineTo(colAmount + colW.amount - cellPad, rowY + rowH - 2).stroke();
-    doc.font('Helvetica');
+    doc.font(INVOICE_FONT.regular);
 
     rowY += rowH + 14;
     doc.fontSize(9).fillColor('#374151');
     doc.text(`Amount in Words (Rs): ${numberToWords(Math.round(grandTotal))}`, margin, rowY);
 
     let termsY = rowY + 36;
-    doc.fontSize(10).font('Helvetica-Bold').fillColor('black').text('Terms & Conditions', margin, termsY);
+    doc.fontSize(10).font(INVOICE_FONT.bold).fillColor('black').text('Terms & Conditions', margin, termsY);
     termsY += 16;
-    doc.font('Helvetica').fontSize(8).fillColor('#374151');
+    doc.font(INVOICE_FONT.regular).fontSize(8).fillColor('#374151');
     const termsWidth = pageWidth - 2 * margin - 12;
     const terms = [
       'Your Trip has a KM limit and in case of certain special packages may even contain Hours limit. If your usage exceeds these limits, you will be charged for the excess KM used (and/or hour if applicable).',
@@ -333,13 +348,13 @@ function generateEventInvoicePDF(eventBooking) {
     doc.text(`Email ID: ${COMPANY.email}`, rightColX, addrY + 14);
 
     doc.rect(0, blueBarTop, pageWidth, blueBarHeight).fill(BLUE_HEADER);
-    doc.fillColor('white').fontSize(16).font('Helvetica-Bold').text('EVENT BOOKING INVOICE', 0, blueBarTop + 6, { width: pageWidth, align: 'center' });
-    doc.fillColor('black').font('Helvetica');
+    doc.fillColor('white').fontSize(16).font(INVOICE_FONT.bold).text('EVENT BOOKING INVOICE', 0, blueBarTop + 6, { width: pageWidth, align: 'center' });
+    doc.fillColor('black').font(INVOICE_FONT.regular);
 
     const eventTypeLabel = (eventBooking.event_type === 'weddings' ? 'Wedding' : eventBooking.event_type === 'birthdays' ? 'Birthday' : 'Event').toUpperCase();
     let y = contentTop;
-    doc.fontSize(11).font('Helvetica-Bold').text(`Booking #${eventBooking.id}  |  ${eventTypeLabel}`, margin, y);
-    doc.font('Helvetica').fontSize(9);
+    doc.fontSize(11).font(INVOICE_FONT.bold).text(`Booking #${eventBooking.id}  |  ${eventTypeLabel}`, margin, y);
+    doc.font(INVOICE_FONT.regular).fontSize(9);
     y += 18;
     doc.text(`Customer: ${(eventBooking.name || '—').toUpperCase()}`, margin, y);
     y += 14;
@@ -359,19 +374,19 @@ function generateEventInvoicePDF(eventBooking) {
 
     const assignments = eventBooking.assignments || [];
     if (assignments.length > 0) {
-      doc.fontSize(10).font('Helvetica-Bold').text('Assigned vehicles', margin, y);
+      doc.fontSize(10).font(INVOICE_FONT.bold).text('Assigned vehicles', margin, y);
       y += 18;
       const tableTop = y;
       const colW = { sl: 28, vehicle: 120, driver: 140, phone: 120 };
       const tableWidth = pageWidth - 2 * margin;
       const rowH = 22;
       doc.rect(margin, tableTop, tableWidth, rowH).fill(BLUE_HEADER);
-      doc.fillColor('white').fontSize(9).font('Helvetica-Bold');
+      doc.fillColor('white').fontSize(9).font(INVOICE_FONT.bold);
       doc.text('No', margin + 6, tableTop + 6, { width: colW.sl });
       doc.text('Vehicle', margin + colW.sl + 6, tableTop + 6, { width: colW.vehicle });
       doc.text('Driver', margin + colW.sl + colW.vehicle + 6, tableTop + 6, { width: colW.driver });
       doc.text('Phone', margin + colW.sl + colW.vehicle + colW.driver + 6, tableTop + 6, { width: colW.phone });
-      doc.fillColor('black').font('Helvetica');
+      doc.fillColor('black').font(INVOICE_FONT.regular);
       let rowY = tableTop + rowH;
       assignments.forEach((a, i) => {
         doc.rect(margin, rowY, tableWidth, rowH).stroke();
