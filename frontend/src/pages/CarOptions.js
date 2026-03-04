@@ -223,8 +223,6 @@ const CarOptions = () => {
       serviceLabel,
       includedKm,
       includedKmLabel,
-      totalDistanceKm,
-      totalDistanceLabel,
       billableDistanceKm,
       billableDistanceLabel,
       extraPerKm,
@@ -246,11 +244,6 @@ const CarOptions = () => {
       includedKmNum != null && Number.isFinite(includedKmNum)
         ? `${formatKm(includedKmNum)} KM`
         : (includedKm != null && includedKm !== '' ? `${includedKm} KM` : '—');
-    const totalDistanceNum = totalDistanceKm != null && totalDistanceKm !== '' ? Number(totalDistanceKm) : null;
-    const totalDistanceText =
-      totalDistanceNum != null && Number.isFinite(totalDistanceNum)
-        ? `${formatKm(totalDistanceNum)} KM`
-        : (totalDistanceKm != null && totalDistanceKm !== '' ? `${totalDistanceKm} KM` : '—');
     const billableDistanceNum = billableDistanceKm != null && billableDistanceKm !== '' ? Number(billableDistanceKm) : null;
     const billableDistanceText =
       billableDistanceNum != null && Number.isFinite(billableDistanceNum)
@@ -281,12 +274,6 @@ const CarOptions = () => {
             <span className="unified-cab-card-breakdown-label">{includedKmLabel || 'Included Km'}</span>
             <span className="unified-cab-card-breakdown-value">{includedKmText}</span>
           </div>
-          {totalDistanceKm != null && (
-            <div className="unified-cab-card-breakdown-row">
-              <span className="unified-cab-card-breakdown-label">{totalDistanceLabel || 'Total distance'}</span>
-              <span className="unified-cab-card-breakdown-value">{totalDistanceText}</span>
-            </div>
-          )}
           {billableDistanceKm != null && (
             <div className="unified-cab-card-breakdown-row">
               <span className="unified-cab-card-breakdown-label">{billableDistanceLabel || 'Billable distance'}</span>
@@ -707,13 +694,11 @@ const CarOptions = () => {
                   seatingCapacity: ct.seatingCapacity,
                 });
                 return renderUnifiedCabCard(cab, ct, {
-                  totalDistanceKm: actualKm ?? null,
-                  totalDistanceLabel: 'Total distance',
                   billableDistanceKm: null,
                   displayFare: outstationFares[ct.id] ?? ct.baseFare ?? 0,
                   serviceLabel: `${ct.name} (${(bookingState.trip_type || 'one_way').replace('_', ' ')})`,
                   includedKm: ct.includedKm ?? null,
-                  includedKmLabel: 'Minimum Km',
+                  includedKmLabel: 'Minimum Km per day',
                   extraPerKm: ct.extraPerKm ?? null,
                   // Customer booking flow requirement: always show Driver Charges as "Included" for outstation
                   // (do not display the admin-configured numeric value here).
