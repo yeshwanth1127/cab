@@ -22,6 +22,8 @@ const CarOptions = () => {
   const [airportOffers, setAirportOffers] = useState([]);
   const [airportFares, setAirportFares] = useState({});
   const [airportDistanceKm, setAirportDistanceKm] = useState(null);
+  const [airportChargeableKm, setAirportChargeableKm] = useState(null);
+  const [airportSlabLabel, setAirportSlabLabel] = useState('');
   const [outstationOffers, setOutstationOffers] = useState([]);
   const [outstationFares, setOutstationFares] = useState({});
   const [outstationDistanceKm, setOutstationDistanceKm] = useState(null);
@@ -63,6 +65,8 @@ const CarOptions = () => {
           setLocalOffers(response.data || []);
           setOptions([]);
           setAirportOffers([]);
+          setAirportChargeableKm(null);
+          setAirportSlabLabel('');
         } else if (isAirportFlow) {
           const [offersRes, estimateRes] = await Promise.all([
             api.get('/cabs/airport-offers'),
@@ -86,6 +90,12 @@ const CarOptions = () => {
               ? Number(estimateRes.data.distance_km)
               : null
           );
+          setAirportChargeableKm(
+            estimateRes.data?.chargeable_km != null && estimateRes.data?.chargeable_km !== ''
+              ? Number(estimateRes.data.chargeable_km)
+              : null
+          );
+          setAirportSlabLabel(estimateRes.data?.slab_label || '');
           // Helpful for debugging distance mismatches vs Google Maps
           if (estimateRes.data?.distance_source) {
             // eslint-disable-next-line no-console
@@ -96,6 +106,8 @@ const CarOptions = () => {
           setOptions([]);
         } else if (isOutstationFlow) {
           setAirportDistanceKm(null);
+          setAirportChargeableKm(null);
+          setAirportSlabLabel('');
           const tripType = bookingState.trip_type || 'one_way';
           const estimateParams = { trip_type: tripType };
           let computedMultiStopDistanceKm = null;
@@ -154,6 +166,8 @@ const CarOptions = () => {
           setOptions([]);
         } else {
           setAirportDistanceKm(null);
+          setAirportChargeableKm(null);
+          setAirportSlabLabel('');
           const response = await api.get('/car-options');
           setOptions(response.data || []);
           setLocalOffers([]);
@@ -162,6 +176,19 @@ const CarOptions = () => {
         }
       } catch (err) {
         console.error('Error fetching data:', err);
+        if (isAirportFlow && err.response?.data?.code === 'AIRPORT_DISTANCE_EXCEEDED') {
+          setAirportOffers([]);
+          setAirportFares({});
+          setAirportDistanceKm(
+            err.response?.data?.distance_km != null && err.response?.data?.distance_km !== ''
+              ? Number(err.response.data.distance_km)
+              : null
+          );
+          setAirportChargeableKm(null);
+          setAirportSlabLabel('');
+          setError(err.response?.data?.error || 'Airport cab is available only up to 60 km. Please book as one-way outstation.');
+          return;
+        }
         setError(
           isLocalFlow ? 'Unable to load cab types. Please try again.' :
           isAirportFlow ? 'Unable to load airport cabs. Please try again.' :
@@ -232,9 +259,15 @@ const CarOptions = () => {
       nightChargesLabel,
       extraNotes,
       seatingLabel,
+      driverChargesPerHour,
     } = opts;
-    const imageUrl = (cab?.image_url ? getImageUrl(cab.image_url) : null) || (ct.image_url ? getImageUrl(ct.image_url) : null) || (ct.cabs?.[0]?.image_url ? getImageUrl(ct.cabs[0].image_url) : null);
-    const driverText = driverCharges == null || Number(driverCharges) === 0 ? 'Included' : `₹${driverCharges}`;
+    const imageUrl = (cab?.image_url ? getImageUrl(cab.image_url) : null)
+      || (ct.image_url ? getImageUrl(ct.image_url) : null)
+      || (ct.cabs?.[0]?.image_url ? getImageUrl(ct.cabs[0].image_url) : null);
+    const hoverImageUrl = (ct.image_url_2 ? getImageUrl(ct.image_url_2) : null);
+    const driverText = driverCharges == null || Number(driverCharges) === 0
+      ? 'Included'
+      : (driverChargesPerHour ? `₹${driverCharges}/Hr` : `₹${driverCharges}`);
     const nightText = nightCharges == null || Number(nightCharges) === 0 ? 'Included' : `₹${nightCharges}`;
     const extraKmText = extraPerKm != null && Number(extraPerKm) >= 0 ? `₹${extraPerKm}/KM` : '—';
     const extraHourText = extraPerHour != null && Number(extraPerHour) >= 0 ? `₹${extraPerHour}/Hr` : '—';
@@ -254,7 +287,12 @@ const CarOptions = () => {
       <div key={cab?.id ?? ct.id} className="unified-cab-card">
         <div className="unified-cab-card-image-wrap">
           {imageUrl ? (
-            <img src={imageUrl} alt={ct.name} className="unified-cab-card-image" onError={(e) => { e.target.style.display = 'none'; }} />
+            <>
+              <img src={imageUrl} alt={ct.name} className="unified-cab-card-image" onError={(e) => { e.target.style.display = 'none'; }} />
+              {hoverImageUrl && (
+                <img src={hoverImageUrl} alt={`${ct.name} alternate`} className="unified-cab-card-image unified-cab-card-image-hover" onError={(e) => { e.target.style.display = 'none'; }} />
+              )}
+            </>
           ) : (
             <div className="unified-cab-card-image-placeholder"><Icon name="car" size={48} /></div>
           )}
@@ -391,11 +429,12 @@ const CarOptions = () => {
         }
       }
     } else {
-      const baseFare = Number(confirmModal.cabType.baseFare) || 0;
       const packageRate = confirmModal.cabType.packageRates?.[selectedHours] != null
         ? Number(confirmModal.cabType.packageRates[selectedHours])
         : 0;
-      fareAmount = baseFare + packageRate;
+      const driverChargesPerHour = Number(confirmModal.cabType.driverCharges) || 0;
+      const selectedHoursNum = Number(selectedHours) || 0;
+      fareAmount = packageRate + (driverChargesPerHour * selectedHoursNum);
       summaryLines.push({ label: 'From', value: fromLocation || '—' });
       summaryLines.push({ label: 'Package', value: `${selectedHours}h` });
     }
@@ -585,6 +624,11 @@ const CarOptions = () => {
                 {airportDistanceKm != null && Number.isFinite(Number(airportDistanceKm)) && (
                   <span>Distance: {Number(airportDistanceKm).toFixed(1)} km</span>
                 )}
+                {airportChargeableKm != null && Number.isFinite(Number(airportChargeableKm)) && (
+                  <span>
+                    Billable to-and-fro slab: {Number(airportChargeableKm).toFixed(0)} km{airportSlabLabel ? ` (one-way slab ${airportSlabLabel})` : ''}
+                  </span>
+                )}
               </div>
             )}
             {isOutstationFlow && bookingState.from_location && (
@@ -622,17 +666,19 @@ const CarOptions = () => {
 }
             {!loading && !error && isLocalFlow && localOffers.length > 0 && (() => {
               const localCards = localOffers.flatMap((ct) => (ct.cabs || []).map((cab) => {
-                const baseFare = Number(ct.baseFare) || 0;
                 const packageForHours = selectedHours && ct.packageRates?.[selectedHours] != null ? Number(ct.packageRates[selectedHours]) : null;
-                const rateForSelected = packageForHours != null ? baseFare + packageForHours : null;
+                const driverChargesPerHour = Number(ct.driverCharges) || 0;
+                const selectedHoursNum = Number(selectedHours) || 0;
+                const rateForSelected = packageForHours != null ? packageForHours + (driverChargesPerHour * selectedHoursNum) : null;
                 return renderUnifiedCabCard(cab, ct, {
                   displayFare: rateForSelected,
                   serviceLabel: `${ct.name} (${selectedHours || 0} hours)`,
                   includedKm: localIncludedKm ?? (ct.includedKm ?? null),
                   extraPerKm: ct.extraPerKm ?? null,
                   extraPerHour: ct.extraHourRate ?? null,
-                  driverCharges: 0,
-                  nightCharges: 0,
+                  driverCharges: ct.driverCharges ?? 0,
+                  driverChargesPerHour: true,
+                  nightCharges: ct.nightCharges ?? 0,
                 });
               }));
               return localCards.length > 0 ? (
@@ -658,6 +704,8 @@ const CarOptions = () => {
                 serviceLabel: ct.name,
                 includedKm: airportDistanceKm ?? null,
                 includedKmLabel: 'Distance',
+                billableDistanceKm: airportChargeableKm ?? null,
+                billableDistanceLabel: airportSlabLabel ? `Billable to-and-fro slab (one-way ${airportSlabLabel})` : 'Billable to-and-fro slab',
                 extraPerKm: ct.perKmRate ?? null,
                 driverCharges: ct.driverCharges ?? 0,
                 nightCharges: ct.nightCharges ?? 0,
@@ -936,13 +984,21 @@ const CarOptions = () => {
                       </div>
                       {confirmModal.cabType.extraHourRate != null && (
                         <div className="car-options-confirm-row">
-                          <span>Extra hour</span>
+                          <span>Extra charges (per hour)</span>
                           <span>₹{confirmModal.cabType.extraHourRate}/hr</span>
                         </div>
                       )}
+                      <div className="car-options-confirm-row">
+                        <span>Driver charges (per hour × {selectedHours}h)</span>
+                        <span>
+                          ₹{(Number(confirmModal.cabType.driverCharges) || 0) * (Number(selectedHours) || 0)}
+                        </span>
+                      </div>
                       <div className="car-options-confirm-row car-options-confirm-total">
                         <span>Total</span>
-                        <span>₹{(Number(confirmModal.cabType.baseFare) || 0) + (confirmModal.cabType.packageRates?.[selectedHours] != null ? Number(confirmModal.cabType.packageRates[selectedHours]) : 0)}</span>
+                        <span>
+                          ₹{(confirmModal.cabType.packageRates?.[selectedHours] != null ? Number(confirmModal.cabType.packageRates[selectedHours]) : 0) + ((Number(confirmModal.cabType.driverCharges) || 0) * (Number(selectedHours) || 0))}
+                        </span>
                       </div>
                     </>
                   )}

@@ -317,6 +317,7 @@
 }
 
 
+
 .unified-cab-cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
@@ -348,13 +349,25 @@
   aspect-ratio: 16 / 10;
   background: #f8f8f8;
   overflow: hidden;
+  position: relative;
 }
 
 .unified-cab-card-image {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+.unified-cab-card-image-hover {
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+
+.unified-cab-card:hover .unified-cab-card-image-hover {
+  opacity: 1;
 }
 
 .unified-cab-card-image-placeholder {

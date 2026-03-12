@@ -30,6 +30,18 @@ const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 },
 });
 
+function deleteLocalCabTypeImageFile(imagePath) {
+  if (!imagePath || typeof imagePath !== 'string') return;
+  const normalized = imagePath.replace(/\\/g, '/');
+  if (!normalized.startsWith('/uploads/car-options/')) return;
+  const filename = path.basename(normalized);
+  if (!filename) return;
+  const absolutePath = path.join(carOptionsUploadDir, filename);
+  fs.unlink(absolutePath, () => {
+    // Best effort cleanup only; missing file is fine.
+  });
+}
+
 function getNum(row, key, defaultVal = 0) {
   if (!row) return defaultVal;
   const val = row[key] ?? row[key.toUpperCase()] ?? row[key.toLowerCase()];
@@ -52,12 +64,83 @@ function isInnovaCrysta(name) {
   return (name || '').trim().toLowerCase() === INNOVA_CRYSTA_NAME.trim().toLowerCase();
 }
 
+function getCabPlacementRank(name) {
+  const normalized = String(name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  if (normalized.includes('sedan')) return 1;
+  if (normalized.includes('suv')) return 2;
+  if (normalized.includes('crysta')) return 3;
+  if (normalized === 'tt' || normalized.includes('traveller')) return 4;
+  if (normalized.includes('minibus')) return 5;
+  return 100;
+}
+
+function sortCabTypesByPlacement(rows) {
+  return [...(rows || [])].sort((a, b) => {
+    const rankDiff = getCabPlacementRank(a?.name) - getCabPlacementRank(b?.name);
+    if (rankDiff !== 0) return rankDiff;
+    return String(a?.name || '').localeCompare(String(b?.name || ''));
+  });
+}
+
+function getGlobalCabTypeImageKey(name) {
+  const normalized = String(name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  if (!normalized) return '';
+  if (normalized.includes('crysta')) return 'crysta';
+  if (normalized.includes('sedan')) return 'sedan';
+  if (normalized.includes('suv')) return 'suv';
+  if (normalized.includes('minibus')) return 'minibus';
+  if (normalized === 'tt' || normalized.includes('traveller')) return 'tt';
+  return normalized;
+}
+
+async function getGloballyLinkedCabTypes(cabTypeId) {
+  const existing = await db.getAsync(
+    'SELECT id, name, service_type, image_url, image_url_2 FROM cab_types WHERE id = ? AND is_active = 1',
+    [cabTypeId]
+  );
+  if (!existing) return { existing: null, linked: [] };
+  const allActive = await db.allAsync(
+    'SELECT id, name, service_type, image_url, image_url_2 FROM cab_types WHERE is_active = 1'
+  );
+  const globalKey = getGlobalCabTypeImageKey(existing.name);
+  const linked = (allActive || []).filter((row) => getGlobalCabTypeImageKey(row.name) === globalKey);
+  return { existing, linked };
+}
+
 async function ensureCabTypesImageUrlColumn() {
   try {
     await db.runAsync('ALTER TABLE cab_types ADD COLUMN image_url TEXT');
   } catch (e) {
     // column may already exist
   }
+  try {
+    await db.runAsync('ALTER TABLE cab_types ADD COLUMN image_url_2 TEXT');
+  } catch (e) {
+    // column may already exist
+  }
+}
+
+let ensureAirportSlabColumnsPromise = null;
+async function ensureAirportSlabColumns() {
+  if (ensureAirportSlabColumnsPromise) return ensureAirportSlabColumnsPromise;
+  ensureAirportSlabColumnsPromise = (async () => {
+    try {
+      await db.runAsync('ALTER TABLE rate_meters ADD COLUMN slab_31_40_extra REAL DEFAULT 0');
+    } catch (e) {
+      // column may already exist
+    }
+    try {
+      await db.runAsync('ALTER TABLE rate_meters ADD COLUMN slab_41_50_extra REAL DEFAULT 0');
+    } catch (e) {
+      // column may already exist
+    }
+    try {
+      await db.runAsync('ALTER TABLE rate_meters ADD COLUMN slab_51_60_extra REAL DEFAULT 0');
+    } catch (e) {
+      // column may already exist
+    }
+  })();
+  return ensureAirportSlabColumnsPromise;
 }
 
 router.get(
@@ -70,7 +153,7 @@ router.get(
       if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
       const { service_type } = req.query;
       const rows = await db.allAsync(
-        `SELECT ct.id, ct.name, ct.description, ct.service_type, ct.base_fare, ct.per_km_rate, ct.image_url,
+        `SELECT ct.id, ct.name, ct.description, ct.service_type, ct.base_fare, ct.per_km_rate, ct.image_url, ct.image_url_2,
                 (SELECT COUNT(*) FROM cabs c WHERE c.cab_type_id = ct.id AND c.is_active = 1) as cab_count
          FROM cab_types ct
          WHERE ct.service_type = ? AND ct.is_active = 1
@@ -101,7 +184,7 @@ router.get(
           existing.cab_count = (existing.cab_count != null ? Number(existing.cab_count) : 0) + cabCount;
         }
       }
-      result = Array.from(byKey.values()).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      result = sortCabTypesByPlacement(Array.from(byKey.values()));
       res.json(result);
     } catch (error) {
       console.error('Error fetching rate-meter cab types:', error);
@@ -144,13 +227,15 @@ router.put(
   param('id').isInt({ min: 1 }),
   body('name').optional().trim().notEmpty(),
   body('description').optional(),
+  body('image_url').optional({ nullable: true }),
+  body('image_url_2').optional({ nullable: true }),
   async (req, res) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
       const { id } = req.params;
-      const { name, description } = req.body;
-      const existing = await db.getAsync('SELECT id, name, service_type FROM cab_types WHERE id = ?', [id]);
+      const { name, description, image_url, image_url_2 } = req.body;
+      const { existing, linked } = await getGloballyLinkedCabTypes(id);
       if (!existing) return res.status(404).json({ error: 'Cab type not found' });
       const updates = [];
       const values = [];
@@ -164,10 +249,34 @@ router.put(
         updates.push('description = ?');
         values.push(description);
       }
+      if (image_url !== undefined) {
+        updates.push('image_url = ?');
+        values.push(image_url || null);
+      }
+      if (image_url_2 !== undefined) {
+        updates.push('image_url_2 = ?');
+        values.push(image_url_2 || null);
+      }
       if (updates.length === 0) return res.json(existing);
-      values.push(id);
-      await db.runAsync(`UPDATE cab_types SET ${updates.join(', ')} WHERE id = ?`, values);
-      const row = await db.getAsync('SELECT id, name, description, service_type FROM cab_types WHERE id = ?', [id]);
+      const targetIds = image_url !== undefined || image_url_2 !== undefined
+        ? (linked || []).map((row) => row.id)
+        : [Number(id)];
+      const placeholders = targetIds.map(() => '?').join(', ');
+      await db.runAsync(
+        `UPDATE cab_types SET ${updates.join(', ')} WHERE id IN (${placeholders})`,
+        [...values, ...targetIds]
+      );
+
+      if (image_url !== undefined && !image_url) {
+        const removable = new Set((linked || []).map((row) => row.image_url).filter(Boolean));
+        removable.forEach((imagePath) => deleteLocalCabTypeImageFile(imagePath));
+      }
+      if (image_url_2 !== undefined && !image_url_2) {
+        const removable = new Set((linked || []).map((row) => row.image_url_2).filter(Boolean));
+        removable.forEach((imagePath) => deleteLocalCabTypeImageFile(imagePath));
+      }
+
+      const row = await db.getAsync('SELECT id, name, description, service_type, image_url, image_url_2 FROM cab_types WHERE id = ?', [id]);
       res.json(row);
     } catch (error) {
       console.error('Error updating cab type:', error);
@@ -213,11 +322,21 @@ router.post(
       if (!req.file || !req.file.filename) {
         return res.status(400).json({ error: 'No image file provided' });
       }
-      const existing = await db.getAsync('SELECT id, name FROM cab_types WHERE id = ? AND is_active = 1', [id]);
+      const { existing, linked } = await getGloballyLinkedCabTypes(id);
       if (!existing) return res.status(404).json({ error: 'Cab type not found' });
       const imagePath = `car-options/${req.file.filename}`;
-      await db.runAsync('UPDATE cab_types SET image_url = ? WHERE id = ?', [imagePath, id]);
-      const row = await db.getAsync('SELECT id, name, description, service_type, image_url FROM cab_types WHERE id = ?', [id]);
+      const slot = String(req.query?.slot || 'primary').toLowerCase();
+      const targetColumn = slot === 'secondary' ? 'image_url_2' : 'image_url';
+      const previousPaths = new Set(
+        (linked || [])
+          .map((row) => (targetColumn === 'image_url_2' ? row.image_url_2 : row.image_url))
+          .filter((value) => value && value !== imagePath)
+      );
+      const targetIds = (linked || []).map((row) => row.id);
+      const placeholders = targetIds.map(() => '?').join(', ');
+      await db.runAsync(`UPDATE cab_types SET ${targetColumn} = ? WHERE id IN (${placeholders})`, [imagePath, ...targetIds]);
+      previousPaths.forEach((oldPath) => deleteLocalCabTypeImageFile(oldPath));
+      const row = await db.getAsync('SELECT id, name, description, service_type, image_url, image_url_2 FROM cab_types WHERE id = ?', [id]);
       res.json(row);
     } catch (error) {
       console.error('Error uploading cab type image:', error);
@@ -420,6 +539,13 @@ router.get('/rate-meter/local/:cabTypeId', param('cabTypeId').isInt({ min: 1 }),
     const { cabTypeId } = req.params;
     const ct = await db.getAsync('SELECT id, name, base_fare FROM cab_types WHERE id = ? AND service_type = \'local\'', [cabTypeId]);
     if (!ct) return res.status(404).json({ error: 'Cab type not found' });
+    const localRate = await db.getAsync(
+      `SELECT driver_charges, night_charges FROM rate_meters
+       WHERE service_type = 'local' AND car_category = ? AND (trip_type IS NULL OR trip_type = '') AND is_active = 1
+       ORDER BY id DESC
+       LIMIT 1`,
+      [ct.name]
+    );
     const rates = await db.allAsync(
       'SELECT hours, package_fare, extra_hour_rate FROM local_package_rates WHERE cab_type_id = ? ORDER BY hours',
       [cabTypeId]
@@ -436,6 +562,8 @@ router.get('/rate-meter/local/:cabTypeId', param('cabTypeId').isInt({ min: 1 }),
       package_8h: packageRates[8] ?? null,
       package_12h: packageRates[12] ?? null,
       extra_hour_rate: extraHourRow ? Number(extraHourRow.extra_hour_rate) : null,
+      driver_charges: localRate ? getNum(localRate, 'driver_charges') : 0,
+      night_charges: localRate ? getNum(localRate, 'night_charges') : 0,
     });
   } catch (error) {
     console.error('Error fetching local rates:', error);
@@ -449,11 +577,34 @@ router.put(
   async (req, res) => {
     try {
       const { cabTypeId } = req.params;
-      const { base_fare, package_4h, package_8h, package_12h, extra_hour_rate } = req.body;
+      const { base_fare, package_4h, package_8h, package_12h, extra_hour_rate, driver_charges, night_charges } = req.body;
       const ct = await db.getAsync('SELECT id, name FROM cab_types WHERE id = ? AND service_type = \'local\'', [cabTypeId]);
       if (!ct) return res.status(404).json({ error: 'Cab type not found' });
       if (base_fare !== undefined) await db.runAsync('UPDATE cab_types SET base_fare = ? WHERE id = ?', [Number(base_fare) || 0, cabTypeId]);
       const extraRate = extra_hour_rate != null ? Number(extra_hour_rate) : null;
+      const dc = driver_charges != null ? Number(driver_charges) : 0;
+      const nc = night_charges != null ? Number(night_charges) : 0;
+
+      const existingLocalRate = await db.getAsync(
+        `SELECT id FROM rate_meters
+         WHERE service_type = 'local' AND car_category = ? AND (trip_type IS NULL OR trip_type = '') AND is_active = 1
+         ORDER BY id DESC
+         LIMIT 1`,
+        [ct.name]
+      );
+      if (existingLocalRate) {
+        await db.runAsync(
+          'UPDATE rate_meters SET driver_charges = ?, night_charges = ? WHERE id = ?',
+          [dc, nc, existingLocalRate.id]
+        );
+      } else {
+        await db.runAsync(
+          `INSERT INTO rate_meters (service_type, car_category, trip_type, driver_charges, night_charges)
+           VALUES ('local', ?, '', ?, ?)`,
+          [ct.name, dc, nc]
+        );
+      }
+
       await db.runAsync('DELETE FROM local_package_rates WHERE cab_type_id = ?', [cabTypeId]);
       await db.runAsync(
         'INSERT INTO local_package_rates (cab_type_id, hours, package_fare, extra_hour_rate) VALUES (?, 4, ?, ?)',
@@ -469,6 +620,13 @@ router.put(
       );
       const updated = await db.getAsync('SELECT base_fare FROM cab_types WHERE id = ?', [cabTypeId]);
       const rates = await db.allAsync('SELECT hours, package_fare, extra_hour_rate FROM local_package_rates WHERE cab_type_id = ? ORDER BY hours', [cabTypeId]);
+      const localRate = await db.getAsync(
+        `SELECT driver_charges, night_charges FROM rate_meters
+         WHERE service_type = 'local' AND car_category = ? AND (trip_type IS NULL OR trip_type = '') AND is_active = 1
+         ORDER BY id DESC
+         LIMIT 1`,
+        [ct.name]
+      );
       const packageRates = {};
       const extraRow = (rates || []).find((r) => r.extra_hour_rate != null);
       (rates || []).forEach((r) => { if (r.hours != null) packageRates[r.hours] = r.package_fare != null ? Number(r.package_fare) : null; });
@@ -479,6 +637,8 @@ router.put(
         package_8h: packageRates[8] ?? null,
         package_12h: packageRates[12] ?? null,
         extra_hour_rate: extraRow ? Number(extraRow.extra_hour_rate) : null,
+        driver_charges: localRate ? getNum(localRate, 'driver_charges') : 0,
+        night_charges: localRate ? getNum(localRate, 'night_charges') : 0,
       });
     } catch (error) {
       console.error('Error updating local rates:', error);
@@ -489,11 +649,14 @@ router.put(
 
 router.get('/rate-meter/airport/:cabTypeId', param('cabTypeId').isInt({ min: 1 }), async (req, res) => {
   try {
+    await ensureAirportSlabColumns();
     const { cabTypeId } = req.params;
     const ct = await db.getAsync('SELECT id, name FROM cab_types WHERE id = ? AND service_type = \'airport\'', [cabTypeId]);
     if (!ct) return res.status(404).json({ error: 'Cab type not found' });
     const row = await db.getAsync(
-      `SELECT id, base_fare, per_km_rate, driver_charges, night_charges FROM rate_meters
+      `SELECT id, base_fare, per_km_rate, driver_charges, night_charges,
+              slab_31_40_extra, slab_41_50_extra, slab_51_60_extra
+       FROM rate_meters
        WHERE service_type = 'airport' AND car_category = ? AND (trip_type IS NULL OR trip_type = '') AND is_active = 1
        ORDER BY id DESC
        LIMIT 1`,
@@ -505,6 +668,9 @@ router.get('/rate-meter/airport/:cabTypeId', param('cabTypeId').isInt({ min: 1 }
       per_km_rate: row ? getNum(row, 'per_km_rate') : 0,
       driver_charges: row ? getNum(row, 'driver_charges') : 0,
       night_charges: row ? getNum(row, 'night_charges') : 0,
+      slab_31_40_extra: row ? getNum(row, 'slab_31_40_extra') : 0,
+      slab_41_50_extra: row ? getNum(row, 'slab_41_50_extra') : 0,
+      slab_51_60_extra: row ? getNum(row, 'slab_51_60_extra') : 0,
     });
   } catch (error) {
     console.error('Error fetching airport rates:', error);
@@ -517,8 +683,17 @@ router.put(
   param('cabTypeId').isInt({ min: 1 }),
   async (req, res) => {
     try {
+      await ensureAirportSlabColumns();
       const { cabTypeId } = req.params;
-      const { base_fare, per_km_rate, driver_charges, night_charges } = req.body;
+      const {
+        base_fare,
+        per_km_rate,
+        driver_charges,
+        night_charges,
+        slab_31_40_extra,
+        slab_41_50_extra,
+        slab_51_60_extra,
+      } = req.body;
       const ct = await db.getAsync('SELECT id, name FROM cab_types WHERE id = ? AND service_type = \'airport\'', [cabTypeId]);
       if (!ct) return res.status(404).json({ error: 'Cab type not found' });
       const existing = await db.getAsync(
@@ -531,19 +706,30 @@ router.put(
       const pkm = per_km_rate != null ? Number(per_km_rate) : 0;
       const dc = driver_charges != null ? Number(driver_charges) : 0;
       const nc = night_charges != null ? Number(night_charges) : 0;
+      const s3140 = slab_31_40_extra != null ? Number(slab_31_40_extra) : 0;
+      const s4150 = slab_41_50_extra != null ? Number(slab_41_50_extra) : 0;
+      const s5160 = slab_51_60_extra != null ? Number(slab_51_60_extra) : 0;
       if (existing) {
         await db.runAsync(
-          'UPDATE rate_meters SET base_fare = ?, per_km_rate = ?, driver_charges = ?, night_charges = ? WHERE id = ?',
-          [bf, pkm, dc, nc, existing.id]
+          `UPDATE rate_meters
+           SET base_fare = ?, per_km_rate = ?, driver_charges = ?, night_charges = ?,
+               slab_31_40_extra = ?, slab_41_50_extra = ?, slab_51_60_extra = ?
+           WHERE id = ?`,
+          [bf, pkm, dc, nc, s3140, s4150, s5160, existing.id]
         );
       } else {
         await db.runAsync(
-          `INSERT INTO rate_meters (service_type, car_category, trip_type, base_fare, per_km_rate, driver_charges, night_charges) VALUES ('airport', ?, '', ?, ?, ?, ?)`,
-          [ct.name, bf, pkm, dc, nc]
+          `INSERT INTO rate_meters (
+             service_type, car_category, trip_type, base_fare, per_km_rate, driver_charges, night_charges,
+             slab_31_40_extra, slab_41_50_extra, slab_51_60_extra
+           ) VALUES ('airport', ?, '', ?, ?, ?, ?, ?, ?, ?)`,
+          [ct.name, bf, pkm, dc, nc, s3140, s4150, s5160]
         );
       }
       const row = await db.getAsync(
-        `SELECT base_fare, per_km_rate, driver_charges, night_charges FROM rate_meters
+        `SELECT base_fare, per_km_rate, driver_charges, night_charges,
+                slab_31_40_extra, slab_41_50_extra, slab_51_60_extra
+         FROM rate_meters
          WHERE service_type = 'airport' AND car_category = ? AND (trip_type IS NULL OR trip_type = '') AND is_active = 1
          ORDER BY id DESC
          LIMIT 1`,
@@ -555,6 +741,9 @@ router.put(
         per_km_rate: getNum(row, 'per_km_rate'),
         driver_charges: getNum(row, 'driver_charges'),
         night_charges: getNum(row, 'night_charges'),
+        slab_31_40_extra: getNum(row, 'slab_31_40_extra'),
+        slab_41_50_extra: getNum(row, 'slab_41_50_extra'),
+        slab_51_60_extra: getNum(row, 'slab_51_60_extra'),
       });
     } catch (error) {
       console.error('Error updating airport rates:', error);
@@ -571,13 +760,13 @@ router.get('/rate-meter/outstation/:cabTypeId', param('cabTypeId').isInt({ min: 
     const [oneWay, roundTrip, multiStop] = await Promise.all([
       db.getAsync(`SELECT min_km, base_fare, extra_km_rate, driver_charges, night_charges FROM rate_meters WHERE service_type = 'outstation' AND car_category = ? AND trip_type = 'one_way' AND is_active = 1 ORDER BY id DESC LIMIT 1`, [ct.name]),
       db.getAsync(`SELECT base_km_per_day, per_km_rate, extra_km_rate, driver_charges, night_charges FROM rate_meters WHERE service_type = 'outstation' AND car_category = ? AND trip_type = 'round_trip' AND is_active = 1 ORDER BY id DESC LIMIT 1`, [ct.name]),
-      db.getAsync(`SELECT base_fare, per_km_rate, driver_charges, night_charges FROM rate_meters WHERE service_type = 'outstation' AND car_category = ? AND trip_type = 'multiple_stops' AND is_active = 1 ORDER BY id DESC LIMIT 1`, [ct.name]),
+      db.getAsync(`SELECT min_km, base_fare, per_km_rate, driver_charges, night_charges FROM rate_meters WHERE service_type = 'outstation' AND car_category = ? AND trip_type = 'multiple_stops' AND is_active = 1 ORDER BY id DESC LIMIT 1`, [ct.name]),
     ]);
     res.json({
       cab_type_id: ct.id,
       oneWay: oneWay ? { minKm: getInt(oneWay, 'min_km', 130), baseFare: getNum(oneWay, 'base_fare'), extraKmRate: getNum(oneWay, 'extra_km_rate'), driverCharges: getNum(oneWay, 'driver_charges'), nightCharges: getNum(oneWay, 'night_charges') } : null,
       roundTrip: roundTrip ? { baseKmPerDay: getInt(roundTrip, 'base_km_per_day', 300), perKmRate: getNum(roundTrip, 'per_km_rate'), extraKmRate: getNum(roundTrip, 'extra_km_rate'), driverCharges: getNum(roundTrip, 'driver_charges'), nightCharges: getNum(roundTrip, 'night_charges') } : null,
-      multipleStops: multiStop ? { baseFare: getNum(multiStop, 'base_fare'), perKmRate: getNum(multiStop, 'per_km_rate'), driverCharges: getNum(multiStop, 'driver_charges'), nightCharges: getNum(multiStop, 'night_charges') } : null,
+      multipleStops: multiStop ? { minKmPerDay: getInt(multiStop, 'min_km', 300), baseFare: getNum(multiStop, 'base_fare'), perKmRate: getNum(multiStop, 'per_km_rate'), driverCharges: getNum(multiStop, 'driver_charges'), nightCharges: getNum(multiStop, 'night_charges') } : null,
     });
   } catch (error) {
     console.error('Error fetching outstation rates:', error);
@@ -632,7 +821,14 @@ router.put(
         });
       }
       if (multipleStops && typeof multipleStops === 'object') {
+        const multipleStopsMinKm = (() => {
+          const raw = multipleStops.minKmPerDay;
+          if (raw == null || String(raw).trim() === '') return 300;
+          const parsed = Number(raw);
+          return Number.isFinite(parsed) && parsed > 0 ? parsed : 300;
+        })();
         await upsert('multiple_stops', {
+          min_km: multipleStopsMinKm,
           base_fare: getNum(multipleStops, 'baseFare'),
           per_km_rate: getNum(multipleStops, 'perKmRate'),
           driver_charges: getNum(multipleStops, 'driverCharges'),
@@ -643,13 +839,13 @@ router.put(
       const [oneWayRow, roundTripRow, multiStopRow] = await Promise.all([
         db.getAsync(`SELECT min_km, base_fare, extra_km_rate, driver_charges, night_charges FROM rate_meters WHERE service_type = 'outstation' AND car_category = ? AND trip_type = 'one_way' AND is_active = 1 ORDER BY id DESC LIMIT 1`, [cat]),
         db.getAsync(`SELECT base_km_per_day, per_km_rate, extra_km_rate, driver_charges, night_charges FROM rate_meters WHERE service_type = 'outstation' AND car_category = ? AND trip_type = 'round_trip' AND is_active = 1 ORDER BY id DESC LIMIT 1`, [cat]),
-        db.getAsync(`SELECT base_fare, per_km_rate, driver_charges, night_charges FROM rate_meters WHERE service_type = 'outstation' AND car_category = ? AND trip_type = 'multiple_stops' AND is_active = 1 ORDER BY id DESC LIMIT 1`, [cat]),
+        db.getAsync(`SELECT min_km, base_fare, per_km_rate, driver_charges, night_charges FROM rate_meters WHERE service_type = 'outstation' AND car_category = ? AND trip_type = 'multiple_stops' AND is_active = 1 ORDER BY id DESC LIMIT 1`, [cat]),
       ]);
       res.json({
         cab_type_id: Number(cabTypeId),
         oneWay: oneWayRow ? { minKm: getInt(oneWayRow, 'min_km', 130), baseFare: getNum(oneWayRow, 'base_fare'), extraKmRate: getNum(oneWayRow, 'extra_km_rate'), driverCharges: getNum(oneWayRow, 'driver_charges'), nightCharges: getNum(oneWayRow, 'night_charges') } : null,
         roundTrip: roundTripRow ? { baseKmPerDay: getInt(roundTripRow, 'base_km_per_day', 300), perKmRate: getNum(roundTripRow, 'per_km_rate'), extraKmRate: getNum(roundTripRow, 'extra_km_rate'), driverCharges: getNum(roundTripRow, 'driver_charges'), nightCharges: getNum(roundTripRow, 'night_charges') } : null,
-        multipleStops: multiStopRow ? { baseFare: getNum(multiStopRow, 'base_fare'), perKmRate: getNum(multiStopRow, 'per_km_rate'), driverCharges: getNum(multiStopRow, 'driver_charges'), nightCharges: getNum(multiStopRow, 'night_charges') } : null,
+        multipleStops: multiStopRow ? { minKmPerDay: getInt(multiStopRow, 'min_km', 300), baseFare: getNum(multiStopRow, 'base_fare'), perKmRate: getNum(multiStopRow, 'per_km_rate'), driverCharges: getNum(multiStopRow, 'driver_charges'), nightCharges: getNum(multiStopRow, 'night_charges') } : null,
       });
     } catch (error) {
       console.error('Error updating outstation rates:', error);

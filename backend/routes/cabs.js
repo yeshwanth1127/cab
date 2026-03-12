@@ -7,6 +7,24 @@ const router = express.Router();
 const KIA_AIRPORT_LAT = 13.1989;
 const KIA_AIRPORT_LNG = 77.7068;
 
+function getCabPlacementRank(name) {
+  const normalized = String(name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  if (normalized.includes('sedan')) return 1;
+  if (normalized.includes('suv')) return 2;
+  if (normalized.includes('crysta')) return 3;
+  if (normalized === 'tt' || normalized.includes('traveller')) return 4;
+  if (normalized.includes('minibus')) return 5;
+  return 100;
+}
+
+function sortCabTypesByPlacement(rows) {
+  return [...(rows || [])].sort((a, b) => {
+    const rankDiff = getCabPlacementRank(a?.name) - getCabPlacementRank(b?.name);
+    if (rankDiff !== 0) return rankDiff;
+    return String(a?.name || '').localeCompare(String(b?.name || ''));
+  });
+}
+
 let ensureCabTypesColsPromise = null;
 async function ensureCabTypesColumns() {
   if (ensureCabTypesColsPromise) return ensureCabTypesColsPromise;
@@ -19,6 +37,11 @@ async function ensureCabTypesColumns() {
     }
     try {
       await db.runAsync('ALTER TABLE cab_types ADD COLUMN image_url TEXT');
+    } catch (e) {
+      // column may already exist
+    }
+    try {
+      await db.runAsync('ALTER TABLE cab_types ADD COLUMN image_url_2 TEXT');
     } catch (e) {
       // column may already exist
     }
@@ -41,6 +64,29 @@ async function ensureCabTypesColumns() {
   return ensureCabTypesColsPromise;
 }
 
+let ensureAirportSlabColumnsPromise = null;
+async function ensureAirportSlabColumns() {
+  if (ensureAirportSlabColumnsPromise) return ensureAirportSlabColumnsPromise;
+  ensureAirportSlabColumnsPromise = (async () => {
+    try {
+      await db.runAsync('ALTER TABLE rate_meters ADD COLUMN slab_31_40_extra REAL DEFAULT 0');
+    } catch (e) {
+      // column may already exist
+    }
+    try {
+      await db.runAsync('ALTER TABLE rate_meters ADD COLUMN slab_41_50_extra REAL DEFAULT 0');
+    } catch (e) {
+      // column may already exist
+    }
+    try {
+      await db.runAsync('ALTER TABLE rate_meters ADD COLUMN slab_51_60_extra REAL DEFAULT 0');
+    } catch (e) {
+      // column may already exist
+    }
+  })();
+  return ensureAirportSlabColumnsPromise;
+}
+
 function haversineDistanceKm(lat1, lng1, lat2, lng2) {
   const R = 6371;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -51,6 +97,16 @@ function haversineDistanceKm(lat1, lng1, lat2, lng2) {
     Math.sin(dLng / 2) * Math.sin(dLng / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return parseFloat((R * c).toFixed(2));
+}
+
+function getAirportDistanceSlab(distanceKm) {
+  const d = Number(distanceKm);
+  if (!Number.isFinite(d) || d < 0) return null;
+  if (d <= 30) return { label: '0-30', upperKm: 30 };
+  if (d <= 40) return { label: '31-40', upperKm: 40 };
+  if (d <= 50) return { label: '41-50', upperKm: 50 };
+  if (d <= 60) return { label: '51-60', upperKm: 60 };
+  return null;
 }
 
 router.get('/types', async (req, res) => {
@@ -119,23 +175,6 @@ function normalizeImageUrl(url) {
   return s.startsWith('/') ? `/uploads${s}` : `/uploads/${s}`;
 }
 
-async function getDefaultImageForCabType(cabTypeId) {
-  const row = await db.getAsync(
-    'SELECT image_url FROM car_options WHERE cab_type_id = ? AND is_active = 1 ORDER BY sort_order ASC, id ASC LIMIT 1',
-    [cabTypeId]
-  );
-  if (!row || !row.image_url) return null;
-  let firstUrl = null;
-  try {
-    const parsed = JSON.parse(row.image_url);
-    firstUrl = Array.isArray(parsed) ? parsed[0] : (typeof parsed === 'string' ? parsed : null);
-  } catch {
-    firstUrl = row.image_url;
-  }
-  if (!firstUrl || typeof firstUrl !== 'string') return null;
-  return normalizeImageUrl(firstUrl.trim());
-}
-
 const LOCAL_OFFER_CAB_TYPE_NAMES = ['Innova Crysta', 'SUV', 'Sedan'];
 
 function isInnovaCrystaName(name) {
@@ -145,9 +184,9 @@ function isInnovaCrystaName(name) {
 router.get('/local-offers', async (req, res) => {
   try {
     await ensureCabTypesColumns();
-    const cabTypes = await db.allAsync(
-      "SELECT id, name, description, base_fare, per_km_rate, capacity, image_url FROM cab_types WHERE service_type = 'local' AND is_active = 1 ORDER BY name"
-    );
+    const cabTypes = sortCabTypesByPlacement(await db.allAsync(
+      "SELECT id, name, description, base_fare, per_km_rate, capacity, image_url, image_url_2 FROM cab_types WHERE service_type = 'local' AND is_active = 1"
+    ));
     const result = [];
     for (const ct of cabTypes || []) {
       const nameAllowed = LOCAL_OFFER_CAB_TYPE_NAMES.some(
@@ -155,16 +194,25 @@ router.get('/local-offers', async (req, res) => {
       );
       if (!nameAllowed) continue;
 
+      const localRateRow = await db.getAsync(
+        `SELECT driver_charges, night_charges
+         FROM rate_meters
+         WHERE service_type = 'local' AND car_category = ? AND (trip_type IS NULL OR trip_type = '') AND is_active = 1
+         ORDER BY id DESC
+         LIMIT 1`,
+        [ct.name]
+      );
+
       const cabsRaw = await db.allAsync(
         `SELECT id, vehicle_number, name, description, image_url, driver_name, driver_phone
          FROM cabs WHERE cab_type_id = ? AND is_active = 1 AND is_available = 1 ORDER BY vehicle_number`,
         [ct.id]
       );
-      const defaultCabTypeImage = await getDefaultImageForCabType(ct.id).catch(() => null);
-      const ctImageUrl = normalizeImageUrl(ct.image_url) || ct.image_url || defaultCabTypeImage;
+      const ctImageUrl = normalizeImageUrl(ct.image_url) || ct.image_url || null;
+      const ctImageUrl2 = normalizeImageUrl(ct.image_url_2) || ct.image_url_2 || null;
       let cabs = (cabsRaw || []).map((c) => {
         const normalized = normalizeImageUrl(c.image_url) || c.image_url;
-        return { ...c, image_url: normalized || defaultCabTypeImage };
+        return { ...c, image_url: normalized || null };
       });
       if (cabs.length === 0) {
         cabs = [{ id: null, vehicle_number: ct.name, name: ct.name, description: ct.description || '', image_url: ctImageUrl, driver_name: null, driver_phone: null }];
@@ -209,11 +257,15 @@ router.get('/local-offers', async (req, res) => {
         baseFare,
         packageRates,
         extraHourRate,
+        driverCharges: localRateRow ? Number(localRateRow.driver_charges || 0) : 0,
+        nightCharges: localRateRow ? Number(localRateRow.night_charges || 0) : 0,
         seatingCapacity: capacity + 1,
         luggageCapacity: ct.luggage_capacity != null ? Number(ct.luggage_capacity) : null,
         hasAc: ct.has_ac != null ? !!ct.has_ac : null,
         includedKm: null,
         extraPerKm,
+        image_url: ctImageUrl,
+        image_url_2: ctImageUrl2,
         gstIncluded: ct.gst_included != null ? !!ct.gst_included : true,
         cabs,
       });
@@ -232,9 +284,9 @@ function excludeInnovaCabTypes(cabTypes) {
 router.get('/airport-offers', async (req, res) => {
   try {
     await ensureCabTypesColumns();
-    const cabTypes = excludeInnovaCabTypes(await db.allAsync(
-      "SELECT id, name, description, capacity, image_url FROM cab_types WHERE service_type = 'airport' AND is_active = 1 ORDER BY name"
-    ));
+    const cabTypes = sortCabTypesByPlacement(excludeInnovaCabTypes(await db.allAsync(
+      "SELECT id, name, description, capacity, image_url, image_url_2 FROM cab_types WHERE service_type = 'airport' AND is_active = 1"
+    )));
     const result = [];
     for (const ct of cabTypes || []) {
       const rateRow = await db.getAsync(
@@ -251,11 +303,11 @@ router.get('/airport-offers', async (req, res) => {
          FROM cabs WHERE cab_type_id = ? AND is_active = 1 AND is_available = 1 ORDER BY vehicle_number`,
         [ct.id]
       );
-      const defaultCabTypeImage = await getDefaultImageForCabType(ct.id).catch(() => null);
-      const ctImageUrl = normalizeImageUrl(ct.image_url) || ct.image_url || defaultCabTypeImage;
+      const ctImageUrl = normalizeImageUrl(ct.image_url) || ct.image_url || null;
+      const ctImageUrl2 = normalizeImageUrl(ct.image_url_2) || ct.image_url_2 || null;
       let cabs = (cabsRaw || []).map((c) => {
         const normalized = normalizeImageUrl(c.image_url) || c.image_url;
-        return { ...c, image_url: normalized || defaultCabTypeImage };
+        return { ...c, image_url: normalized || null };
       });
       if (cabs.length === 0) {
         cabs = [{ id: null, vehicle_number: ct.name, name: ct.name, description: ct.description || '', image_url: ctImageUrl, driver_name: null, driver_phone: null }];
@@ -272,6 +324,8 @@ router.get('/airport-offers', async (req, res) => {
         seatingCapacity: capacity + 1,
         luggageCapacity: ct.luggage_capacity != null ? Number(ct.luggage_capacity) : null,
         hasAc: ct.has_ac != null ? !!ct.has_ac : null,
+        image_url: ctImageUrl,
+        image_url_2: ctImageUrl2,
         includedKm: null,
         extraPerKm: rateRow ? Number(rateRow.per_km_rate) : null,
         gstIncluded: ct.gst_included != null ? !!ct.gst_included : true,
@@ -288,6 +342,7 @@ router.get('/airport-offers', async (req, res) => {
 router.get('/airport-fare-estimate', async (req, res) => {
   try {
     await ensureCabTypesColumns();
+    await ensureAirportSlabColumns();
     const fromLat = parseFloat(req.query.from_lat);
     const fromLng = parseFloat(req.query.from_lng);
     const toLat = parseFloat(req.query.to_lat);
@@ -316,15 +371,28 @@ router.get('/airport-fare-estimate', async (req, res) => {
       distance_km = haversineDistanceKm(fromLat, fromLng, toLat, toLng);
       distance_source = 'haversine';
     }
-    // Airport pricing: charge for return distance as well (driver returns), so fare is calculated on 2x the one-way distance.
-    const chargeable_km = distance_km * 2;
-    const cabTypes = excludeInnovaCabTypes(await db.allAsync(
-      "SELECT id, name FROM cab_types WHERE service_type = 'airport' AND is_active = 1 ORDER BY name"
-    ));
+    const slab = getAirportDistanceSlab(distance_km);
+    if (!slab) {
+      return res.status(400).json({
+        code: 'AIRPORT_DISTANCE_EXCEEDED',
+        error: 'Airport cab is available only up to 60 km. Please book as one-way outstation.',
+        distance_km: Number(distance_km.toFixed(2)),
+        max_airport_km: 60,
+        suggest_service_type: 'outstation',
+      });
+    }
+
+    // Airport pricing is slab-based by one-way distance, then doubled for return (driver comes back).
+    const one_way_slab_km = slab.upperKm;
+    const chargeable_km = one_way_slab_km * 2;
+    const cabTypes = sortCabTypesByPlacement(excludeInnovaCabTypes(await db.allAsync(
+      "SELECT id, name FROM cab_types WHERE service_type = 'airport' AND is_active = 1"
+    )));
     const fares = [];
     for (const ct of cabTypes) {
       const rateRow = await db.getAsync(
-        `SELECT base_fare, per_km_rate, driver_charges, night_charges
+        `SELECT base_fare, per_km_rate, driver_charges, night_charges,
+                slab_31_40_extra, slab_41_50_extra, slab_51_60_extra
          FROM rate_meters
          WHERE service_type = 'airport' AND car_category = ? AND (trip_type IS NULL OR trip_type = '') AND is_active = 1
          ORDER BY id DESC
@@ -335,10 +403,26 @@ router.get('/airport-fare-estimate', async (req, res) => {
       const perKm = rateRow ? Number(rateRow.per_km_rate) || 0 : 0;
       const driverCharges = rateRow ? Number(rateRow.driver_charges) || 0 : 0;
       const nightCharges = rateRow ? Number(rateRow.night_charges) || 0 : 0;
-      const fare_amount = Math.round(baseFare + chargeable_km * perKm + driverCharges + nightCharges);
+      const slabExtra = rateRow
+        ? (slab.label === '31-40'
+            ? Number(rateRow.slab_31_40_extra) || 0
+            : slab.label === '41-50'
+              ? Number(rateRow.slab_41_50_extra) || 0
+              : slab.label === '51-60'
+                ? Number(rateRow.slab_51_60_extra) || 0
+                : 0)
+        : 0;
+      const fare_amount = Math.round(baseFare + chargeable_km * perKm + driverCharges + nightCharges + slabExtra);
       fares.push({ cab_type_id: ct.id, cab_type_name: ct.name, fare_amount });
     }
-    res.json({ distance_km, chargeable_km, distance_source, fares });
+    res.json({
+      distance_km: Number(distance_km.toFixed(2)),
+      chargeable_km,
+      slab_label: slab.label,
+      one_way_slab_km,
+      distance_source,
+      fares,
+    });
   } catch (error) {
     console.error('Error airport fare estimate:', error);
     res.status(500).json({ error: 'Server error' });
@@ -363,9 +447,9 @@ function getInt(row, key, defaultVal = null) {
 router.get('/outstation-offers', async (req, res) => {
   try {
     await ensureCabTypesColumns();
-    const cabTypes = excludeInnovaCabTypes(await db.allAsync(
-      "SELECT id, name, description, capacity, image_url FROM cab_types WHERE service_type = 'outstation' AND is_active = 1 ORDER BY name"
-    ));
+    const cabTypes = sortCabTypesByPlacement(excludeInnovaCabTypes(await db.allAsync(
+      "SELECT id, name, description, capacity, image_url, image_url_2 FROM cab_types WHERE service_type = 'outstation' AND is_active = 1"
+    )));
     const result = [];
     for (const ct of cabTypes || []) {
       const [oneWay, roundTrip, multiStop] = await Promise.all([
@@ -384,7 +468,7 @@ router.get('/outstation-offers', async (req, res) => {
           [ct.name]
         ),
         db.getAsync(
-          `SELECT id, base_fare, per_km_rate, driver_charges, night_charges
+          `SELECT id, min_km, base_fare, per_km_rate, driver_charges, night_charges
            FROM rate_meters WHERE service_type = 'outstation' AND car_category = ? AND trip_type = 'multiple_stops' AND is_active = 1
            ORDER BY id DESC
            LIMIT 1`,
@@ -396,11 +480,11 @@ router.get('/outstation-offers', async (req, res) => {
          FROM cabs WHERE cab_type_id = ? AND is_active = 1 AND is_available = 1 ORDER BY vehicle_number`,
         [ct.id]
       );
-      const defaultCabTypeImage = await getDefaultImageForCabType(ct.id).catch(() => null);
-      const ctImageUrl = normalizeImageUrl(ct.image_url) || ct.image_url || defaultCabTypeImage;
+      const ctImageUrl = normalizeImageUrl(ct.image_url) || ct.image_url || null;
+      const ctImageUrl2 = normalizeImageUrl(ct.image_url_2) || ct.image_url_2 || null;
       let cabs = (cabsRaw || []).map((c) => {
         const normalized = normalizeImageUrl(c.image_url) || c.image_url;
-        return { ...c, image_url: normalized || defaultCabTypeImage };
+        return { ...c, image_url: normalized || null };
       });
       if (cabs.length === 0) {
         cabs = [{ id: null, vehicle_number: ct.name, name: ct.name, description: ct.description || '', image_url: ctImageUrl, driver_name: null, driver_phone: null }];
@@ -416,20 +500,21 @@ router.get('/outstation-offers', async (req, res) => {
         hasAc: ct.has_ac != null ? !!ct.has_ac : null,
         gstIncluded: ct.gst_included != null ? !!ct.gst_included : true,
         oneWay: oneWay ? {
-          minKm: getInt(oneWay, 'min_km') ?? 130,
+          minKm: 300,
           baseFare: getNum(oneWay, 'base_fare'),
           extraKmRate: getNum(oneWay, 'extra_km_rate'),
           driverCharges: getNum(oneWay, 'driver_charges'),
           nightCharges: getNum(oneWay, 'night_charges'),
         } : null,
         roundTrip: roundTrip ? {
-          baseKmPerDay: getInt(roundTrip, 'base_km_per_day') ?? 300,
+          baseKmPerDay: 300,
           perKmRate: getNum(roundTrip, 'per_km_rate'),
           extraKmRate: getNum(roundTrip, 'extra_km_rate'),
           driverCharges: getNum(roundTrip, 'driver_charges'),
           nightCharges: getNum(roundTrip, 'night_charges'),
         } : null,
         multipleStops: multiStop ? {
+          minKmPerDay: getInt(multiStop, 'min_km', 300),
           baseFare: getNum(multiStop, 'base_fare'),
           perKmRate: getNum(multiStop, 'per_km_rate'),
           driverCharges: getNum(multiStop, 'driver_charges'),
@@ -439,7 +524,9 @@ router.get('/outstation-offers', async (req, res) => {
         perKmRate: firstRate ? getNum(firstRate, 'per_km_rate') : 0,
         driverCharges: firstRate ? getNum(firstRate, 'driver_charges') : 0,
         nightCharges: firstRate ? getNum(firstRate, 'night_charges') : 0,
-        includedKm: oneWay ? (getInt(oneWay, 'min_km') ?? 130) : (roundTrip ? getInt(roundTrip, 'base_km_per_day') ?? 300 : null),
+        image_url: ctImageUrl,
+        image_url_2: ctImageUrl2,
+        includedKm: oneWay ? 300 : (roundTrip ? 300 : (multiStop ? getInt(multiStop, 'min_km', 300) : null)),
         extraPerKm: oneWay ? getNum(oneWay, 'extra_km_rate') : (roundTrip ? getNum(roundTrip, 'extra_km_rate') : (multiStop ? getNum(multiStop, 'per_km_rate') : null)),
         cabs,
       });
@@ -455,9 +542,9 @@ router.get('/outstation-fare-estimate', async (req, res) => {
   try {
     await ensureCabTypesColumns();
     const tripType = req.query.trip_type || 'one_way';
-    const offers = excludeInnovaCabTypes(await db.allAsync(
-      "SELECT id, name FROM cab_types WHERE service_type = 'outstation' AND is_active = 1 ORDER BY name"
-    ));
+    const offers = sortCabTypesByPlacement(excludeInnovaCabTypes(await db.allAsync(
+      "SELECT id, name FROM cab_types WHERE service_type = 'outstation' AND is_active = 1"
+    )));
     const fares = [];
 
     if (tripType === 'one_way') {
@@ -466,7 +553,7 @@ router.get('/outstation-fare-estimate', async (req, res) => {
       const toLat = parseFloat(req.query.to_lat);
       const toLng = parseFloat(req.query.to_lng);
       const hasCoords = !Number.isNaN(fromLat) && !Number.isNaN(fromLng) && !Number.isNaN(toLat) && !Number.isNaN(toLng);
-       const days = Math.max(1, parseInt(req.query.number_of_days, 10) || 1);
+      const days = Math.max(1, parseInt(req.query.number_of_days, 10) || 1);
       // Prefer driving distance (Google Distance Matrix) so it matches Google Maps.
       // Fallback to haversine if Google API is unavailable/misconfigured.
       let distance_km = null;
@@ -499,25 +586,14 @@ router.get('/outstation-fare-estimate', async (req, res) => {
           [ct.name]
         );
         if (!row) { fares.push({ cab_type_id: ct.id, cab_type_name: ct.name, fare_amount: 0 }); continue; }
-        const minKm = getInt(row, 'min_km') ?? 130;
-        const baseFare = getNum(row, 'base_fare');
-        const extraKmRate = getNum(row, 'extra_km_rate');
+        const minKmPerDay = 300;
+        const minKm = minKmPerDay * days;
+        const perKmRate = getNum(row, 'extra_km_rate');
         const driverCharges = getNum(row, 'driver_charges');
         const nightCharges = getNum(row, 'night_charges');
-        
-        // One-way fare calculation logic:
-        // If distance < minimum km: charge (distance * per_km_rate) + base fare
-        // If distance >= minimum km: charge (distance * per_km_rate) + driver charges (no base fare)
-        let fare_amount;
         const actualDistance = Number(distance_km) || 0;
-        
-        if (actualDistance < minKm) {
-          // Below minimum km: actual distance * rate + base fare
-          fare_amount = Math.round(actualDistance * extraKmRate + baseFare);
-        } else {
-          // At or above minimum km: actual distance * rate + driver charges (no base fare)
-          fare_amount = Math.round(actualDistance * extraKmRate + driverCharges * days);
-        }
+        const chargeable_km = Math.max(actualDistance, minKm);
+        const fare_amount = Math.round(chargeable_km * perKmRate + (driverCharges + nightCharges) * days);
         
         fares.push({
           cab_type_id: ct.id,
@@ -525,7 +601,7 @@ router.get('/outstation-fare-estimate', async (req, res) => {
           fare_amount,
           distance_km: Number(distance_km.toFixed(2)),
           min_km: minKm,
-          chargeable_km: Number(actualDistance.toFixed(2)),
+          chargeable_km: Number(chargeable_km.toFixed(2)),
         });
       }
       return res.json({ distance_km, distance_source, fares });
@@ -572,7 +648,7 @@ router.get('/outstation-fare-estimate', async (req, res) => {
           [ct.name]
         );
         if (!row) { fares.push({ cab_type_id: ct.id, cab_type_name: ct.name, fare_amount: 0 }); continue; }
-        const baseKmPerDay = getInt(row, 'base_km_per_day') ?? 300;
+        const baseKmPerDay = 300;
         const perKmRate = getNum(row, 'per_km_rate');
         const extraKmRate = getNum(row, 'extra_km_rate');
         const driverCharges = getNum(row, 'driver_charges');
@@ -598,8 +674,6 @@ router.get('/outstation-fare-estimate', async (req, res) => {
 
     if (tripType === 'multiple_stops') {
       const days = Math.max(1, parseInt(req.query.number_of_days, 10) || 1);
-      const minKmPerDay = 300;
-      const minTotalKm = minKmPerDay * days;
       const distanceParam = parseFloat(req.query.distance_km);
       const hasDistanceParam = Number.isFinite(distanceParam) && distanceParam > 0;
       const fromLat = parseFloat(req.query.from_lat);
@@ -608,24 +682,30 @@ router.get('/outstation-fare-estimate', async (req, res) => {
       const toLng = parseFloat(req.query.to_lng);
       const hasCoords = !Number.isNaN(fromLat) && !Number.isNaN(fromLng) && !Number.isNaN(toLat) && !Number.isNaN(toLng);
       const distance_km = hasDistanceParam ? distanceParam : (hasCoords ? haversineDistanceKm(fromLat, fromLng, toLat, toLng) : 0);
-      const chargeable_km = Math.max(distance_km, minTotalKm);
+      let responseMinKm = 0;
+      let responseChargeableKm = 0;
       for (const ct of offers || []) {
         const row = await db.getAsync(
-          `SELECT base_fare, per_km_rate, driver_charges, night_charges
+          `SELECT min_km, base_fare, per_km_rate, driver_charges, night_charges
            FROM rate_meters WHERE service_type = 'outstation' AND car_category = ? AND trip_type = 'multiple_stops' AND is_active = 1
            ORDER BY id DESC
            LIMIT 1`,
           [ct.name]
         );
         if (!row) { fares.push({ cab_type_id: ct.id, cab_type_name: ct.name, fare_amount: 0 }); continue; }
+        const minKmPerDay = getInt(row, 'min_km', 300);
+        const minTotalKm = minKmPerDay * days;
+        const chargeable_km = Math.max(distance_km, minTotalKm);
         const baseFare = getNum(row, 'base_fare');
         const perKmRate = getNum(row, 'per_km_rate');
         const driverCharges = getNum(row, 'driver_charges');
         const nightCharges = getNum(row, 'night_charges');
         const fare_amount = Math.round(baseFare + chargeable_km * perKmRate + (driverCharges + nightCharges) * days);
         fares.push({ cab_type_id: ct.id, cab_type_name: ct.name, fare_amount, distance_km: Number(distance_km.toFixed(2)), number_of_days: days, min_km: minTotalKm, chargeable_km: Number(chargeable_km.toFixed(2)) });
+        if (!responseMinKm || minTotalKm > responseMinKm) responseMinKm = minTotalKm;
+        if (!responseChargeableKm || chargeable_km > responseChargeableKm) responseChargeableKm = chargeable_km;
       }
-      return res.json({ number_of_days: days, distance_km: Number(distance_km.toFixed(2)), min_km: minTotalKm, chargeable_km: Number(chargeable_km.toFixed(2)), fares });
+      return res.json({ number_of_days: days, distance_km: Number(distance_km.toFixed(2)), min_km: responseMinKm, chargeable_km: Number(responseChargeableKm.toFixed(2)), fares });
     }
 
     return res.json({ fares: [] });

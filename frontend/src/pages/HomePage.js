@@ -333,11 +333,12 @@ const HomePage = () => {
       setConfirmError('Please enter your name and phone number.');
       return;
     }
-    const baseFare = Number(confirmModal.cabType.baseFare) || 0;
     const packageRate = confirmModal.cabType.packageRates?.[numberOfHours] != null
       ? Number(confirmModal.cabType.packageRates[numberOfHours])
       : 0;
-    const fareAmount = baseFare + packageRate;
+    const selectedHoursNum = Number(numberOfHours) || 0;
+    const driverChargesPerHour = Number(confirmModal.cabType.driverCharges) || 0;
+    const fareAmount = packageRate + (driverChargesPerHour * selectedHoursNum);
     setConfirmSubmitting(true);
     setConfirmError('');
     try {
@@ -935,18 +936,24 @@ const HomePage = () => {
               </div>
               {confirmModal.cabType.extraHourRate != null && (
                 <div className="home-confirm-row">
-                  <span>Extra hour</span>
+                  <span>Extra charges (per hour)</span>
                   <span>₹{confirmModal.cabType.extraHourRate}/hr</span>
                 </div>
               )}
+              <div className="home-confirm-row">
+                <span>Driver charges (per hour × {numberOfHours}h)</span>
+                <span>
+                  ₹{(Number(confirmModal.cabType.driverCharges) || 0) * (Number(numberOfHours) || 0)}
+                </span>
+              </div>
               <div className="home-confirm-row home-confirm-total">
                 <span>Total</span>
                 <span>
                   ₹
-                  {(Number(confirmModal.cabType.baseFare) || 0) +
-                    (confirmModal.cabType.packageRates?.[numberOfHours] != null
-                      ? Number(confirmModal.cabType.packageRates[numberOfHours])
-                      : 0)}
+                  {(confirmModal.cabType.packageRates?.[numberOfHours] != null
+                    ? Number(confirmModal.cabType.packageRates[numberOfHours])
+                    : 0) +
+                    ((Number(confirmModal.cabType.driverCharges) || 0) * (Number(numberOfHours) || 0))}
                 </span>
               </div>
             </div>

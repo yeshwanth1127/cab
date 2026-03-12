@@ -39,10 +39,28 @@ const MANAGER_SECTIONS = [
 ];
 
 const RATE_METER_CAB_NAMES = {
-  local: ['Innova Crysta', 'SUV', 'Sedan'],
-  airport: ['Crysta', 'SUV', 'Sedan'],
-  outstation: ['Crysta', 'SUV', 'Sedan', 'TT', 'Minibus'],
+  local: ['Sedan', 'SUV', 'Innova Crysta'],
+  airport: ['Sedan', 'SUV', 'Crysta'],
+  outstation: ['Sedan', 'SUV', 'Crysta', 'TT', 'Minibus'],
 };
+
+function getCabPlacementRank(name) {
+  const normalized = String(name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  if (normalized.includes('sedan')) return 1;
+  if (normalized.includes('suv')) return 2;
+  if (normalized.includes('crysta')) return 3;
+  if (normalized === 'tt' || normalized.includes('traveller')) return 4;
+  if (normalized.includes('minibus')) return 5;
+  return 100;
+}
+
+function sortCabTypesByPlacement(rows) {
+  return [...(rows || [])].sort((a, b) => {
+    const rankDiff = getCabPlacementRank(a?.name) - getCabPlacementRank(b?.name);
+    if (rankDiff !== 0) return rankDiff;
+    return String(a?.name || '').localeCompare(String(b?.name || ''));
+  });
+}
 
 function normalizePhoneForWhatsApp(phone) {
   if (!phone) return '';
@@ -134,6 +152,7 @@ const AdminDashboard = () => {
   const [uploadingCabTypeId, setUploadingCabTypeId] = useState(null);
   const cabTypeImageInputRef = useRef(null);
   const cabTypeImageUploadTargetId = useRef(null);
+  const cabTypeImageUploadSlot = useRef('primary');
 
   const [othersCabTypes, setOthersCabTypes] = useState([]);
   const [othersCabTypesLoading, setOthersCabTypesLoading] = useState(false);
@@ -418,7 +437,7 @@ const AdminDashboard = () => {
       const res = await api.get(`/admin/rate-meter/local/${cabTypeId}`);
       const d = res.data || {};
       setRateMeterLocalRates((prev) => ({ ...prev, [cabTypeId]: d }));
-      setRateMeterLocalForm((prev) => ({ ...prev, [cabTypeId]: { base_fare: d.base_fare ?? '', package_4h: d.package_4h ?? '', package_8h: d.package_8h ?? '', package_12h: d.package_12h ?? '', extra_hour_rate: d.extra_hour_rate ?? '' } }));
+      setRateMeterLocalForm((prev) => ({ ...prev, [cabTypeId]: { base_fare: d.base_fare ?? '', package_4h: d.package_4h ?? '', package_8h: d.package_8h ?? '', package_12h: d.package_12h ?? '', extra_hour_rate: d.extra_hour_rate ?? '', driver_charges: d.driver_charges ?? '', night_charges: d.night_charges ?? '' } }));
     } catch (err) {
       showToast(err.response?.data?.error || 'Failed to load local rates', 'error');
     } finally {
@@ -432,7 +451,18 @@ const AdminDashboard = () => {
       const res = await api.get(`/admin/rate-meter/airport/${cabTypeId}`);
       const d = res.data || {};
       setRateMeterAirportRates((prev) => ({ ...prev, [cabTypeId]: d }));
-      setRateMeterAirportForm((prev) => ({ ...prev, [cabTypeId]: { base_fare: d.base_fare ?? '', per_km_rate: d.per_km_rate ?? '', driver_charges: d.driver_charges ?? '', night_charges: d.night_charges ?? '' } }));
+      setRateMeterAirportForm((prev) => ({
+        ...prev,
+        [cabTypeId]: {
+          base_fare: d.base_fare ?? '',
+          per_km_rate: d.per_km_rate ?? '',
+          driver_charges: d.driver_charges ?? '',
+          night_charges: d.night_charges ?? '',
+          slab_31_40_extra: d.slab_31_40_extra ?? '',
+          slab_41_50_extra: d.slab_41_50_extra ?? '',
+          slab_51_60_extra: d.slab_51_60_extra ?? '',
+        }
+      }));
     } catch (err) {
       showToast(err.response?.data?.error || 'Failed to load airport rates', 'error');
     } finally {
@@ -454,7 +484,7 @@ const AdminDashboard = () => {
         [cabTypeId]: {
           oneWay: { minKm: ow.minKm ?? '', baseFare: ow.baseFare ?? '', extraKmRate: ow.extraKmRate ?? '', driverCharges: ow.driverCharges ?? '', nightCharges: ow.nightCharges ?? '' },
           roundTrip: { baseKmPerDay: rt.baseKmPerDay ?? '', perKmRate: rt.perKmRate ?? '', extraKmRate: rt.extraKmRate ?? '', driverCharges: rt.driverCharges ?? '', nightCharges: rt.nightCharges ?? '' },
-          multipleStops: { baseFare: ms.baseFare ?? '', perKmRate: ms.perKmRate ?? '', driverCharges: ms.driverCharges ?? '', nightCharges: ms.nightCharges ?? '' },
+          multipleStops: { minKmPerDay: ms.minKmPerDay ?? 300, baseFare: ms.baseFare ?? '', perKmRate: ms.perKmRate ?? '', driverCharges: ms.driverCharges ?? '', nightCharges: ms.nightCharges ?? '' },
         },
       }));
     } catch (err) {
@@ -1636,8 +1666,9 @@ const AdminDashboard = () => {
     }
   };
 
-  const triggerCabTypeImageUpload = (cabTypeId) => {
+  const triggerCabTypeImageUpload = (cabTypeId, slot = 'primary') => {
     cabTypeImageUploadTargetId.current = cabTypeId;
+    cabTypeImageUploadSlot.current = slot;
     cabTypeImageInputRef.current?.click();
   };
 
@@ -1653,16 +1684,33 @@ const AdminDashboard = () => {
     try {
       const formData = new FormData();
       formData.append('image', file);
-      await api.post(`/admin/rate-meter/cab-types/${cabTypeId}/upload`, formData, {
+      const slot = cabTypeImageUploadSlot.current === 'secondary' ? 'secondary' : 'primary';
+      await api.post(`/admin/rate-meter/cab-types/${cabTypeId}/upload?slot=${slot}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      showToast('Cab type image uploaded.');
+      showToast(slot === 'secondary' ? 'Cab type image 2 updated everywhere.' : 'Cab type image 1 updated everywhere.');
       fetchRateMeterCabTypes();
     } catch (err) {
       showToast(err.response?.data?.error || 'Upload failed', 'error');
     } finally {
       setUploadingCabTypeId(null);
       cabTypeImageUploadTargetId.current = null;
+      cabTypeImageUploadSlot.current = 'primary';
+    }
+  };
+
+  const removeCabTypeImage = async (cabTypeId, slot = 'primary') => {
+    if (!cabTypeId) return;
+    setUploadingCabTypeId(cabTypeId);
+    try {
+      const payload = slot === 'secondary' ? { image_url_2: null } : { image_url: null };
+      await api.put(`/admin/rate-meter/cab-types/${cabTypeId}`, payload);
+      showToast(slot === 'secondary' ? 'Cab type image 2 removed everywhere.' : 'Cab type image 1 removed everywhere.');
+      fetchRateMeterCabTypes();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to remove image', 'error');
+    } finally {
+      setUploadingCabTypeId(null);
     }
   };
 
@@ -1756,9 +1804,9 @@ const AdminDashboard = () => {
   const filteredEventBookings = (eventBookings || []).filter(filterEventBooking);
 
   const filteredRateMeterCabTypes = {
-    local: (rateMeterCabTypes.local || []).filter((ct) => filterBySearch(tabFilter.search, ct, ['name'])),
-    airport: (rateMeterCabTypes.airport || []).filter((ct) => filterBySearch(tabFilter.search, ct, ['name'])),
-    outstation: (rateMeterCabTypes.outstation || []).filter((ct) => filterBySearch(tabFilter.search, ct, ['name'])),
+    local: sortCabTypesByPlacement((rateMeterCabTypes.local || []).filter((ct) => filterBySearch(tabFilter.search, ct, ['name']))),
+    airport: sortCabTypesByPlacement((rateMeterCabTypes.airport || []).filter((ct) => filterBySearch(tabFilter.search, ct, ['name']))),
+    outstation: sortCabTypesByPlacement((rateMeterCabTypes.outstation || []).filter((ct) => filterBySearch(tabFilter.search, ct, ['name']))),
   };
 
   const pieData = stats ? [
@@ -2559,7 +2607,7 @@ const AdminDashboard = () => {
                   <div className={`admin-rate-meters-block ${rateMeterOpenSection === 'local' ? 'open' : ''}`}>
                     <button type="button" className="admin-rate-meters-block-btn" onClick={() => setRateMeterOpenSection(rateMeterOpenSection === 'local' ? null : 'local')}>
                       <span>Local (4h / 8h / 12h packages + extra hour)</span>
-                      <span className="admin-rate-meters-block-meta">Base + selected package + (extra hours × extra hour rate)</span>
+                      <span className="admin-rate-meters-block-meta">Selected package + (driver charges per hour × selected hours) (night charges shown only in customer UI)</span>
                     </button>
                     {rateMeterOpenSection === 'local' && (
                       <div className="admin-rate-meters-block-body">
@@ -2603,11 +2651,19 @@ const AdminDashboard = () => {
                                                 <div className="admin-cab-row-image-placeholder" style={{ display: 'none' }}><Icon name="car" size={24} /></div>
                                               </div>
                                               <div className="admin-cab-row-actions">
-                                                <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => triggerCabTypeImageUpload(ct.id)} disabled={uploadingCabTypeId === ct.id}>{uploadingCabTypeId === ct.id ? 'Uploading…' : 'Upload image'}</button>
+                                                <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => triggerCabTypeImageUpload(ct.id, 'primary')} disabled={uploadingCabTypeId === ct.id}>{uploadingCabTypeId === ct.id ? 'Uploading…' : 'Upload image 1'}</button>
+                                                <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => triggerCabTypeImageUpload(ct.id, 'secondary')} disabled={uploadingCabTypeId === ct.id}>{uploadingCabTypeId === ct.id ? 'Uploading…' : 'Upload image 2'}</button>
+                                                <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => removeCabTypeImage(ct.id, 'primary')} disabled={uploadingCabTypeId === ct.id || !ct.image_url}>Remove image 1</button>
+                                                <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => removeCabTypeImage(ct.id, 'secondary')} disabled={uploadingCabTypeId === ct.id || !ct.image_url_2}>Remove image 2</button>
                                               </div>
                                             </div>
                                           ) : (
-                                            <button type="button" className="admin-btn admin-btn-secondary" onClick={() => triggerCabTypeImageUpload(ct.id)} disabled={uploadingCabTypeId === ct.id}>{uploadingCabTypeId === ct.id ? 'Uploading…' : 'Upload image'}</button>
+                                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                              <button type="button" className="admin-btn admin-btn-secondary" onClick={() => triggerCabTypeImageUpload(ct.id, 'primary')} disabled={uploadingCabTypeId === ct.id}>{uploadingCabTypeId === ct.id ? 'Uploading…' : 'Upload image 1'}</button>
+                                              <button type="button" className="admin-btn admin-btn-secondary" onClick={() => triggerCabTypeImageUpload(ct.id, 'secondary')} disabled={uploadingCabTypeId === ct.id}>{uploadingCabTypeId === ct.id ? 'Uploading…' : 'Upload image 2'}</button>
+                                              <button type="button" className="admin-btn admin-btn-secondary" onClick={() => removeCabTypeImage(ct.id, 'primary')} disabled={uploadingCabTypeId === ct.id || !ct.image_url}>Remove image 1</button>
+                                              <button type="button" className="admin-btn admin-btn-secondary" onClick={() => removeCabTypeImage(ct.id, 'secondary')} disabled={uploadingCabTypeId === ct.id || !ct.image_url_2}>Remove image 2</button>
+                                            </div>
                                           )}
                                         </div>
                                       </div>
@@ -2630,8 +2686,16 @@ const AdminDashboard = () => {
                                             <input type="number" min="0" step="0.01" value={f.package_12h} onChange={(e) => setRateMeterLocalForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], package_12h: e.target.value } }))} />
                                           </div>
                                           <div className="admin-form-group">
-                                            <label>Extra hour rate (₹)</label>
+                                            <label>Extra charges per hour (₹/hr)</label>
                                             <input type="number" min="0" step="0.01" value={f.extra_hour_rate} onChange={(e) => setRateMeterLocalForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], extra_hour_rate: e.target.value } }))} />
+                                          </div>
+                                          <div className="admin-form-group">
+                                            <label>Driver charges per hour (₹/hr)</label>
+                                            <input type="number" min="0" step="0.01" value={f.driver_charges} onChange={(e) => setRateMeterLocalForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], driver_charges: e.target.value } }))} />
+                                          </div>
+                                          <div className="admin-form-group">
+                                            <label>Night charges (₹) - UI only</label>
+                                            <input type="number" min="0" step="0.01" value={f.night_charges} onChange={(e) => setRateMeterLocalForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], night_charges: e.target.value } }))} />
                                           </div>
                                         </div>
                                         <div className="admin-modal-actions" style={{ marginBottom: 16 }}>
@@ -2645,7 +2709,7 @@ const AdminDashboard = () => {
                             )}
                           </div>
                         ))}
-                        {(filteredRateMeterCabTypes.local || []).length === 0 && <p className="admin-rate-meters-empty">Click “Create missing cab types” to add Innova Crysta, SUV, Sedan.</p>}
+                        {(filteredRateMeterCabTypes.local || []).length === 0 && <p className="admin-rate-meters-empty">Click “Create missing cab types” to add Sedan, SUV, Innova Crysta.</p>}
                       </div>
                     )}
                   </div>
@@ -2697,11 +2761,19 @@ const AdminDashboard = () => {
                                                 <div className="admin-cab-row-image-placeholder" style={{ display: 'none' }}><Icon name="car" size={24} /></div>
                                               </div>
                                               <div className="admin-cab-row-actions">
-                                                <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => triggerCabTypeImageUpload(ct.id)} disabled={uploadingCabTypeId === ct.id}>{uploadingCabTypeId === ct.id ? 'Uploading…' : 'Upload image'}</button>
+                                                <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => triggerCabTypeImageUpload(ct.id, 'primary')} disabled={uploadingCabTypeId === ct.id}>{uploadingCabTypeId === ct.id ? 'Uploading…' : 'Upload image 1'}</button>
+                                                <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => triggerCabTypeImageUpload(ct.id, 'secondary')} disabled={uploadingCabTypeId === ct.id}>{uploadingCabTypeId === ct.id ? 'Uploading…' : 'Upload image 2'}</button>
+                                                <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => removeCabTypeImage(ct.id, 'primary')} disabled={uploadingCabTypeId === ct.id || !ct.image_url}>Remove image 1</button>
+                                                <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => removeCabTypeImage(ct.id, 'secondary')} disabled={uploadingCabTypeId === ct.id || !ct.image_url_2}>Remove image 2</button>
                                               </div>
                                             </div>
                                           ) : (
-                                            <button type="button" className="admin-btn admin-btn-secondary" onClick={() => triggerCabTypeImageUpload(ct.id)} disabled={uploadingCabTypeId === ct.id}>{uploadingCabTypeId === ct.id ? 'Uploading…' : 'Upload image'}</button>
+                                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                              <button type="button" className="admin-btn admin-btn-secondary" onClick={() => triggerCabTypeImageUpload(ct.id, 'primary')} disabled={uploadingCabTypeId === ct.id}>{uploadingCabTypeId === ct.id ? 'Uploading…' : 'Upload image 1'}</button>
+                                              <button type="button" className="admin-btn admin-btn-secondary" onClick={() => triggerCabTypeImageUpload(ct.id, 'secondary')} disabled={uploadingCabTypeId === ct.id}>{uploadingCabTypeId === ct.id ? 'Uploading…' : 'Upload image 2'}</button>
+                                              <button type="button" className="admin-btn admin-btn-secondary" onClick={() => removeCabTypeImage(ct.id, 'primary')} disabled={uploadingCabTypeId === ct.id || !ct.image_url}>Remove image 1</button>
+                                              <button type="button" className="admin-btn admin-btn-secondary" onClick={() => removeCabTypeImage(ct.id, 'secondary')} disabled={uploadingCabTypeId === ct.id || !ct.image_url_2}>Remove image 2</button>
+                                            </div>
                                           )}
                                         </div>
                                       </div>
@@ -2723,6 +2795,18 @@ const AdminDashboard = () => {
                                             <label>Night charges (₹)</label>
                                             <input type="number" min="0" step="0.01" value={f.night_charges} onChange={(e) => setRateMeterAirportForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], night_charges: e.target.value } }))} />
                                           </div>
+                                          <div className="admin-form-group">
+                                            <label>Extra slab charge 31-40 km (₹)</label>
+                                            <input type="number" min="0" step="0.01" value={f.slab_31_40_extra ?? ''} onChange={(e) => setRateMeterAirportForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], slab_31_40_extra: e.target.value } }))} />
+                                          </div>
+                                          <div className="admin-form-group">
+                                            <label>Extra slab charge 41-50 km (₹)</label>
+                                            <input type="number" min="0" step="0.01" value={f.slab_41_50_extra ?? ''} onChange={(e) => setRateMeterAirportForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], slab_41_50_extra: e.target.value } }))} />
+                                          </div>
+                                          <div className="admin-form-group">
+                                            <label>Extra slab charge 51-60 km (₹)</label>
+                                            <input type="number" min="0" step="0.01" value={f.slab_51_60_extra ?? ''} onChange={(e) => setRateMeterAirportForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], slab_51_60_extra: e.target.value } }))} />
+                                          </div>
                                         </div>
                                         <div className="admin-modal-actions" style={{ marginBottom: 16 }}>
                                           <button type="submit" className="admin-btn admin-btn-primary" disabled={rateMeterSaving}>Save airport rates</button>
@@ -2735,7 +2819,7 @@ const AdminDashboard = () => {
                             )}
                           </div>
                         ))}
-                        {(filteredRateMeterCabTypes.airport || []).length === 0 && <p className="admin-rate-meters-empty">Click “Create missing cab types” to add Crysta, SUV, Sedan.</p>}
+                        {(filteredRateMeterCabTypes.airport || []).length === 0 && <p className="admin-rate-meters-empty">Click “Create missing cab types” to add Sedan, SUV, Crysta.</p>}
                       </div>
                     )}
                   </div>
@@ -2792,11 +2876,19 @@ const AdminDashboard = () => {
                                                 <div className="admin-cab-row-image-placeholder" style={{ display: 'none' }}><Icon name="car" size={24} /></div>
                                               </div>
                                               <div className="admin-cab-row-actions">
-                                                <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => triggerCabTypeImageUpload(ct.id)} disabled={uploadingCabTypeId === ct.id}>{uploadingCabTypeId === ct.id ? 'Uploading…' : 'Upload image'}</button>
+                                                <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => triggerCabTypeImageUpload(ct.id, 'primary')} disabled={uploadingCabTypeId === ct.id}>{uploadingCabTypeId === ct.id ? 'Uploading…' : 'Upload image 1'}</button>
+                                                <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => triggerCabTypeImageUpload(ct.id, 'secondary')} disabled={uploadingCabTypeId === ct.id}>{uploadingCabTypeId === ct.id ? 'Uploading…' : 'Upload image 2'}</button>
+                                                <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => removeCabTypeImage(ct.id, 'primary')} disabled={uploadingCabTypeId === ct.id || !ct.image_url}>Remove image 1</button>
+                                                <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => removeCabTypeImage(ct.id, 'secondary')} disabled={uploadingCabTypeId === ct.id || !ct.image_url_2}>Remove image 2</button>
                                               </div>
                                             </div>
                                           ) : (
-                                            <button type="button" className="admin-btn admin-btn-secondary" onClick={() => triggerCabTypeImageUpload(ct.id)} disabled={uploadingCabTypeId === ct.id}>{uploadingCabTypeId === ct.id ? 'Uploading…' : 'Upload image'}</button>
+                                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                              <button type="button" className="admin-btn admin-btn-secondary" onClick={() => triggerCabTypeImageUpload(ct.id, 'primary')} disabled={uploadingCabTypeId === ct.id}>{uploadingCabTypeId === ct.id ? 'Uploading…' : 'Upload image 1'}</button>
+                                              <button type="button" className="admin-btn admin-btn-secondary" onClick={() => triggerCabTypeImageUpload(ct.id, 'secondary')} disabled={uploadingCabTypeId === ct.id}>{uploadingCabTypeId === ct.id ? 'Uploading…' : 'Upload image 2'}</button>
+                                              <button type="button" className="admin-btn admin-btn-secondary" onClick={() => removeCabTypeImage(ct.id, 'primary')} disabled={uploadingCabTypeId === ct.id || !ct.image_url}>Remove image 1</button>
+                                              <button type="button" className="admin-btn admin-btn-secondary" onClick={() => removeCabTypeImage(ct.id, 'secondary')} disabled={uploadingCabTypeId === ct.id || !ct.image_url_2}>Remove image 2</button>
+                                            </div>
                                           )}
                                         </div>
                                       </div>
@@ -2827,6 +2919,7 @@ const AdminDashboard = () => {
                                         <div className="admin-form-block" style={{ marginBottom: 12 }}>
                                           <div className="admin-form-block-title">Multiple stops</div>
                                           <div className="admin-form-grid">
+                                            <div className="admin-form-group"><label>Min km/day</label><input type="number" min="0" value={ms.minKmPerDay} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], multipleStops: { ...prev[ct.id]?.multipleStops, minKmPerDay: e.target.value } } }))} /></div>
                                             <div className="admin-form-group"><label>Base fare (₹)</label><input type="number" min="0" step="0.01" value={ms.baseFare} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], multipleStops: { ...prev[ct.id]?.multipleStops, baseFare: e.target.value } } }))} /></div>
                                             <div className="admin-form-group"><label>Per km rate (₹)</label><input type="number" min="0" step="0.01" value={ms.perKmRate} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], multipleStops: { ...prev[ct.id]?.multipleStops, perKmRate: e.target.value } } }))} /></div>
                                             <div className="admin-form-group"><label>Driver charges (₹)</label><input type="number" min="0" step="0.01" value={ms.driverCharges} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], multipleStops: { ...prev[ct.id]?.multipleStops, driverCharges: e.target.value } } }))} /></div>
@@ -2844,7 +2937,7 @@ const AdminDashboard = () => {
                             )}
                           </div>
                         ))}
-                        {(filteredRateMeterCabTypes.outstation || []).length === 0 && <p className="admin-rate-meters-empty">Click “Create missing cab types” to add Crysta, SUV, Sedan, TT, Minibus.</p>}
+                        {(filteredRateMeterCabTypes.outstation || []).length === 0 && <p className="admin-rate-meters-empty">Click “Create missing cab types” to add Sedan, SUV, Crysta, TT, Minibus.</p>}
                       </div>
                     )}
                   </div>
