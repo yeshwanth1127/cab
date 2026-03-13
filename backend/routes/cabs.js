@@ -609,39 +609,10 @@ router.get('/outstation-fare-estimate', async (req, res) => {
 
     if (tripType === 'round_trip') {
       const days = Math.max(1, parseInt(req.query.number_of_days, 10) || 1);
-      const distanceParam = parseFloat(req.query.distance_km);
-      const hasDistanceParam = Number.isFinite(distanceParam) && distanceParam > 0;
-      const fromLat = parseFloat(req.query.from_lat);
-      const fromLng = parseFloat(req.query.from_lng);
-      const toLat = parseFloat(req.query.to_lat);
-      const toLng = parseFloat(req.query.to_lng);
-      const hasCoords = !Number.isNaN(fromLat) && !Number.isNaN(fromLng) && !Number.isNaN(toLat) && !Number.isNaN(toLng);
-      // Prefer driving distance (Google Distance Matrix) when coords exist.
-      // Fallback to haversine if Google API is unavailable/misconfigured.
-      let computedTotalKm = null;
-      let distance_source = 'haversine';
-      if (hasCoords) {
-        try {
-          const dist = await getDistanceAndTime(
-            { lat: fromLat, lng: fromLng },
-            { lat: toLat, lng: toLng }
-          );
-          if (dist?.distance_km != null && Number.isFinite(Number(dist.distance_km))) {
-            computedTotalKm = Number(dist.distance_km) * 2;
-            distance_source = 'google_distance_matrix';
-          }
-        } catch (_) {
-          computedTotalKm = null;
-        }
-      }
-      if (computedTotalKm == null && hasCoords) {
-        computedTotalKm = haversineDistanceKm(fromLat, fromLng, toLat, toLng) * 2;
-        distance_source = 'haversine';
-      }
 
       for (const ct of offers || []) {
         const row = await db.getAsync(
-          `SELECT base_km_per_day, per_km_rate, extra_km_rate, driver_charges, night_charges
+          `SELECT base_km_per_day, per_km_rate, driver_charges, night_charges
            FROM rate_meters WHERE service_type = 'outstation' AND car_category = ? AND trip_type = 'round_trip' AND is_active = 1
            ORDER BY id DESC
            LIMIT 1`,
@@ -650,26 +621,23 @@ router.get('/outstation-fare-estimate', async (req, res) => {
         if (!row) { fares.push({ cab_type_id: ct.id, cab_type_name: ct.name, fare_amount: 0 }); continue; }
         const baseKmPerDay = getInt(row, 'base_km_per_day', 300);
         const perKmRate = getNum(row, 'per_km_rate');
-        const extraKmRate = getNum(row, 'extra_km_rate');
         const driverCharges = getNum(row, 'driver_charges');
         const nightCharges = getNum(row, 'night_charges');
-        const includedKm = baseKmPerDay * days;
-        const totalKmRaw = (hasDistanceParam ? distanceParam : computedTotalKm);
-        // If computed distance is below included km, bill at included km.
-        const chargeable_km = Math.max((totalKmRaw != null ? Number(totalKmRaw) : 0) || 0, includedKm);
-        const extraKm = Math.max(0, chargeable_km - includedKm);
-        const fare_amount = Math.round(includedKm * perKmRate + extraKm * extraKmRate + (driverCharges + nightCharges) * days);
+        const totalKm = baseKmPerDay * days;
+        const fare_amount = Math.round(totalKm * perKmRate + driverCharges + nightCharges);
         fares.push({
           cab_type_id: ct.id,
           cab_type_name: ct.name,
           fare_amount,
-          total_km: Number(((totalKmRaw ?? includedKm) || 0).toFixed(2)),
-          included_km: includedKm,
-          chargeable_km: Number(chargeable_km.toFixed(2)),
-          extra_km: Number(extraKm.toFixed(2)),
+          distance_km: totalKm,
+          min_km: totalKm,
+          total_km: totalKm,
+          included_km: totalKm,
+          chargeable_km: totalKm,
+          extra_km: 0,
         });
       }
-      return res.json({ number_of_days: days, distance_source, fares });
+      return res.json({ number_of_days: days, fares });
     }
 
     if (tripType === 'multiple_stops') {
