@@ -500,14 +500,14 @@ router.get('/outstation-offers', async (req, res) => {
         hasAc: ct.has_ac != null ? !!ct.has_ac : null,
         gstIncluded: ct.gst_included != null ? !!ct.gst_included : true,
         oneWay: oneWay ? {
-          minKm: 300,
+          minKm: getInt(oneWay, 'min_km', 130),
           baseFare: getNum(oneWay, 'base_fare'),
           extraKmRate: getNum(oneWay, 'extra_km_rate'),
           driverCharges: getNum(oneWay, 'driver_charges'),
           nightCharges: getNum(oneWay, 'night_charges'),
         } : null,
         roundTrip: roundTrip ? {
-          baseKmPerDay: 300,
+          baseKmPerDay: getInt(roundTrip, 'base_km_per_day', 300),
           perKmRate: getNum(roundTrip, 'per_km_rate'),
           extraKmRate: getNum(roundTrip, 'extra_km_rate'),
           driverCharges: getNum(roundTrip, 'driver_charges'),
@@ -526,7 +526,7 @@ router.get('/outstation-offers', async (req, res) => {
         nightCharges: firstRate ? getNum(firstRate, 'night_charges') : 0,
         image_url: ctImageUrl,
         image_url_2: ctImageUrl2,
-        includedKm: oneWay ? 300 : (roundTrip ? 300 : (multiStop ? getInt(multiStop, 'min_km', 300) : null)),
+        includedKm: oneWay ? getInt(oneWay, 'min_km', 130) : (roundTrip ? getInt(roundTrip, 'base_km_per_day', 300) : (multiStop ? getInt(multiStop, 'min_km', 300) : null)),
         extraPerKm: oneWay ? getNum(oneWay, 'extra_km_rate') : (roundTrip ? getNum(roundTrip, 'extra_km_rate') : (multiStop ? getNum(multiStop, 'per_km_rate') : null)),
         cabs,
       });
@@ -586,7 +586,7 @@ router.get('/outstation-fare-estimate', async (req, res) => {
           [ct.name]
         );
         if (!row) { fares.push({ cab_type_id: ct.id, cab_type_name: ct.name, fare_amount: 0 }); continue; }
-        const minKmPerDay = 300;
+        const minKmPerDay = getInt(row, 'min_km', 130);
         const minKm = minKmPerDay * days;
         const perKmRate = getNum(row, 'extra_km_rate');
         const driverCharges = getNum(row, 'driver_charges');
@@ -648,7 +648,7 @@ router.get('/outstation-fare-estimate', async (req, res) => {
           [ct.name]
         );
         if (!row) { fares.push({ cab_type_id: ct.id, cab_type_name: ct.name, fare_amount: 0 }); continue; }
-        const baseKmPerDay = 300;
+        const baseKmPerDay = getInt(row, 'base_km_per_day', 300);
         const perKmRate = getNum(row, 'per_km_rate');
         const extraKmRate = getNum(row, 'extra_km_rate');
         const driverCharges = getNum(row, 'driver_charges');
