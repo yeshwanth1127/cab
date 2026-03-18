@@ -642,16 +642,10 @@ router.get('/outstation-fare-estimate', async (req, res) => {
 
     if (tripType === 'multiple_stops') {
       const days = Math.max(1, parseInt(req.query.number_of_days, 10) || 1);
-      const distanceParam = parseFloat(req.query.distance_km);
-      const hasDistanceParam = Number.isFinite(distanceParam) && distanceParam > 0;
-      const fromLat = parseFloat(req.query.from_lat);
-      const fromLng = parseFloat(req.query.from_lng);
-      const toLat = parseFloat(req.query.to_lat);
-      const toLng = parseFloat(req.query.to_lng);
-      const hasCoords = !Number.isNaN(fromLat) && !Number.isNaN(fromLng) && !Number.isNaN(toLat) && !Number.isNaN(toLng);
-      const distance_km = hasDistanceParam ? distanceParam : (hasCoords ? haversineDistanceKm(fromLat, fromLng, toLat, toLng) : 0);
+
       let responseMinKm = 0;
       let responseChargeableKm = 0;
+
       for (const ct of offers || []) {
         const row = await db.getAsync(
           `SELECT min_km, base_fare, per_km_rate, driver_charges, night_charges
@@ -661,19 +655,36 @@ router.get('/outstation-fare-estimate', async (req, res) => {
           [ct.name]
         );
         if (!row) { fares.push({ cab_type_id: ct.id, cab_type_name: ct.name, fare_amount: 0 }); continue; }
+
         const minKmPerDay = getInt(row, 'min_km', 300);
-        const minTotalKm = minKmPerDay * days;
-        const chargeable_km = Math.max(distance_km, minTotalKm);
-        const baseFare = getNum(row, 'base_fare');
         const perKmRate = getNum(row, 'per_km_rate');
         const driverCharges = getNum(row, 'driver_charges');
         const nightCharges = getNum(row, 'night_charges');
-        const fare_amount = Math.round(baseFare + chargeable_km * perKmRate + (driverCharges + nightCharges) * days);
-        fares.push({ cab_type_id: ct.id, cab_type_name: ct.name, fare_amount, distance_km: Number(distance_km.toFixed(2)), number_of_days: days, min_km: minTotalKm, chargeable_km: Number(chargeable_km.toFixed(2)) });
-        if (!responseMinKm || minTotalKm > responseMinKm) responseMinKm = minTotalKm;
-        if (!responseChargeableKm || chargeable_km > responseChargeableKm) responseChargeableKm = chargeable_km;
+
+        const totalKm = minKmPerDay * days; // fixed 300km (or configured) per day
+        const fare_amount = Math.round(totalKm * perKmRate + driverCharges + nightCharges);
+
+        fares.push({
+          cab_type_id: ct.id,
+          cab_type_name: ct.name,
+          fare_amount,
+          distance_km: totalKm,
+          number_of_days: days,
+          min_km: totalKm,
+          chargeable_km: totalKm,
+        });
+
+        if (!responseMinKm || totalKm > responseMinKm) responseMinKm = totalKm;
+        if (!responseChargeableKm || totalKm > responseChargeableKm) responseChargeableKm = totalKm;
       }
-      return res.json({ number_of_days: days, distance_km: Number(distance_km.toFixed(2)), min_km: responseMinKm, chargeable_km: Number(responseChargeableKm.toFixed(2)), fares });
+
+      return res.json({
+        number_of_days: days,
+        distance_km: responseChargeableKm,
+        min_km: responseMinKm,
+        chargeable_km: responseChargeableKm,
+        fares,
+      });
     }
 
     return res.json({ fares: [] });
