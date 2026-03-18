@@ -158,7 +158,9 @@ const CarOptions = () => {
           setOutstationEstimateMetaByCabType(metaMap);
           setOutstationDistanceKm(
             tripType === 'multiple_stops'
-              ? (estimateRes.data?.chargeable_km != null ? Number(estimateRes.data.chargeable_km) : computedMultiStopDistanceKm)
+              ? (computedMultiStopDistanceKm != null
+                  ? Number(computedMultiStopDistanceKm)
+                  : (estimateRes.data?.distance_km != null ? Number(estimateRes.data.distance_km) : null))
               : null
           );
           setLocalOffers([]);
@@ -647,6 +649,9 @@ const CarOptions = () => {
                     return `Multi way (${intermediateStops} stop(s))${daysText}`;
                   })()}
                 </span>
+                {bookingState.trip_type === 'multiple_stops' && outstationDistanceKm != null && Number.isFinite(Number(outstationDistanceKm)) && (
+                  <span>Total distance (route): {Number(outstationDistanceKm).toFixed(1)} km</span>
+                )}
               </div>
             )}
             <p className="subtitle">
@@ -732,21 +737,19 @@ const CarOptions = () => {
             {!loading && !error && isOutstationFlow && outstationOffers.length > 0 && (() => {
               const tripType = bookingState.trip_type || 'one_way';
               const outstationCards = outstationOffers.flatMap((ct) => (ct.cabs || []).map((cab) => {
-                const meta = outstationEstimateMetaByCabType?.[ct.id] || {};
-                const actualKm =
-                  tripType === 'one_way'
-                    ? meta.distance_km
-                    : (tripType === 'round_trip' ? meta.total_km : meta.distance_km);
                 const seatLabel = getSeatLabel({
                   cabTypeName: ct.name,
                   seatingCapacity: ct.seatingCapacity,
                 });
+                const isMultiWay = tripType === 'multiple_stops';
+                const includedKmValue = isMultiWay ? 300 : (ct.includedKm ?? null);
+                const includedKmLabel = isMultiWay ? 'Minimum Km per day (fixed)' : 'Minimum Km per day';
                 return renderUnifiedCabCard(cab, ct, {
                   billableDistanceKm: null,
                   displayFare: outstationFares[ct.id] ?? ct.baseFare ?? 0,
                   serviceLabel: `${ct.name} (${(bookingState.trip_type || 'one_way').replace('_', ' ')})`,
-                  includedKm: ct.includedKm ?? null,
-                  includedKmLabel: 'Minimum Km per day',
+                  includedKm: includedKmValue,
+                  includedKmLabel,
                   extraPerKm: ct.extraPerKm ?? null,
                   // Customer booking flow requirement: always show Driver Charges as "Included" for outstation
                   // (do not display the admin-configured numeric value here).
