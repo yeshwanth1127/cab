@@ -12,6 +12,24 @@
 			"type": "shell",
 			"command": "npm run migrate",
 			"group": "build"
+		},
+		{
+			"label": "Start backend server",
+			"type": "shell",
+			"command": "npm run start",
+			"args": [],
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Start backend (node server.js)",
+			"type": "shell",
+			"command": "node server.js",
+			"args": [],
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
 		}
 	]
 }

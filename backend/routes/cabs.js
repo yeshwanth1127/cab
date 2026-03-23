@@ -591,7 +591,7 @@ router.get('/outstation-fare-estimate', async (req, res) => {
         const perKmRate = getNum(row, 'extra_km_rate');
         const driverCharges = getNum(row, 'driver_charges');
         const nightCharges = getNum(row, 'night_charges');
-        const fare_amount = Math.round(chargeable_km * perKmRate + (driverCharges + nightCharges) * days);
+        const fare_amount = Math.round(chargeable_km * perKmRate + driverCharges + nightCharges);
         fares.push({
           cab_type_id: ct.id,
           cab_type_name: ct.name,
