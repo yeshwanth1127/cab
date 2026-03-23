@@ -34,6 +34,7 @@ const HomePage = () => {
   const [airportDirection, setAirportDirection] = useState(null);
   const [airportLocation, setAirportLocation] = useState(null);
   const [outstationTripType, setOutstationTripType] = useState('one_way');
+  const [outstationOneWayDays, setOutstationOneWayDays] = useState('');
   const [outstationFrom, setOutstationFrom] = useState(null);
   const [outstationTo, setOutstationTo] = useState(null);
   const [outstationRoundTripDays, setOutstationRoundTripDays] = useState('');
@@ -172,6 +173,7 @@ const HomePage = () => {
     setAirportDirection(null);
     setAirportLocation(null);
     setOutstationTripType('one_way');
+    setOutstationOneWayDays('');
     setOutstationFrom(null);
     setOutstationTo(null);
     setOutstationRoundTripDays('');
@@ -195,7 +197,8 @@ const HomePage = () => {
     if (outstationTripType === 'one_way') {
       const fromAddr = outstationFrom?.address || '';
       const toAddr = outstationTo?.address || '';
-      if (!fromAddr.trim() || !toAddr.trim()) return;
+      const days = Number(outstationOneWayDays);
+      if (!fromAddr.trim() || !toAddr.trim() || !(days >= 1)) return;
       if (!isOutsideBangalore(outstationTo)) {
         setOutstationNonPickupError('Destination must be outside Bangalore for outstation trips.');
         return;
@@ -211,6 +214,7 @@ const HomePage = () => {
           from_lng: outstationFrom?.lng ?? null,
           to_lat: outstationTo?.lat ?? null,
           to_lng: outstationTo?.lng ?? null,
+          number_of_days: days,
           travel_datetime: travelDatetime || null,
           return_datetime: null,
         },
@@ -558,6 +562,18 @@ const HomePage = () => {
                           <p className="home-form-error" role="alert">{outstationNonPickupError}</p>
                         )}
                       </div>
+                    </div>
+                    <div className="home-form-group">
+                      <label className="home-booking-label">Number of days <span className="home-booking-required">*</span></label>
+                      <input
+                        type="number"
+                        min="1"
+                        className="home-booking-input"
+                        value={outstationOneWayDays}
+                        onChange={e => setOutstationOneWayDays(e.target.value.replace(/[^\d]/g, ''))}
+                        placeholder="Enter number of days"
+                        required
+                      />
                     </div>
                   </>
                 )}

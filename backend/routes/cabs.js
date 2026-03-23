@@ -575,20 +575,9 @@ router.get('/outstation-fare-estimate', async (req, res) => {
         distance_source = 'haversine';
       }
 
-      // Days and chargeable_km logic as per new slabs
-      let days = 1;
-      let chargeable_km = 300;
-      if (distance_km > 300 && distance_km <= 600) {
-        days = 2;
-        chargeable_km = 600;
-      } else if (distance_km > 600 && distance_km <= 900) {
-        days = 3;
-        chargeable_km = 900;
-      } else if (distance_km > 900) {
-        // For >900, keep extending by 300km/day
-        days = Math.ceil(distance_km / 300);
-        chargeable_km = days * 300;
-      }
+      // Use user-input number_of_days, default 1
+      const days = Math.max(1, parseInt(req.query.number_of_days, 10) || 1);
+      const chargeable_km = days * 300;
 
       for (const ct of offers || []) {
         const row = await db.getAsync(
