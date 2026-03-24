@@ -116,7 +116,7 @@ const CarOptions = () => {
             estimateParams.from_lng = bookingState.from_lng;
             estimateParams.to_lat = bookingState.to_lat;
             estimateParams.to_lng = bookingState.to_lng;
-             if (bookingState.number_of_days) estimateParams.number_of_days = bookingState.number_of_days;
+            // number_of_days is not needed for one_way
           } else if (tripType === 'round_trip' && bookingState.number_of_days) {
             estimateParams.number_of_days = bookingState.number_of_days;
           } else if (tripType === 'multiple_stops') {
