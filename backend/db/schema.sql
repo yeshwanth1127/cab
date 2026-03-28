@@ -270,5 +270,9 @@ INSERT OR IGNORE INTO cab_types (name, description, service_type, base_fare, per
 ('Innova Crysta', 'Innova Crysta', 'local', 0, 0, 0, 6),
 ('Sedan', 'Sedan cars', 'airport', 0, 0, 0, 4),
 ('SUV', 'SUV cars', 'airport', 0, 0, 0, 6),
+('Innova Crysta', 'Innova Crysta', 'airport', 0, 0, 0, 6),
 ('Sedan', 'Sedan cars', 'outstation', 0, 0, 0, 4),
-('SUV', 'SUV cars', 'outstation', 0, 0, 0, 6);
+('SUV', 'SUV cars', 'outstation', 0, 0, 0, 6),
+('Innova Crysta', 'Innova Crysta', 'outstation', 0, 0, 0, 6),
+('TT', 'Tempo Traveller', 'outstation', 0, 0, 0, 12),
+('Minibus', 'Minibus', 'outstation', 0, 0, 0, 14);

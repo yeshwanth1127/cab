@@ -21,8 +21,8 @@ export function getSeatLabel({ cabTypeName, seatingCapacity, crystaSeater }) {
   if (isSuv) return '6+1';
 
   // Use fixed seat counts for TT and MiniBus.
-  if (isTempoTraveller) return '11+1';
-  if (isMiniBus) return '9+1';
+  if (isTempoTraveller) return '12+1';
+  if (isMiniBus) return '25+1';
 
   // Default for other car types
   return '6+1';

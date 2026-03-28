@@ -37,6 +37,8 @@ const HomePage = () => {
   // Removed outstationOneWayDays state for one-way outstation
   const [outstationFrom, setOutstationFrom] = useState(null);
   const [outstationTo, setOutstationTo] = useState(null);
+  /** Round trip only: destination label for UI / invoice (not used for fare). */
+  const [outstationRoundTripTo, setOutstationRoundTripTo] = useState(null);
   const [outstationRoundTripDays, setOutstationRoundTripDays] = useState('');
   const [outstationMultiStops, setOutstationMultiStops] = useState([null, null]);
   const [outstationMultiwayDays, setOutstationMultiwayDays] = useState('');
@@ -72,6 +74,7 @@ const HomePage = () => {
         outstationTripType,
         outstationFrom,
         outstationTo,
+        outstationRoundTripTo,
         outstationRoundTripDays,
         outstationMultiStops,
         outstationMultiwayDays,
@@ -104,6 +107,7 @@ const HomePage = () => {
       if (d.outstationTripType !== undefined) setOutstationTripType(d.outstationTripType);
       if (d.outstationFrom !== undefined) setOutstationFrom(d.outstationFrom);
       if (d.outstationTo !== undefined) setOutstationTo(d.outstationTo);
+      if (d.outstationRoundTripTo !== undefined) setOutstationRoundTripTo(d.outstationRoundTripTo);
       if (d.outstationRoundTripDays !== undefined) setOutstationRoundTripDays(d.outstationRoundTripDays);
       if (d.outstationMultiStops !== undefined) setOutstationMultiStops(d.outstationMultiStops);
       if (d.outstationMultiwayDays !== undefined) setOutstationMultiwayDays(d.outstationMultiwayDays);
@@ -136,13 +140,14 @@ const HomePage = () => {
 
   // Return date cannot be before pickup; when pickup changes, clear return if it becomes invalid
   useEffect(() => {
-    if (outstationTripType !== 'round_trip') return;
+    if (outstationTripType !== 'round_trip' && outstationTripType !== 'multiple_stops') return;
     if (!travelDatetime || !outstationReturnDatetime) return;
     if (new Date(outstationReturnDatetime) <= new Date(travelDatetime)) setOutstationReturnDatetime('');
-  }, [travelDatetime]);
+  }, [travelDatetime, outstationTripType]);
 
   const isPickupInPast = travelDatetime && new Date(travelDatetime) <= new Date();
-  const isReturnBeforePickup = outstationTripType === 'round_trip' && travelDatetime && outstationReturnDatetime && new Date(outstationReturnDatetime) <= new Date(travelDatetime);
+  const isReturnBeforePickup = (outstationTripType === 'round_trip' || outstationTripType === 'multiple_stops')
+    && travelDatetime && outstationReturnDatetime && new Date(outstationReturnDatetime) <= new Date(travelDatetime);
   const computedRoundTripDays = outstationTripType === 'round_trip' ? getCeilDaysDiff(travelDatetime, outstationReturnDatetime) : null;
   const selectedRoundTripDays = outstationTripType === 'round_trip' ? Number(outstationRoundTripDays) : null;
   const isRoundTripDaysMismatch = outstationTripType === 'round_trip'
@@ -151,6 +156,15 @@ const HomePage = () => {
     && Number.isFinite(selectedRoundTripDays)
     && selectedRoundTripDays >= 1
     && computedRoundTripDays !== selectedRoundTripDays;
+  const computedMultiwayDays = outstationTripType === 'multiple_stops' ? getCeilDaysDiff(travelDatetime, outstationReturnDatetime) : null;
+  const selectedMultiwayDays = outstationTripType === 'multiple_stops' ? Number(outstationMultiwayDays) : null;
+  const isMultiwayDaysMismatch = outstationTripType === 'multiple_stops'
+    && outstationReturnDatetime
+    && computedMultiwayDays != null
+    && selectedMultiwayDays != null
+    && Number.isFinite(selectedMultiwayDays)
+    && selectedMultiwayDays >= 1
+    && computedMultiwayDays !== selectedMultiwayDays;
 
   // Local service is only available within Bangalore; outstation destinations/stops must be outside Bangalore
   const BANGALORE_BOUNDS = { latMin: 12.77, latMax: 13.22, lngMin: 77.38, lngMax: 77.82 };
@@ -176,6 +190,7 @@ const HomePage = () => {
     // Removed setOutstationOneWayDays for one-way outstation
     setOutstationFrom(null);
     setOutstationTo(null);
+    setOutstationRoundTripTo(null);
     setOutstationRoundTripDays('');
     setOutstationMultiStops([null, null]);
     setOutstationMultiwayDays('');
@@ -219,15 +234,16 @@ const HomePage = () => {
       });
     } else if (outstationTripType === 'round_trip') {
       const pickupAddr = outstationFrom?.address || '';
+      const toAddr = (outstationRoundTripTo?.address || '').trim();
       const days = Number(outstationRoundTripDays);
-      if (!pickupAddr.trim() || !(days >= 1)) return;
+      if (!pickupAddr.trim() || !toAddr || !(days >= 1)) return;
       persistBookingDraft();
       navigate('/car-options', {
         state: {
           service_type: 'outstation',
           trip_type: 'round_trip',
           from_location: pickupAddr,
-          to_location: pickupAddr,
+          to_location: toAddr,
           number_of_days: days,
           travel_datetime: travelDatetime || null,
           return_datetime: outstationReturnDatetime || null,
@@ -257,7 +273,7 @@ const HomePage = () => {
           stop_points: allStops,
           number_of_days: days,
           travel_datetime: travelDatetime || null,
-          return_datetime: null,
+          return_datetime: outstationReturnDatetime || null,
         },
       });
     }
@@ -335,12 +351,13 @@ const HomePage = () => {
       setConfirmError('Please enter your name and phone number.');
       return;
     }
+    const baseFare = Number(confirmModal.cabType.baseFare) || 0;
     const packageRate = confirmModal.cabType.packageRates?.[numberOfHours] != null
       ? Number(confirmModal.cabType.packageRates[numberOfHours])
       : 0;
-    const selectedHoursNum = Number(numberOfHours) || 0;
-    const driverChargesPerHour = Number(confirmModal.cabType.driverCharges) || 0;
-    const fareAmount = packageRate + (driverChargesPerHour * selectedHoursNum);
+    const driverCharges = Number(confirmModal.cabType.driverCharges) || 0;
+    const nightCharges = Number(confirmModal.cabType.nightCharges) || 0;
+    const fareAmount = baseFare + packageRate + driverCharges + nightCharges;
     setConfirmSubmitting(true);
     setConfirmError('');
     try {
@@ -513,7 +530,10 @@ const HomePage = () => {
                       const next = e.target.value;
                       setOutstationTripType(next);
                       setOutstationNonPickupError('');
-                      if (next !== 'round_trip') setOutstationReturnDatetime('');
+                      if (next !== 'round_trip') {
+                        setOutstationReturnDatetime('');
+                        setOutstationRoundTripTo(null);
+                      }
                       if (next !== 'multiple_stops') {
                         setOutstationMultiwayDays('');
                         setOutstationPickup(null);
@@ -567,14 +587,25 @@ const HomePage = () => {
 
                 {outstationTripType === 'round_trip' && (
                   <>
-                    <div className="home-form-group">
-                      <label className="home-booking-label">Pickup point</label>
-                      <LocationInput
-                        placeholder="Enter pickup location"
-                        value={outstationFrom}
-                        onSelect={setOutstationFrom}
-                        label={null}
-                      />
+                    <div className="home-booking-grid">
+                      <div className="home-booking-field">
+                        <label className="home-booking-label">Pickup point <span className="home-booking-required">*</span></label>
+                        <LocationInput
+                          placeholder="Enter pickup location"
+                          value={outstationFrom}
+                          onSelect={setOutstationFrom}
+                          label={null}
+                        />
+                      </div>
+                      <div className="home-booking-field">
+                        <label className="home-booking-label">To location <span className="home-booking-required">*</span></label>
+                        <LocationInput
+                          placeholder="e.g. city or destination (for booking summary)"
+                          value={outstationRoundTripTo}
+                          onSelect={setOutstationRoundTripTo}
+                          label={null}
+                        />
+                      </div>
                     </div>
                     <div className="home-form-group">
                       <label className="home-booking-label">Number of days</label>
@@ -695,7 +726,7 @@ const HomePage = () => {
                     <p className="home-form-error" role="alert">Pickup date and time must be in the future.</p>
                   )}
                 </div>
-                {outstationTripType === 'round_trip' && (
+                {(outstationTripType === 'round_trip' || outstationTripType === 'multiple_stops') && (
                   <div className="home-form-group">
                     <label className="home-booking-label">Return date (optional)</label>
                     <DateTimePicker
@@ -708,9 +739,14 @@ const HomePage = () => {
                     {isReturnBeforePickup && (
                       <p className="home-form-error" role="alert">Return date must be after pickup date.</p>
                     )}
-                    {isRoundTripDaysMismatch && (
+                    {outstationTripType === 'round_trip' && isRoundTripDaysMismatch && (
                       <p className="home-form-error" role="alert">
                         Number of days ({selectedRoundTripDays}) does not match pickup/return dates ({computedRoundTripDays} day(s)). Please correct it.
+                      </p>
+                    )}
+                    {outstationTripType === 'multiple_stops' && isMultiwayDaysMismatch && (
+                      <p className="home-form-error" role="alert">
+                        Number of days ({selectedMultiwayDays}) does not match pickup/return dates ({computedMultiwayDays} day(s)). Please correct it.
                       </p>
                     )}
                   </div>
@@ -722,8 +758,8 @@ const HomePage = () => {
                     outstationTripType === 'one_way'
                       ? !(outstationFrom?.address || '').trim() || !(outstationTo?.address || '').trim() || isPickupInPast
                       : outstationTripType === 'round_trip'
-                        ? !(outstationFrom?.address || '').trim() || !(Number(outstationRoundTripDays) >= 1) || isPickupInPast || isReturnBeforePickup || isRoundTripDaysMismatch
-                        : !(outstationPickup?.address || '').trim() || !(outstationFinalDrop?.address || '').trim() || !(Number(outstationMultiwayDays) >= 1) || isPickupInPast
+                        ? !(outstationFrom?.address || '').trim() || !(outstationRoundTripTo?.address || '').trim() || !(Number(outstationRoundTripDays) >= 1) || isPickupInPast || isReturnBeforePickup || isRoundTripDaysMismatch
+                        : !(outstationPickup?.address || '').trim() || !(outstationFinalDrop?.address || '').trim() || !(Number(outstationMultiwayDays) >= 1) || isPickupInPast || isReturnBeforePickup || isMultiwayDaysMismatch
                   }
                   onClick={handleContinueToOutstationCabSelection}
                 >
@@ -944,19 +980,23 @@ const HomePage = () => {
                 </div>
               )}
               <div className="home-confirm-row">
-                <span>Driver charges (per hour × {numberOfHours}h)</span>
-                <span>
-                  ₹{(Number(confirmModal.cabType.driverCharges) || 0) * (Number(numberOfHours) || 0)}
-                </span>
+                <span>Driver charges</span>
+                <span>₹{Number(confirmModal.cabType.driverCharges) || 0}</span>
+              </div>
+              <div className="home-confirm-row">
+                <span>Night charges</span>
+                <span>₹{Number(confirmModal.cabType.nightCharges) || 0}</span>
               </div>
               <div className="home-confirm-row home-confirm-total">
                 <span>Total</span>
                 <span>
                   ₹
-                  {(confirmModal.cabType.packageRates?.[numberOfHours] != null
+                  {(Number(confirmModal.cabType.baseFare) || 0) +
+                  (confirmModal.cabType.packageRates?.[numberOfHours] != null
                     ? Number(confirmModal.cabType.packageRates[numberOfHours])
                     : 0) +
-                    ((Number(confirmModal.cabType.driverCharges) || 0) * (Number(numberOfHours) || 0))}
+                    (Number(confirmModal.cabType.driverCharges) || 0) +
+                    (Number(confirmModal.cabType.nightCharges) || 0)}
                 </span>
               </div>
             </div>

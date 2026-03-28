@@ -125,6 +125,11 @@ async function ensureAirportSlabColumns() {
   if (ensureAirportSlabColumnsPromise) return ensureAirportSlabColumnsPromise;
   ensureAirportSlabColumnsPromise = (async () => {
     try {
+      await db.runAsync('ALTER TABLE rate_meters ADD COLUMN slab_0_30_extra REAL DEFAULT 0');
+    } catch (e) {
+      // column may already exist
+    }
+    try {
       await db.runAsync('ALTER TABLE rate_meters ADD COLUMN slab_31_40_extra REAL DEFAULT 0');
     } catch (e) {
       // column may already exist
@@ -169,6 +174,9 @@ router.get(
         );
       } else if (service_type === 'airport' || service_type === 'outstation') {
         result = result.filter((row) => (row.name || '').trim().toLowerCase() !== 'innova');
+        if (service_type === 'airport') {
+          result = result.filter((row) => (row.name || '').trim().toLowerCase() !== 'crysta');
+        }
       }
       // Deduplicate by name (case-insensitive): keep one row per name (prefer lowest id), sum cab_count
       const byKey = new Map();
@@ -655,7 +663,7 @@ router.get('/rate-meter/airport/:cabTypeId', param('cabTypeId').isInt({ min: 1 }
     if (!ct) return res.status(404).json({ error: 'Cab type not found' });
     const row = await db.getAsync(
       `SELECT id, base_fare, per_km_rate, driver_charges, night_charges,
-              slab_31_40_extra, slab_41_50_extra, slab_51_60_extra
+              slab_0_30_extra, slab_31_40_extra, slab_41_50_extra, slab_51_60_extra
        FROM rate_meters
        WHERE service_type = 'airport' AND car_category = ? AND (trip_type IS NULL OR trip_type = '') AND is_active = 1
        ORDER BY id DESC
@@ -668,6 +676,7 @@ router.get('/rate-meter/airport/:cabTypeId', param('cabTypeId').isInt({ min: 1 }
       per_km_rate: row ? getNum(row, 'per_km_rate') : 0,
       driver_charges: row ? getNum(row, 'driver_charges') : 0,
       night_charges: row ? getNum(row, 'night_charges') : 0,
+      slab_0_30_extra: row ? getNum(row, 'slab_0_30_extra') : 0,
       slab_31_40_extra: row ? getNum(row, 'slab_31_40_extra') : 0,
       slab_41_50_extra: row ? getNum(row, 'slab_41_50_extra') : 0,
       slab_51_60_extra: row ? getNum(row, 'slab_51_60_extra') : 0,
@@ -690,6 +699,7 @@ router.put(
         per_km_rate,
         driver_charges,
         night_charges,
+        slab_0_30_extra,
         slab_31_40_extra,
         slab_41_50_extra,
         slab_51_60_extra,
@@ -706,6 +716,7 @@ router.put(
       const pkm = per_km_rate != null ? Number(per_km_rate) : 0;
       const dc = driver_charges != null ? Number(driver_charges) : 0;
       const nc = night_charges != null ? Number(night_charges) : 0;
+      const s030 = slab_0_30_extra != null ? Number(slab_0_30_extra) : 0;
       const s3140 = slab_31_40_extra != null ? Number(slab_31_40_extra) : 0;
       const s4150 = slab_41_50_extra != null ? Number(slab_41_50_extra) : 0;
       const s5160 = slab_51_60_extra != null ? Number(slab_51_60_extra) : 0;
@@ -713,22 +724,22 @@ router.put(
         await db.runAsync(
           `UPDATE rate_meters
            SET base_fare = ?, per_km_rate = ?, driver_charges = ?, night_charges = ?,
-               slab_31_40_extra = ?, slab_41_50_extra = ?, slab_51_60_extra = ?
+               slab_0_30_extra = ?, slab_31_40_extra = ?, slab_41_50_extra = ?, slab_51_60_extra = ?
            WHERE id = ?`,
-          [bf, pkm, dc, nc, s3140, s4150, s5160, existing.id]
+          [bf, pkm, dc, nc, s030, s3140, s4150, s5160, existing.id]
         );
       } else {
         await db.runAsync(
           `INSERT INTO rate_meters (
              service_type, car_category, trip_type, base_fare, per_km_rate, driver_charges, night_charges,
-             slab_31_40_extra, slab_41_50_extra, slab_51_60_extra
-           ) VALUES ('airport', ?, '', ?, ?, ?, ?, ?, ?, ?)`,
-          [ct.name, bf, pkm, dc, nc, s3140, s4150, s5160]
+             slab_0_30_extra, slab_31_40_extra, slab_41_50_extra, slab_51_60_extra
+           ) VALUES ('airport', ?, '', ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [ct.name, bf, pkm, dc, nc, s030, s3140, s4150, s5160]
         );
       }
       const row = await db.getAsync(
         `SELECT base_fare, per_km_rate, driver_charges, night_charges,
-                slab_31_40_extra, slab_41_50_extra, slab_51_60_extra
+                slab_0_30_extra, slab_31_40_extra, slab_41_50_extra, slab_51_60_extra
          FROM rate_meters
          WHERE service_type = 'airport' AND car_category = ? AND (trip_type IS NULL OR trip_type = '') AND is_active = 1
          ORDER BY id DESC
@@ -741,6 +752,7 @@ router.put(
         per_km_rate: getNum(row, 'per_km_rate'),
         driver_charges: getNum(row, 'driver_charges'),
         night_charges: getNum(row, 'night_charges'),
+        slab_0_30_extra: getNum(row, 'slab_0_30_extra'),
         slab_31_40_extra: getNum(row, 'slab_31_40_extra'),
         slab_41_50_extra: getNum(row, 'slab_41_50_extra'),
         slab_51_60_extra: getNum(row, 'slab_51_60_extra'),

@@ -123,7 +123,7 @@ router.post('/', async (req, res) => {
           return res.status(400).json({ error: 'number_of_days is required for outstation round trip / multi way bookings' });
         }
       }
-      if (tripType === 'round_trip' && return_date) {
+      if ((tripType === 'round_trip' || tripType === 'multiple_stops') && return_date) {
         const start = parseDate(travel_date);
         const end = parseDate(return_date);
         if (!start) {

@@ -163,10 +163,21 @@ function generateInvoicePDF(booking, withGST = true) {
     const descLines = [
       serviceLabel + (tripLabel ? ` - ${tripLabel.toUpperCase()}` : ''),
       `DATE - ${dateForDesc}`,
+    ];
+    const returnRaw = booking.return_date != null ? booking.return_date : booking.RETURN_DATE;
+    if (returnRaw) {
+      const rd = new Date(returnRaw);
+      if (!Number.isNaN(rd.getTime())) {
+        descLines.push(
+          `RETURN DATE - ${rd.toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })}`
+        );
+      }
+    }
+    descLines.push(
       `PICKUP- ${(booking.from_location || '—').substring(0, 45)}`,
       `DROP- ${(booking.to_location || '—').substring(0, 45)}`,
       `CAB - ${(booking.cab_type_name || 'AC').toUpperCase()}`,
-    ];
+    );
     const totalKms = booking.distance_km != null ? Number(booking.distance_km) : 0;
     const noOfDays = booking.number_of_days != null ? Number(booking.number_of_days) : 1;
     const baseAmount = Number(booking.fare_amount) || 0;
@@ -191,7 +202,7 @@ function generateInvoicePDF(booking, withGST = true) {
     const formatMoney = (n) => round2(n).toFixed(2);
 
     let rowY = tableTop + headerH;
-    const firstRowH = rowH * 5;
+    const firstRowH = rowH * descLines.length;
     doc.strokeColor('#d1d5db');
     doc.rect(margin, tableTop + headerH, tableWidth, firstRowH).stroke();
     [colDesc, colKms, colDays, colRate, colAmount].forEach((x) => {

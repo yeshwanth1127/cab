@@ -40,8 +40,10 @@ const MANAGER_SECTIONS = [
 
 const RATE_METER_CAB_NAMES = {
   local: ['Sedan', 'SUV', 'Innova Crysta'],
-  airport: ['Sedan', 'SUV', 'Crysta'],
-  outstation: ['Sedan', 'SUV', 'Crysta', 'TT', 'Minibus'],
+  /** Airport: base + per-km + slabs + driver + night (see airport fare estimator). */
+  airport: ['Sedan', 'SUV', 'Innova Crysta'],
+  /** Outstation: one-way / round trip / multi-stop blocks per cab type. */
+  outstation: ['Sedan', 'SUV', 'Innova Crysta', 'TT', 'Minibus'],
 };
 
 function getCabPlacementRank(name) {
@@ -83,6 +85,7 @@ const AdminDashboard = () => {
   const [cabs, setCabs] = useState([]);
   const [loading, setLoading] = useState({ dashboard: false, bookings: false, drivers: false });
   const [toast, setToast] = useState(null);
+  const toastDismissRef = useRef(null);
   const [detailBooking, setDetailBooking] = useState(null);
   const [editingInvoiceNumber, setEditingInvoiceNumber] = useState('');
   const [invoiceNumberSaving, setInvoiceNumberSaving] = useState(false);
@@ -266,8 +269,19 @@ const AdminDashboard = () => {
   const [addUserError, setAddUserError] = useState('');
 
   const showToast = useCallback((message, type = 'success') => {
+    if (toastDismissRef.current) {
+      clearTimeout(toastDismissRef.current);
+      toastDismissRef.current = null;
+    }
     setToast({ message, type });
-    setTimeout(() => setToast(null), 4000);
+    toastDismissRef.current = setTimeout(() => {
+      setToast(null);
+      toastDismissRef.current = null;
+    }, 4000);
+  }, []);
+
+  useEffect(() => () => {
+    if (toastDismissRef.current) clearTimeout(toastDismissRef.current);
   }, []);
 
   const fetchStats = useCallback(async () => {
@@ -458,6 +472,7 @@ const AdminDashboard = () => {
           per_km_rate: d.per_km_rate ?? '',
           driver_charges: d.driver_charges ?? '',
           night_charges: d.night_charges ?? '',
+          slab_0_30_extra: d.slab_0_30_extra ?? '',
           slab_31_40_extra: d.slab_31_40_extra ?? '',
           slab_41_50_extra: d.slab_41_50_extra ?? '',
           slab_51_60_extra: d.slab_51_60_extra ?? '',
@@ -651,7 +666,7 @@ const AdminDashboard = () => {
         const res = await api.put(`/corporate/bookings/${assignBooking.id}`, { cab_id: Number(assignCabId) });
         showToast(wasAlreadyAssigned ? 'Driver & cab reassigned.' : 'Driver & cab assigned.');
         if (res.data?.n8nWarnings?.length) {
-          setTimeout(() => showToast(res.data.n8nWarnings.join(' '), 'error'), 600);
+          setTimeout(() => showToast(`Integration note: ${res.data.n8nWarnings.join(' ')}`, 'warning'), 600);
         }
         setAssignBooking(null);
         setAssignForCorporate(false);
@@ -667,7 +682,7 @@ const AdminDashboard = () => {
         const res = await api.put(`/admin/bookings/${assignBooking.id}`, payload);
         showToast(wasAlreadyAssigned ? 'Driver & cab reassigned.' : 'Driver & cab assigned.');
         if (res.data?.n8nWarnings?.length) {
-          setTimeout(() => showToast(res.data.n8nWarnings.join(' '), 'error'), 600);
+          setTimeout(() => showToast(`Integration note: ${res.data.n8nWarnings.join(' ')}`, 'warning'), 600);
         }
         setAssignBooking(null);
         setAssignDriverId('');
@@ -1012,7 +1027,7 @@ const AdminDashboard = () => {
         try {
           const invoiceWarnings = JSON.parse(rawWarnings);
           if (Array.isArray(invoiceWarnings) && invoiceWarnings.length) {
-            setTimeout(() => showToast(invoiceWarnings.join(' '), 'error'), 600);
+            setTimeout(() => showToast(`Integration note: ${invoiceWarnings.join(' ')}`, 'warning'), 600);
           }
         } catch (_) {}
       }
@@ -2745,7 +2760,7 @@ const AdminDashboard = () => {
                                               type="text"
                                               value={rateMeterNameDraft[ct.id] ?? ct.name ?? ''}
                                               onChange={(e) => setRateMeterNameDraft((prev) => ({ ...prev, [ct.id]: e.target.value }))}
-                                              placeholder="e.g. Crysta"
+                                              placeholder="e.g. Innova Crysta"
                                               style={{ width: '100%', padding: '8px 12px', border: '1px solid #bbf7d0', borderRadius: 6 }}
                                             />
                                           </div>
@@ -2796,6 +2811,10 @@ const AdminDashboard = () => {
                                             <input type="number" min="0" step="0.01" value={f.night_charges} onChange={(e) => setRateMeterAirportForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], night_charges: e.target.value } }))} />
                                           </div>
                                           <div className="admin-form-group">
+                                            <label>Extra slab charge 0–30 km (₹)</label>
+                                            <input type="number" min="0" step="0.01" value={f.slab_0_30_extra ?? ''} onChange={(e) => setRateMeterAirportForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], slab_0_30_extra: e.target.value } }))} />
+                                          </div>
+                                          <div className="admin-form-group">
                                             <label>Extra slab charge 31-40 km (₹)</label>
                                             <input type="number" min="0" step="0.01" value={f.slab_31_40_extra ?? ''} onChange={(e) => setRateMeterAirportForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], slab_31_40_extra: e.target.value } }))} />
                                           </div>
@@ -2819,7 +2838,7 @@ const AdminDashboard = () => {
                             )}
                           </div>
                         ))}
-                        {(filteredRateMeterCabTypes.airport || []).length === 0 && <p className="admin-rate-meters-empty">Click “Create missing cab types” to add Sedan, SUV, Crysta.</p>}
+                        {(filteredRateMeterCabTypes.airport || []).length === 0 && <p className="admin-rate-meters-empty">Click “Create missing cab types” to add Sedan, SUV, Innova Crysta.</p>}
                       </div>
                     )}
                   </div>
@@ -2898,8 +2917,9 @@ const AdminDashboard = () => {
                                       }}>
                                         <div className="admin-form-block" style={{ marginBottom: 12 }}>
                                           <div className="admin-form-block-title">One way</div>
+                                          <p className="admin-bookings-desc" style={{ marginTop: 0, marginBottom: 8 }}>Fare uses chargeable km × per km rate (+ driver + night). Same fields for Sedan through Minibus; set higher min km / per km for TT &amp; Minibus if needed.</p>
                                           <div className="admin-form-grid">
-                                            <div className="admin-form-group"><label>Min km/day</label><input type="number" min="0" value={ow.minKm} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], oneWay: { ...prev[ct.id]?.oneWay, minKm: e.target.value } } }))} /></div>
+                                            <div className="admin-form-group"><label>Min km (floor)</label><input type="number" min="0" value={ow.minKm} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], oneWay: { ...prev[ct.id]?.oneWay, minKm: e.target.value } } }))} /></div>
                                             <div className="admin-form-group"><label>Base fare (₹)</label><input type="number" min="0" step="0.01" value={ow.baseFare} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], oneWay: { ...prev[ct.id]?.oneWay, baseFare: e.target.value } } }))} /></div>
                                             <div className="admin-form-group"><label>Per km rate (₹)</label><input type="number" min="0" step="0.01" value={ow.extraKmRate} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], oneWay: { ...prev[ct.id]?.oneWay, extraKmRate: e.target.value } } }))} /></div>
                                             <div className="admin-form-group"><label>Driver charges (₹)</label><input type="number" min="0" step="0.01" value={ow.driverCharges} onChange={(e) => setRateMeterOutstationForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], oneWay: { ...prev[ct.id]?.oneWay, driverCharges: e.target.value } } }))} /></div>
@@ -2937,7 +2957,7 @@ const AdminDashboard = () => {
                             )}
                           </div>
                         ))}
-                        {(filteredRateMeterCabTypes.outstation || []).length === 0 && <p className="admin-rate-meters-empty">Click “Create missing cab types” to add Sedan, SUV, Crysta, TT, Minibus.</p>}
+                        {(filteredRateMeterCabTypes.outstation || []).length === 0 && <p className="admin-rate-meters-empty">Click “Create missing cab types” to add Sedan, SUV, Innova Crysta, TT, Minibus.</p>}
                       </div>
                     )}
                   </div>
