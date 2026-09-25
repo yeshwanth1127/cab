@@ -166,6 +166,13 @@
   color: #ef4444;
 }
 
+.home-booking-hint {
+  margin: -4px 0 10px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #64748b;
+}
+
 .home-booking-static-input {
   width: 100%;
   padding: 14px 16px;

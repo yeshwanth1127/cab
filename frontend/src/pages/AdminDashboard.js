@@ -451,7 +451,7 @@ const AdminDashboard = () => {
       const res = await api.get(`/admin/rate-meter/local/${cabTypeId}`);
       const d = res.data || {};
       setRateMeterLocalRates((prev) => ({ ...prev, [cabTypeId]: d }));
-      setRateMeterLocalForm((prev) => ({ ...prev, [cabTypeId]: { base_fare: d.base_fare ?? '', package_4h: d.package_4h ?? '', package_8h: d.package_8h ?? '', package_12h: d.package_12h ?? '', extra_hour_rate: d.extra_hour_rate ?? '', driver_charges: d.driver_charges ?? '', night_charges: d.night_charges ?? '' } }));
+      setRateMeterLocalForm((prev) => ({ ...prev, [cabTypeId]: { base_fare: d.base_fare ?? '', extra_km_rate: d.extra_km_rate ?? '', package_4h: d.package_4h ?? '', package_8h: d.package_8h ?? '', package_12h: d.package_12h ?? '', extra_hour_rate: d.extra_hour_rate ?? '', driver_charges: d.driver_charges ?? '', night_charges: d.night_charges ?? '' } }));
     } catch (err) {
       showToast(err.response?.data?.error || 'Failed to load local rates', 'error');
     } finally {
@@ -2703,6 +2703,10 @@ const AdminDashboard = () => {
                                           <div className="admin-form-group">
                                             <label>Extra charges per hour (₹/hr)</label>
                                             <input type="number" min="0" step="0.01" value={f.extra_hour_rate} onChange={(e) => setRateMeterLocalForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], extra_hour_rate: e.target.value } }))} />
+                                          </div>
+                                          <div className="admin-form-group">
+                                            <label>Extra charges per km (₹/km)</label>
+                                            <input type="number" min="0" step="0.01" value={f.extra_km_rate} onChange={(e) => setRateMeterLocalForm((prev) => ({ ...prev, [ct.id]: { ...prev[ct.id], extra_km_rate: e.target.value } }))} />
                                           </div>
                                           <div className="admin-form-group">
                                             <label>Driver charges per hour (₹/hr)</label>

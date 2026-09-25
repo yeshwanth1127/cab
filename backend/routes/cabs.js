@@ -286,15 +286,15 @@ function excludeInnovaCabTypes(cabTypes) {
   return (cabTypes || []).filter((ct) => (ct.name || '').trim().toLowerCase() !== 'innova');
 }
 
-/** Legacy short name "Crysta" — use "Innova Crysta" for airport only. */
-function excludeShortCrystaAirport(cabTypes) {
+/** Legacy short name "Crysta" — use "Innova Crysta" instead. */
+function excludeShortCrysta(cabTypes) {
   return (cabTypes || []).filter((ct) => (ct.name || '').trim().toLowerCase() !== 'crysta');
 }
 
 router.get('/airport-offers', async (req, res) => {
   try {
     await ensureCabTypesColumns();
-    const cabTypes = sortCabTypesByPlacement(excludeShortCrystaAirport(excludeInnovaCabTypes(await db.allAsync(
+    const cabTypes = sortCabTypesByPlacement(excludeShortCrysta(excludeInnovaCabTypes(await db.allAsync(
       "SELECT id, name, description, capacity, image_url, image_url_2 FROM cab_types WHERE service_type = 'airport' AND is_active = 1"
     ))));
     const result = [];
@@ -395,7 +395,7 @@ router.get('/airport-fare-estimate', async (req, res) => {
     // Airport pricing is slab-based by one-way distance (no doubling of kms).
     const one_way_slab_km = slab.upperKm;
     const chargeable_km = one_way_slab_km;
-    const cabTypes = sortCabTypesByPlacement(excludeShortCrystaAirport(excludeInnovaCabTypes(await db.allAsync(
+    const cabTypes = sortCabTypesByPlacement(excludeShortCrysta(excludeInnovaCabTypes(await db.allAsync(
       "SELECT id, name FROM cab_types WHERE service_type = 'airport' AND is_active = 1"
     ))));
     const fares = [];
@@ -462,9 +462,9 @@ function getInt(row, key, defaultVal = null) {
 router.get('/outstation-offers', async (req, res) => {
   try {
     await ensureCabTypesColumns();
-    const cabTypes = sortCabTypesByPlacement(excludeInnovaCabTypes(await db.allAsync(
+    const cabTypes = sortCabTypesByPlacement(excludeShortCrysta(excludeInnovaCabTypes(await db.allAsync(
       "SELECT id, name, description, capacity, image_url, image_url_2 FROM cab_types WHERE service_type = 'outstation' AND is_active = 1"
-    )));
+    ))));
     const result = [];
     for (const ct of cabTypes || []) {
       const [oneWay, roundTrip, multiStop] = await Promise.all([
@@ -564,9 +564,9 @@ router.get('/outstation-fare-estimate', async (req, res) => {
   try {
     await ensureCabTypesColumns();
     const tripType = req.query.trip_type || 'one_way';
-    const offers = sortCabTypesByPlacement(excludeInnovaCabTypes(await db.allAsync(
+    const offers = sortCabTypesByPlacement(excludeShortCrysta(excludeInnovaCabTypes(await db.allAsync(
       "SELECT id, name FROM cab_types WHERE service_type = 'outstation' AND is_active = 1"
-    )));
+    ))));
     const fares = [];
 
     if (tripType === 'one_way') {

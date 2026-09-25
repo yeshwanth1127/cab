@@ -4,17 +4,11 @@ const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
 const db = require('../db/database');
 const { authenticateToken } = require('../middleware/auth');
-const { authLimiter, adminActionLimiter } = require('../middleware/rateLimit');
-
-if (!process.env.JWT_SECRET) {
-  throw new Error('JWT_SECRET is not set');
-}
 
 const router = express.Router();
 
 router.post(
   '/register',
-  authLimiter,
   [
     body('username').notEmpty().withMessage('Username is required'),
     body('email').isEmail().withMessage('Valid email is required'),
@@ -52,7 +46,7 @@ router.post(
 
       const token = jwt.sign(
         { id: user.id, username: user.username, role: user.role },
-        process.env.JWT_SECRET,
+        process.env.JWT_SECRET || 'your_secret_key',
         { expiresIn: '24h' }
       );
 
@@ -64,14 +58,10 @@ router.post(
   }
 );
 
-router.post(
-  '/login',
-  authLimiter,
-  [
-    body('username').notEmpty().withMessage('Username is required'),
-    body('password').notEmpty().withMessage('Password is required'),
-  ],
-  async (req, res) => {
+router.post('/login', [
+  body('username').notEmpty().withMessage('Username is required'),
+  body('password').notEmpty().withMessage('Password is required'),
+], async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -117,7 +107,7 @@ router.post(
 
     const token = jwt.sign(
       { id: user.id, username: user.username, role: user.role },
-      process.env.JWT_SECRET,
+      process.env.JWT_SECRET || 'your_secret_key',
       { expiresIn: '24h' }
     );
 
@@ -140,7 +130,6 @@ router.post(
 router.post(
   '/register-admin',
   authenticateToken,
-  adminActionLimiter,
   [
     body('username').notEmpty().withMessage('Username is required'),
     body('email').isEmail().withMessage('Valid email is required'),

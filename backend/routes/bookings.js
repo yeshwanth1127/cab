@@ -1,11 +1,13 @@
 const express = require('express');
 const db = require('../db/database');
+const { optionalAuthenticateToken } = require('../middleware/auth');
 const { generateGoogleMapsLink } = require('../utils/mapsLink');
 const { triggerBookingSuccess } = require('../services/n8nWebhooks');
 const { sendBookingConfirmation } = require('../services/whatsappService');
 
 const router = express.Router();
 
+router.use(optionalAuthenticateToken);
 function formatTimeForWebhook(travelDate) {
   if (!travelDate) return '';
   const d = new Date(travelDate);
@@ -33,6 +35,7 @@ async function ensureBookingsColumns() {
     ['invoice_number', 'TEXT'],
     ['travel_date', 'DATETIME'],
     ['"return_date"', 'DATETIME'],
+    ['user_id', 'INTEGER'],
   ];
   for (const [col, type] of columns) {
     try {
@@ -102,13 +105,6 @@ router.post('/', async (req, res) => {
       return Number.isNaN(d.getTime()) ? null : d;
     };
 
-    const ceilDaysDiff = (start, end) => {
-      if (!start || !end) return null;
-      const diffMs = end.getTime() - start.getTime();
-      if (diffMs <= 0) return null;
-      return Math.max(1, Math.ceil(diffMs / (24 * 60 * 60 * 1000)));
-    };
-
     const distanceKmVal = distance_km != null && distance_km !== '' ? Number(distance_km) : 0;
     const estimatedMinutesVal = estimated_time_minutes != null && estimated_time_minutes !== ''
       ? Number(estimated_time_minutes)
@@ -135,12 +131,6 @@ router.post('/', async (req, res) => {
         if (end <= start) {
           return res.status(400).json({ error: 'return_date must be after travel_date' });
         }
-        const computed = ceilDaysDiff(start, end);
-        if (computed != null && numberOfDaysVal != null && computed !== numberOfDaysVal) {
-          return res.status(400).json({
-            error: `number_of_days (${numberOfDaysVal}) does not match pickup/return dates (${computed} day(s))`,
-          });
-        }
       }
     }
 
@@ -150,8 +140,8 @@ router.post('/', async (req, res) => {
         from_location, to_location, distance_km, estimated_time_minutes, fare_amount,
         passenger_name, passenger_phone, passenger_email, notes, cab_id, cab_type_id,
         service_type, number_of_hours, trip_type, number_of_days, pickup_lat, pickup_lng, destination_lat, destination_lng,
-        invoice_number, travel_date, "return_date"
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        invoice_number, travel_date, "return_date", user_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         from_location,
         to_location,
@@ -176,6 +166,7 @@ router.post('/', async (req, res) => {
         invoiceNumber,
         travel_date || null,
         return_date || null,
+        req.user ? req.user.id : null
       ]
     );
 
@@ -212,10 +203,28 @@ router.post('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const booking = await db.getAsync('SELECT * FROM bookings WHERE id = ?', [id]);
+
+    if (!/^\d+$/.test(id)) {
+      return res.status(400).json({ error: 'Invalid booking ID' });
+    }
+
+    let booking;
+
+    if (req.user && (req.user.role === 'admin' || req.user.role === 'manager')) {
+      booking = await db.getAsync('SELECT * FROM bookings WHERE id = ?', [id]);
+    } else if (req.user) {
+      booking = await db.getAsync(
+        'SELECT * FROM bookings WHERE id = ? AND user_id = ?',
+        [id, req.user.id]
+      );
+    } else {
+      booking = await db.getAsync('SELECT * FROM bookings WHERE id = ?', [id]);
+    }
+
     if (!booking) {
       return res.status(404).json({ error: 'Booking not found' });
     }
+
     res.json(booking);
   } catch (error) {
     console.error('Error fetching booking:', error);

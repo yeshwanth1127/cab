@@ -545,7 +545,7 @@ router.delete(
 router.get('/rate-meter/local/:cabTypeId', param('cabTypeId').isInt({ min: 1 }), async (req, res) => {
   try {
     const { cabTypeId } = req.params;
-    const ct = await db.getAsync('SELECT id, name, base_fare FROM cab_types WHERE id = ? AND service_type = \'local\'', [cabTypeId]);
+    const ct = await db.getAsync('SELECT id, name, base_fare, per_km_rate FROM cab_types WHERE id = ? AND service_type = \'local\'', [cabTypeId]);
     if (!ct) return res.status(404).json({ error: 'Cab type not found' });
     const localRate = await db.getAsync(
       `SELECT driver_charges, night_charges FROM rate_meters
@@ -566,6 +566,7 @@ router.get('/rate-meter/local/:cabTypeId', param('cabTypeId').isInt({ min: 1 }),
     res.json({
       cab_type_id: ct.id,
       base_fare: ct.base_fare != null ? Number(ct.base_fare) : 0,
+      extra_km_rate: ct.per_km_rate != null ? Number(ct.per_km_rate) : 0,
       package_4h: packageRates[4] ?? null,
       package_8h: packageRates[8] ?? null,
       package_12h: packageRates[12] ?? null,
@@ -585,10 +586,21 @@ router.put(
   async (req, res) => {
     try {
       const { cabTypeId } = req.params;
-      const { base_fare, package_4h, package_8h, package_12h, extra_hour_rate, driver_charges, night_charges } = req.body;
+      const { base_fare, extra_km_rate, package_4h, package_8h, package_12h, extra_hour_rate, driver_charges, night_charges } = req.body;
       const ct = await db.getAsync('SELECT id, name FROM cab_types WHERE id = ? AND service_type = \'local\'', [cabTypeId]);
       if (!ct) return res.status(404).json({ error: 'Cab type not found' });
-      if (base_fare !== undefined) await db.runAsync('UPDATE cab_types SET base_fare = ? WHERE id = ?', [Number(base_fare) || 0, cabTypeId]);
+      if (base_fare !== undefined || extra_km_rate !== undefined) {
+        await db.runAsync(
+          `UPDATE cab_types
+           SET base_fare = COALESCE(?, base_fare), per_km_rate = COALESCE(?, per_km_rate)
+           WHERE id = ?`,
+          [
+            base_fare !== undefined ? Number(base_fare) || 0 : null,
+            extra_km_rate !== undefined ? Number(extra_km_rate) || 0 : null,
+            cabTypeId,
+          ]
+        );
+      }
       const extraRate = extra_hour_rate != null ? Number(extra_hour_rate) : null;
       const dc = driver_charges != null ? Number(driver_charges) : 0;
       const nc = night_charges != null ? Number(night_charges) : 0;
@@ -626,7 +638,7 @@ router.put(
         'INSERT INTO local_package_rates (cab_type_id, hours, package_fare, extra_hour_rate) VALUES (?, 12, ?, ?)',
         [cabTypeId, package_12h != null ? Number(package_12h) : null, extraRate]
       );
-      const updated = await db.getAsync('SELECT base_fare FROM cab_types WHERE id = ?', [cabTypeId]);
+      const updated = await db.getAsync('SELECT base_fare, per_km_rate FROM cab_types WHERE id = ?', [cabTypeId]);
       const rates = await db.allAsync('SELECT hours, package_fare, extra_hour_rate FROM local_package_rates WHERE cab_type_id = ? ORDER BY hours', [cabTypeId]);
       const localRate = await db.getAsync(
         `SELECT driver_charges, night_charges FROM rate_meters
@@ -641,6 +653,7 @@ router.put(
       res.json({
         cab_type_id: Number(cabTypeId),
         base_fare: updated ? Number(updated.base_fare) : 0,
+        extra_km_rate: updated ? Number(updated.per_km_rate || 0) : 0,
         package_4h: packageRates[4] ?? null,
         package_8h: packageRates[8] ?? null,
         package_12h: packageRates[12] ?? null,

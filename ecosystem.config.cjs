@@ -7,7 +7,7 @@ module.exports = {
   apps: [
     {
       name: 'nammacabs-backend',
-      cwd: '/var/www/nammacabs.com/cab/backend',
+      cwd: '/var/www/nammacabs/cab/backend',
       script: 'server.js',
       interpreter: 'node',
       instances: 1,

@@ -6,6 +6,7 @@ import LocationInput from '../components/LocationInput';
 import DateTimePicker from '../components/DateTimePicker';
 import Icon from '../components/Icon';
 import { getSeatLabel } from '../utils/seating';
+import { defaultReturnDatetimeFromPickupAndCalendarDays } from '../utils/outstationCalendarDays';
 import './HomePage.css';
 
 const HOURS_OPTIONS = [4, 8, 12];
@@ -121,20 +122,6 @@ const HomePage = () => {
     }
   }, [location.state]);
 
-  const getCeilDaysDiff = (startIso, endIso) => {
-    try {
-      if (!startIso || !endIso) return null;
-      const start = new Date(startIso);
-      const end = new Date(endIso);
-      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
-      const diffMs = end.getTime() - start.getTime();
-      if (diffMs <= 0) return null;
-      return Math.max(1, Math.ceil(diffMs / (24 * 60 * 60 * 1000)));
-    } catch {
-      return null;
-    }
-  };
-
   // Minimum pickup = now (no dates/times before today/current moment)
   const minPickupDatetime = () => new Date().toISOString().slice(0, 16);
 
@@ -145,26 +132,21 @@ const HomePage = () => {
     if (new Date(outstationReturnDatetime) <= new Date(travelDatetime)) setOutstationReturnDatetime('');
   }, [travelDatetime, outstationTripType]);
 
+  // Default return from pickup + number of days (inclusive calendar days); user can edit after.
+  useEffect(() => {
+    if (outstationTripType !== 'round_trip' && outstationTripType !== 'multiple_stops') return;
+    if (!travelDatetime) return;
+    const raw = outstationTripType === 'round_trip' ? outstationRoundTripDays : outstationMultiwayDays;
+    const days = Number(raw);
+    if (!Number.isFinite(days) || days < 1) return;
+    const next = defaultReturnDatetimeFromPickupAndCalendarDays(travelDatetime, days);
+    if (!next) return;
+    setOutstationReturnDatetime(next);
+  }, [travelDatetime, outstationRoundTripDays, outstationMultiwayDays, outstationTripType]);
+
   const isPickupInPast = travelDatetime && new Date(travelDatetime) <= new Date();
   const isReturnBeforePickup = (outstationTripType === 'round_trip' || outstationTripType === 'multiple_stops')
     && travelDatetime && outstationReturnDatetime && new Date(outstationReturnDatetime) <= new Date(travelDatetime);
-  const computedRoundTripDays = outstationTripType === 'round_trip' ? getCeilDaysDiff(travelDatetime, outstationReturnDatetime) : null;
-  const selectedRoundTripDays = outstationTripType === 'round_trip' ? Number(outstationRoundTripDays) : null;
-  const isRoundTripDaysMismatch = outstationTripType === 'round_trip'
-    && computedRoundTripDays != null
-    && selectedRoundTripDays != null
-    && Number.isFinite(selectedRoundTripDays)
-    && selectedRoundTripDays >= 1
-    && computedRoundTripDays !== selectedRoundTripDays;
-  const computedMultiwayDays = outstationTripType === 'multiple_stops' ? getCeilDaysDiff(travelDatetime, outstationReturnDatetime) : null;
-  const selectedMultiwayDays = outstationTripType === 'multiple_stops' ? Number(outstationMultiwayDays) : null;
-  const isMultiwayDaysMismatch = outstationTripType === 'multiple_stops'
-    && outstationReturnDatetime
-    && computedMultiwayDays != null
-    && selectedMultiwayDays != null
-    && Number.isFinite(selectedMultiwayDays)
-    && selectedMultiwayDays >= 1
-    && computedMultiwayDays !== selectedMultiwayDays;
 
   // Local service is only available within Bangalore; outstation destinations/stops must be outside Bangalore
   const BANGALORE_BOUNDS = { latMin: 12.77, latMax: 13.22, lngMin: 77.38, lngMax: 77.82 };
@@ -728,26 +710,19 @@ const HomePage = () => {
                 </div>
                 {(outstationTripType === 'round_trip' || outstationTripType === 'multiple_stops') && (
                   <div className="home-form-group">
-                    <label className="home-booking-label">Return date (optional)</label>
+                    <label className="home-booking-label">Return date and time</label>
+                    <p className="home-booking-hint">
+                      Set automatically from pickup and number of days (calendar days). You can change it if needed.
+                    </p>
                     <DateTimePicker
                       value={outstationReturnDatetime}
                       onChange={setOutstationReturnDatetime}
-                      placeholder="Select return date and time"
+                      placeholder="Return date and time"
                       min={travelDatetime || minPickupDatetime()}
                       className="home-flow-datetime-picker"
                     />
                     {isReturnBeforePickup && (
                       <p className="home-form-error" role="alert">Return date must be after pickup date.</p>
-                    )}
-                    {outstationTripType === 'round_trip' && isRoundTripDaysMismatch && (
-                      <p className="home-form-error" role="alert">
-                        Number of days ({selectedRoundTripDays}) does not match pickup/return dates ({computedRoundTripDays} day(s)). Please correct it.
-                      </p>
-                    )}
-                    {outstationTripType === 'multiple_stops' && isMultiwayDaysMismatch && (
-                      <p className="home-form-error" role="alert">
-                        Number of days ({selectedMultiwayDays}) does not match pickup/return dates ({computedMultiwayDays} day(s)). Please correct it.
-                      </p>
                     )}
                   </div>
                 )}
@@ -758,8 +733,8 @@ const HomePage = () => {
                     outstationTripType === 'one_way'
                       ? !(outstationFrom?.address || '').trim() || !(outstationTo?.address || '').trim() || isPickupInPast
                       : outstationTripType === 'round_trip'
-                        ? !(outstationFrom?.address || '').trim() || !(outstationRoundTripTo?.address || '').trim() || !(Number(outstationRoundTripDays) >= 1) || isPickupInPast || isReturnBeforePickup || isRoundTripDaysMismatch
-                        : !(outstationPickup?.address || '').trim() || !(outstationFinalDrop?.address || '').trim() || !(Number(outstationMultiwayDays) >= 1) || isPickupInPast || isReturnBeforePickup || isMultiwayDaysMismatch
+                        ? !(outstationFrom?.address || '').trim() || !(outstationRoundTripTo?.address || '').trim() || !(Number(outstationRoundTripDays) >= 1) || isPickupInPast || isReturnBeforePickup
+                        : !(outstationPickup?.address || '').trim() || !(outstationFinalDrop?.address || '').trim() || !(Number(outstationMultiwayDays) >= 1) || isPickupInPast || isReturnBeforePickup
                   }
                   onClick={handleContinueToOutstationCabSelection}
                 >

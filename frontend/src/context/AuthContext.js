@@ -47,12 +47,26 @@ export const AuthProvider = ({ children }) => {
       setUser(user);
       return { success: true };
     } catch (error) {
+      const status = error.response?.status;
+
+      let message = 'Server error. Please try again later.';
+
+      if (status === 401) {
+        message = 'Invalid username or password';
+      } else if (status === 429) {
+        message = 'Too many login attempts. Please try again later.';
+      } else if (status >= 500) {
+        message = 'Server error. Please try again later.';
+      } else if (error.response?.data?.error) {
+        message = error.response.data.error;
+      }
+
       return {
         success: false,
-        error: error.response?.data?.error || 'Login failed',
+        error: message,
       };
-    }
-  };
+     }
+    };
 
   const logout = () => {
     localStorage.removeItem('token');
